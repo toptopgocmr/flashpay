@@ -1,0 +1,50 @@
+<div class="doc">
+<h2>API de paiement e-commerce</h2>
+<p>Acceptez les paiements par wallet FlashPay sur votre site ou votre application, sans agent ni scan en boutique. Chaque paiement alimente le même solde, le même journal et le même circuit de retrait que vos encaissements QR / NFC.</p>
+
+<h3>1. Clés et environnements</h3>
+<p>Dans l'app marchand › Paiement en ligne, générez vos clés <b>sandbox</b> (tests, aucun débit réel) puis <b>live</b> (production, compte validé). La clé secrète <code>sk_…</code> ne s'utilise que côté serveur ; elle n'est affichée qu'une seule fois. Restriction IP optionnelle.</p>
+<pre>Authorization: Bearer sk_sandbox_xxxxxxxxxxxxxxxx</pre>
+
+<h3>2. Créer un paiement</h3>
+<pre>POST /api/v1/payment-intents
+Idempotency-Key: commande-1042-essai-1   (obligatoire)
+{
+  "amount": 15000,
+  "currency": "XAF",
+  "order_reference": "CMD-1042",
+  "description": "2 x T-shirt",
+  "customer_phone": "242066123456",      (optionnel : notifie le client dans l'app)
+  "return_url": "https://boutique.cg/merci",
+  "cancel_url": "https://boutique.cg/panier"
+}
+→ 201 { "id": "pi_…", "status": "pending", "checkout_url": "https://…/checkout/pi_…", "qr_payload": "flashpay://intent?id=pi_…" }</pre>
+<p>Redirigez le client vers <code>checkout_url</code> (ou affichez le QR). Il confirme avec son PIN dans l'app FlashPay ou sur la page web (code SMS + PIN), puis revient sur <code>return_url?payment_intent=pi_…&amp;status=confirmed</code>.</p>
+
+<h3>3. Autres endpoints</h3>
+<pre>GET  /api/v1/payment-intents/{id}           statut : pending | confirmed | failed | expired | refunded | partially_refunded
+POST /api/v1/payment-intents/{id}/confirm   { "customer_phone": "…" } → notifie le client ; sandbox : { "test_outcome": "succeeded" | "failed" }
+POST /api/v1/payment-intents/{id}/cancel
+POST /api/v1/refunds                        { "payment_intent": "pi_…", "amount": 5000, "reason": "…" }  (Idempotency-Key obligatoire)
+GET  /api/v1/refunds/{id}</pre>
+
+<h3>4. Webhooks signés</h3>
+<p>Événements : <code>payment.succeeded</code>, <code>payment.failed</code>, <code>payment.expired</code>, <code>refund.completed</code>. Nouvel essai automatique (1 min → 24 h) tant que votre serveur ne répond pas 2xx.</p>
+<pre>FlashPay-Signature: t=1790000000,v1=hex(HMAC_SHA256(whsec_…, "1790000000." + corps_brut))
+
+// PHP
+[$t, $v1] = sscanf($_SERVER['HTTP_FLASHPAY_SIGNATURE'], 't=%d,v1=%s');
+$ok = hash_equals(hash_hmac('sha256', $t . '.' . file_get_contents('php://input'), $whsec), $v1)
+      &amp;&amp; abs(time() - $t) &lt; 300;</pre>
+
+<h3>5. Widget « Payer avec FlashPay »</h3>
+<pre>&lt;script src="https://VOTRE-DOMAINE-FLASHPAY/js/flashpay-checkout.js"&gt;&lt;/script&gt;
+&lt;div data-flashpay-button data-create-url="/mon-serveur/creer-paiement-flashpay"&gt;&lt;/div&gt;</pre>
+<p>Votre route <code>data-create-url</code> crée le paiement côté serveur (clé secrète) et renvoie le JSON du payment intent ; le widget redirige vers <code>checkout_url</code>.</p>
+
+<h3>6. Plugins</h3>
+<p>WooCommerce : module fourni dans <code>integrations/woocommerce-flashpay</code>. PrestaShop : à venir (même API).</p>
+
+<h3>Limites</h3>
+<p>120 requêtes / minute par clé. Erreurs : <code>{ "error": { "code": "…", "message": "…" } }</code>.</p>
+</div>
