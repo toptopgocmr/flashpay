@@ -87,18 +87,25 @@
         </button>
       </div>
       <nav>
-        <template v-for="g in groups" :key="g.name">
-          <div class="section">{{ g.name }}</div>
-          <router-link v-for="l in g.links" :key="l.to" :to="l.to" :class="{ active: isActive(l.to) }" @click="onNav">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="ICONS[l.icon]"></svg>
-            <span>{{ l.label }}</span>
-            <span v-if="l.badge && badges[l.badge]" class="count">{{ badges[l.badge] }}</span>
-          </router-link>
-        </template>
+        <div v-for="g in groups" :key="g.name" class="nav-group" :class="{ open: isOpen(g) }">
+          <button type="button" class="section" :aria-expanded="isOpen(g)" @click="toggleGroup(g)">
+            <span>{{ g.name }}</span>
+            <span v-if="!isOpen(g) && groupCount(g)" class="count">{{ groupCount(g) }}</span>
+            <svg class="chev" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4.5l3 3 3-3"/></svg>
+          </button>
+          <div v-show="isOpen(g)" class="links">
+            <router-link v-for="l in g.links" :key="l.to" :to="l.to" :class="{ active: isActive(l.to) }" @click="onNav">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="ICONS[l.icon]"></svg>
+              <span>{{ l.label }}</span>
+              <span v-if="l.badge && badges[l.badge]" class="count">{{ badges[l.badge] }}</span>
+            </router-link>
+          </div>
+        </div>
       </nav>
       <div class="foot">FlashPay Group · Brazzaville<br /><span style="font-size:11px;">Console v2 · {{ sandbox ? 'Sandbox' : 'Production' }}</span></div>
     </aside>
 
+    <div v-if="!collapsed && narrow" class="side-backdrop" @click.stop="collapsed = true"></div>
     <button v-if="collapsed" class="side-open-btn" title="Afficher le menu" @click.stop="collapsed = false">
       <svg width="18" height="18" viewBox="0 0 18 18" stroke="currentColor" stroke-width="2"><path d="M2 4h14M2 9h14M2 14h14"/></svg>
     </button>
@@ -151,40 +158,44 @@ const ICONS = {
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5c2.5.6 4 2.4 4 5.5"/>',
 }
 
+// Menu réorganisé par usage : piloter, gérer le réseau, traiter les validations,
+// régler les tarifs, brancher les partenaires, administrer la plateforme.
 const groups = [
-  { name: 'Pilotage', links: [
+  { name: 'Pilotage', icon: 'home', links: [
     { to: '/', label: 'Tableau de bord', desc: "Vue d'ensemble de l'activité", icon: 'home' },
     { to: '/transactions', label: 'Transactions', desc: 'Toutes les opérations, filtres par canal', icon: 'list', badge: 'processing' },
+    { to: '/notifications', label: 'Notifications', desc: 'Centre d\'alertes : KYC, float, fraude, incidents', icon: 'bell', badge: 'notifications' },
   ] },
-  { name: 'Réseau', links: [
+  { name: 'Réseau & comptes', icon: 'users', links: [
     { to: '/clients', label: 'Clients', desc: 'Comptes clients : fiche, wallet, KYC, activation', icon: 'users', badge: 'kyc' },
     { to: '/merchants', label: 'Marchands', desc: 'Comptes marchands et validations', icon: 'store', badge: 'merchants' },
-    { to: '/agents', label: 'Agents', desc: 'Agents, sous-agents et super-agents (dépôt / retrait cash)', icon: 'agent', badge: 'agents' },
     { to: '/cashiers', label: 'Caissiers', desc: 'Sous-comptes d\'encaissement des marchands', icon: 'pos' },
-    { to: '/settlements', label: 'Règlements', desc: 'Virements bancaires des marchands à exécuter', icon: 'bank', badge: 'bank' },
+    { to: '/agents', label: 'Agents', desc: 'Agents, sous-agents et super-agents', icon: 'agent', badge: 'agents' },
+    { to: '/accounts', label: 'Comptes utilisateurs', desc: 'Activer / désactiver les comptes', icon: 'lock', badge: 'inactive' },
   ] },
-  { name: 'Conformité & opérations', links: [
-    { to: '/notifications', label: 'Notifications', desc: 'Centre d\'alertes : KYC, float, fraude, incidents', icon: 'bell', badge: 'notifications' },
+  { name: 'À traiter', icon: 'shield', links: [
     { to: '/kyc', label: 'Validation KYC', desc: 'Pièces à valider, paliers et plafonds', icon: 'id', badge: 'kyc_docs' },
     { to: '/float-requests', label: 'Approvisionnements', desc: 'Demandes de float des agents', icon: 'float', badge: 'float' },
+    { to: '/settlements', label: 'Règlements', desc: 'Virements bancaires des marchands à exécuter', icon: 'bank', badge: 'bank' },
     { to: '/support', label: 'Litiges & support', desc: 'Contestations et tickets (SLA)', icon: 'chat', badge: 'disputes' },
     { to: '/fraud', label: 'Anti-fraude', desc: 'Alertes, blocages temporaires', icon: 'shield', badge: 'fraud' },
-    { to: '/reconciliation', label: 'Réconciliation', desc: 'Ledger, soldes, orphelines PEEX', icon: 'scale' },
-    { to: '/audit', label: 'Journal d\'audit', desc: 'Trace immuable des interventions', icon: 'list' },
   ] },
-  { name: 'Paiements', links: [
-    { to: '/peex', label: 'Passerelle PEEX', desc: 'Collecte, décaissement, tests sandbox', icon: 'gateway' },
-    { to: '/corridors', label: 'Pays & change', desc: 'Corridors, opérateurs, taux de change', icon: 'globe' },
+  { name: 'Tarifs & finance', icon: 'tag', links: [
     { to: '/tariffs', label: 'Grille tarifaire', desc: 'Frais par opération et par zone', icon: 'tag' },
     { to: '/commissions', label: 'Commissions agents', desc: 'Barème par opération et palier', icon: 'tag' },
+    { to: '/corridors', label: 'Pays & change', desc: 'Corridors, opérateurs, taux de change', icon: 'globe' },
+    { to: '/reconciliation', label: 'Réconciliation', desc: 'Ledger, soldes, orphelines PEEX', icon: 'scale' },
+  ] },
+  { name: 'Intégrations', icon: 'gateway', links: [
+    { to: '/peex', label: 'Passerelle PEEX', desc: 'Collecte, décaissement, tests sandbox', icon: 'gateway' },
     { to: '/ecommerce', label: 'E-commerce & API', desc: 'Clés API, payment intents, webhooks', icon: 'code', badge: 'webhooks' },
     { to: '/mini-programs', label: 'Mini-programmes', desc: 'Services partenaires dans l\'app', icon: 'grid' },
-    { to: '/settings', label: 'Continuité & plafonds', desc: 'Mode dégradé par canal, plafonds KYC', icon: 'gear' },
   ] },
-  { name: 'Administration', links: [
-    { to: '/roles', label: 'Rôles & habilitations', desc: 'Qui fait quoi : app mobile et console, effectifs, comptes démo', icon: 'key' },
-    { to: '/accounts', label: 'Comptes utilisateurs', desc: 'Activer / désactiver les comptes (un, sélection, tous)', icon: 'lock', badge: 'inactive' },
+  { name: 'Administration', icon: 'gear', links: [
+    { to: '/roles', label: 'Rôles & habilitations', desc: 'Ajouter / retirer les droits de chaque profil', icon: 'key' },
     { to: '/users', label: 'Équipe interne', desc: 'Super Admin et Support', icon: 'users' },
+    { to: '/settings', label: 'Continuité & plafonds', desc: 'Mode dégradé par canal, plafonds KYC', icon: 'gear' },
+    { to: '/audit', label: 'Journal d\'audit', desc: 'Trace immuable des interventions', icon: 'list' },
   ] },
 ]
 const badges = ref({})
@@ -228,7 +239,28 @@ let pollTimer = null
 const allLinks = groups.flatMap((g) => g.links.map((l) => ({ ...l, group: g.name })))
 
 const isLoginPage = computed(() => route.path === '/login')
-const collapsed = ref(window.innerWidth < 800)
+// En dessous de 1100 px, le menu devient un panneau superposé (fermé par défaut)
+// pour ne jamais recouvrir le contenu des pages.
+const NARROW = 1100
+const narrow = ref(window.innerWidth < NARROW)
+const collapsed = ref(narrow.value)
+function onResize() {
+  const n = window.innerWidth < NARROW
+  if (n !== narrow.value) {
+    narrow.value = n
+    collapsed.value = n
+  }
+}
+// Groupes du menu repliables ; l'état est mémorisé par navigateur.
+const openGroups = ref({})
+try { openGroups.value = JSON.parse(localStorage.getItem('fp_admin_nav_groups') || '{}') } catch (_) {}
+function groupHasActive(g) { return g.links.some((l) => isActive(l.to)) }
+function isOpen(g) { return openGroups.value[g.name] ?? (g.name === 'Pilotage' || g.name === 'À traiter' || groupHasActive(g)) }
+function toggleGroup(g) {
+  openGroups.value = { ...openGroups.value, [g.name]: !isOpen(g) }
+  try { localStorage.setItem('fp_admin_nav_groups', JSON.stringify(openGroups.value)) } catch (_) {}
+}
+function groupCount(g) { return g.links.reduce((a, l) => a + (l.badge ? Number(badges.value[l.badge] || 0) : 0), 0) }
 const servicesOpen = ref(false)
 const userOpen = ref(false)
 const searchOpen = ref(false)
@@ -265,7 +297,7 @@ function closeMenus() {
   searchOpen.value = false
 }
 function onNav() {
-  if (window.innerWidth < 800) collapsed.value = true
+  if (narrow.value) collapsed.value = true
 }
 function move(d) {
   if (!results.value.length) return
@@ -302,9 +334,15 @@ async function loadEnv() {
 }
 watch(isLoginPage, (v) => { if (!v) loadEnv() })
 watch(() => route.path, () => { if (!isLoginPage.value) loadBadges() })
+// Ouvre automatiquement le groupe du menu de la page affichée
+watch(() => route.path, (path) => {
+  const g = groups.find((x) => x.links.some((l) => (l.to === '/' ? path === '/' : path.startsWith(l.to))))
+  if (g && openGroups.value[g.name] === false) openGroups.value = { ...openGroups.value, [g.name]: true }
+}, { immediate: true })
 
 onMounted(() => {
   window.addEventListener('keydown', onKey)
+  window.addEventListener('resize', onResize)
   window.addEventListener('pointerdown', unlockAudio, { once: true })
   window.addEventListener('keydown', unlockAudio, { once: true })
   loadEnv()
@@ -313,6 +351,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
+  window.removeEventListener('resize', onResize)
   clearInterval(pollTimer)
 })
 </script>

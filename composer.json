@@ -4,6 +4,7 @@
     "description": "FlashPay - API de paiement et de collecte interopérable (Congo-Brazzaville)",
     "require": {
         "php": "^8.2",
+        "ext-gd": "*",
         "laravel/framework": "^11.0",
         "laravel/sanctum": "^4.0",
         "spatie/laravel-permission": "^6.9",
@@ -12,7 +13,7 @@
         "propaganistas/laravel-phone": "^5.3"
     },
     "require-dev": {
-        "laravel/pint": "^1.13",
+        "laravel/pint": "^1.13 <1.18",
         "phpunit/phpunit": "^11.0",
         "fakerphp/faker": "^1.23"
     },

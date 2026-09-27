@@ -189,6 +189,8 @@ class ClientAdminController extends Controller
             'full_name' => $u->full_name,
             'phone' => $u->phone,
             'email' => $u->email,
+            'date_of_birth' => optional($u->date_of_birth)->format('Y-m-d'),
+            'place_of_birth' => $u->place_of_birth,
             'country' => $u->wallet?->country,
             'balance' => (int) ($u->wallet?->balance ?? 0),
             'currency' => $u->wallet?->currency ?? 'XAF',

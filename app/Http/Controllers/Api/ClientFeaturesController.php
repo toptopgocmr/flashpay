@@ -53,13 +53,16 @@ class ClientFeaturesController extends Controller
     public function addLinkedAccount(Request $request)
     {
         $v = $request->validate([
-            'type' => 'required|in:mobile_money,bank',
+            'type' => 'required|in:mobile_money,bank,card',
             'label' => 'nullable|string|max:80',
             'country' => 'nullable|string|size:2',
             'phone' => 'required_if:type,mobile_money|nullable|string|max:25',
             'bank_name' => 'required_if:type,bank|nullable|string|max:120',
             'account_holder' => 'required_if:type,bank|nullable|string|max:120',
             'account_number' => 'required_if:type,bank|nullable|string|max:60',
+            'card_holder' => 'required_if:type,card|nullable|string|max:120',
+            'card_number' => ['required_if:type,card', 'nullable', 'string', 'regex:/^[0-9 ]{12,23}$/'],
+            'card_expiry' => ['required_if:type,card', 'nullable', 'string', 'regex:/^(0[1-9]|1[0-2])\/[0-9]{2}$/'],
             'is_default' => 'nullable|boolean',
         ]);
         $u = $request->user();
@@ -72,7 +75,20 @@ class ClientFeaturesController extends Controller
             $operator = $route['operator'] ?? null;
             $country = $route['country'];
         }
-        $acc = LinkedAccount::create(array_intersect_key($v, array_flip(['type', 'label', 'phone', 'bank_name', 'account_holder', 'account_number'])) + [
+        $cardFields = [];
+        if ($v['type'] === 'card') {
+            $digits = preg_replace('/\D/', '', $v['card_number']);
+            // PCI-DSS : jamais de PAN complet ni de CVV en base — seuls le
+            // réseau et les 4 derniers chiffres sont conservés.
+            $cardFields = [
+                'account_holder' => $v['card_holder'],
+                'card_brand' => $this->cardBrand($digits),
+                'card_last4' => substr($digits, -4),
+                'card_expiry' => $v['card_expiry'],
+            ];
+            unset($v['card_number']);
+        }
+        $acc = LinkedAccount::create(array_intersect_key($v, array_flip(['type', 'label', 'phone', 'bank_name', 'account_holder', 'account_number'])) + $cardFields + [
             'user_id' => $u->id, 'country' => $country, 'operator' => is_array($operator) ? ($operator['label'] ?? null) : $operator,
             'is_default' => (bool) ($v['is_default'] ?? ! $u->linkedAccounts()->exists()),
         ]);
@@ -80,6 +96,16 @@ class ClientFeaturesController extends Controller
             LinkedAccount::where('user_id', $u->id)->where('id', '<>', $acc->id)->update(['is_default' => false]);
         }
         return response()->json($acc, 201);
+    }
+
+    private function cardBrand(string $digits): string
+    {
+        return match (true) {
+            (bool) preg_match('/^4/', $digits) => 'Visa',
+            (bool) preg_match('/^(5[1-5]|2[2-7])/', $digits) => 'Mastercard',
+            (bool) preg_match('/^3[47]/', $digits) => 'American Express',
+            default => 'Carte',
+        };
     }
 
     public function deleteLinkedAccount(Request $request, LinkedAccount $account)

@@ -8,6 +8,7 @@ use App\Models\MerchantCashier;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Merchant\CashierService;
+use App\Services\Security\Permissions;
 use App\Support\Audit;
 use Illuminate\Http\Request;
 
@@ -48,12 +49,40 @@ class RolesAdminController extends Controller
             }
         }
 
+        $perm = app(Permissions::class);
+
         return response()->json([
             'capabilities' => config('roles.capabilities'),
-            'roles' => config('roles.roles'),
+            'roles' => $perm->roles(),
+            'enforced' => self::ENFORCED,
             'counts' => $counts,
             'demo_accounts' => $demo,
         ]);
+    }
+
+    /** Habilitations contrôlées par l'API (middleware « cap: ») ; les autres pilotent l'affichage de l'app. */
+    public const ENFORCED = ['send', 'request', 'topup', 'withdraw', 'pay', 'collect', 'scan_client', 'cash_in', 'cash_out',
+        'float', 'sub_agents', 'cashiers', 'settlement', 'reports', 'kyc', 'desk'];
+
+    /** Ajoute (yes), restreint (limited + note) ou retire (no) une habilitation d'un rôle. */
+    public function setGrant(Request $request, string $role, string $capability, Permissions $perm)
+    {
+        $v = $request->validate([
+            'value' => 'required|in:yes,limited,no',
+            'note' => 'nullable|string|max:120',
+        ]);
+        $perm->set($role, $capability, $v['value'], $v['note'] ?? null, $request->user()->id);
+
+        return response()->json(['role' => $perm->roles()[$role], 'message' => 'Habilitation mise à jour.']);
+    }
+
+    /** Rétablit les habilitations par défaut (?role=… ou toutes). */
+    public function reset(Request $request, Permissions $perm)
+    {
+        $v = $request->validate(['role' => 'nullable|string|max:40']);
+        $perm->reset($v['role'] ?? null, $request->user()->id);
+
+        return response()->json(['roles' => $perm->roles(), 'message' => 'Habilitations par défaut rétablies.']);
     }
 
     /** Tous les caissiers, tous marchands confondus : ?q=&status=active|revoked */

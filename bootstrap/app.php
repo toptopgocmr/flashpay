@@ -17,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => EnsureRole::class,
             'active' => \App\Http\Middleware\EnsureActiveAccount::class,
             'pin' => \App\Http\Middleware\RequirePin::class,
+            'cap' => \App\Http\Middleware\RequireCapability::class,
             'idempotent' => \App\Http\Middleware\Idempotent::class,
             'merchant.api' => \App\Http\Middleware\AuthenticateMerchantApi::class,
         ]);

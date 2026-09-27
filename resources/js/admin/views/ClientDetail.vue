@@ -37,6 +37,8 @@
                 <tr><td>Nom</td><td>{{ c.full_name }}</td></tr>
                 <tr><td>Téléphone</td><td class="mono">{{ $phone(c.phone) }}</td></tr>
                 <tr><td>E-mail</td><td>{{ c.email || '—' }}</td></tr>
+                <tr><td>Date de naissance</td><td>{{ c.date_of_birth ? d(c.date_of_birth) : '—' }}</td></tr>
+                <tr><td>Lieu de naissance</td><td>{{ c.place_of_birth || '—' }}</td></tr>
                 <tr><td>Pays / devise</td><td>{{ c.country || '—' }} · {{ c.currency }}</td></tr>
                 <tr><td>Statut du compte</td><td><span class="status" :class="c.active ? 'ok' : 'err'">{{ c.active ? 'Actif' : 'Désactivé' }}</span></td></tr>
                 <tr v-if="c.other_profiles?.length"><td>Autres profils</td><td>{{ c.other_profiles.map((r) => ROLES[r] || r).join(', ') }}</td></tr>

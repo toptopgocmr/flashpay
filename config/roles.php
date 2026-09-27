@@ -63,6 +63,7 @@ return [
             'created_by' => 'FlashPay (Super Admin)',
             'login' => 'Identifiant agent (AG…) ou numéro + code secret',
             'grants' => ['cash_in' => 'yes', 'cash_out' => 'yes', 'scan_client' => 'yes', 'receive' => 'yes', 'float' => 'yes',
+                'send' => ['limited', 'Flux wallet agent ↔ externe (§3.1.5)'], 'topup' => 'yes', 'withdraw' => ['limited', 'Vers ses comptes'],
                 'reports' => ['limited', 'Historique et caisse du jour'], 'kyc' => 'yes'],
         ],
         'sub_agent' => [
@@ -70,14 +71,16 @@ return [
             'created_by' => 'FlashPay, rattaché à un super-agent',
             'login' => 'Identifiant agent ou numéro + code secret',
             'grants' => ['cash_in' => 'yes', 'cash_out' => 'yes', 'scan_client' => 'yes', 'receive' => 'yes',
-                'float' => ['limited', 'Validé par son super-agent'], 'reports' => ['limited', 'Historique et caisse du jour'], 'kyc' => 'yes'],
+                'float' => ['limited', 'Validé par son super-agent'], 'reports' => ['limited', 'Historique et caisse du jour'], 'kyc' => 'yes',
+                'send' => ['limited', 'Flux wallet agent ↔ externe (§3.1.5)'], 'topup' => 'yes', 'withdraw' => ['limited', 'Vers ses comptes']],
         ],
         'super_agent' => [
             'label' => 'Super-agent', 'space' => 'app', 'tone' => 'red',
             'created_by' => 'FlashPay (agent promu super-agent)',
             'login' => 'Identifiant agent ou numéro + code secret',
             'grants' => ['cash_in' => 'yes', 'cash_out' => 'yes', 'scan_client' => 'yes', 'receive' => 'yes', 'float' => 'yes',
-                'sub_agents' => 'yes', 'reports' => 'yes', 'kyc' => 'yes'],
+                'sub_agents' => 'yes', 'reports' => 'yes', 'kyc' => 'yes',
+                'send' => ['limited', 'Flux wallet agent ↔ externe (§3.1.5)'], 'topup' => 'yes', 'withdraw' => ['limited', 'Vers ses comptes']],
         ],
         'support' => [
             'label' => 'Support', 'space' => 'console', 'tone' => 'blue',

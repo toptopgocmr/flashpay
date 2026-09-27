@@ -87,7 +87,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     // --- KYC (§3.3.1, §12) ---
     Route::get('/kyc', [KycController::class, 'show']);
-    Route::post('/kyc/documents', [KycController::class, 'upload'])->middleware('throttle:20,1');
+    Route::post('/kyc/documents', [KycController::class, 'upload'])->middleware(['throttle:20,1', 'cap:kyc']);
 
     // --- Notifications (§11) ---
     Route::get('/notifications', [NotificationController::class, 'index']);
@@ -103,40 +103,40 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     // --- QR dynamique / lien de paiement / NFC / e-commerce côté payeur ---
     Route::get('/pay/requests/{token}', [PaymentRequestController::class, 'show']);
-    Route::post('/pay/requests/{token}', [PaymentRequestController::class, 'pay'])->middleware(['pin', 'idempotent']);
+    Route::post('/pay/requests/{token}', [PaymentRequestController::class, 'pay'])->middleware(['cap:pay', 'pin', 'idempotent']);
     Route::get('/pay/intents', [PaymentRequestController::class, 'pendingIntents']);
     Route::get('/pay/intents/{publicId}', [PaymentRequestController::class, 'showIntent']);
-    Route::post('/pay/intents/{publicId}', [PaymentRequestController::class, 'payIntent'])->middleware(['pin', 'idempotent']);
+    Route::post('/pay/intents/{publicId}', [PaymentRequestController::class, 'payIntent'])->middleware(['cap:pay', 'pin', 'idempotent']);
 
     // --- Wallet consolidé, comptes liés, cadeaux, partage de note, mini-programmes ---
     Route::get('/wallet/overview', [ClientFeaturesController::class, 'overview']);
     Route::get('/linked-accounts', [ClientFeaturesController::class, 'linkedAccounts']);
     Route::post('/linked-accounts', [ClientFeaturesController::class, 'addLinkedAccount']);
     Route::delete('/linked-accounts/{account}', [ClientFeaturesController::class, 'deleteLinkedAccount']);
-    Route::post('/pay/withdraw-bank', [ClientFeaturesController::class, 'withdrawToBank'])->middleware(['pin', 'idempotent']);
+    Route::post('/pay/withdraw-bank', [ClientFeaturesController::class, 'withdrawToBank'])->middleware(['cap:withdraw', 'pin', 'idempotent']);
     Route::get('/gifts', [ClientFeaturesController::class, 'gifts']);
-    Route::post('/gifts', [ClientFeaturesController::class, 'sendGift'])->middleware(['pin', 'idempotent']);
+    Route::post('/gifts', [ClientFeaturesController::class, 'sendGift'])->middleware(['cap:send', 'pin', 'idempotent']);
     Route::get('/gifts/{code}', [ClientFeaturesController::class, 'showGift']);
     Route::post('/gifts/{code}/claim', [ClientFeaturesController::class, 'claimGift'])->middleware('throttle:20,1');
     Route::get('/splits', [ClientFeaturesController::class, 'splits']);
     Route::post('/splits', [ClientFeaturesController::class, 'createSplit']);
     Route::post('/splits/{split}/remind', [ClientFeaturesController::class, 'remindSplit']);
     Route::post('/splits/{split}/cancel', [ClientFeaturesController::class, 'cancelSplit']);
-    Route::post('/splits/shares/{share}/pay', [ClientFeaturesController::class, 'paySplitShare'])->middleware(['pin', 'idempotent']);
+    Route::post('/splits/shares/{share}/pay', [ClientFeaturesController::class, 'paySplitShare'])->middleware(['cap:send', 'pin', 'idempotent']);
     Route::post('/splits/shares/{share}/decline', [ClientFeaturesController::class, 'declineSplitShare']);
     Route::get('/mini-programs', [ClientFeaturesController::class, 'miniPrograms']);
     // Demandes d'argent entre utilisateurs (« Scanner un ami pour lui demander »)
     Route::get('/money-requests', [MoneyRequestController::class, 'index']);
-    Route::post('/money-requests', [MoneyRequestController::class, 'store'])->middleware('throttle:20,1');
+    Route::post('/money-requests', [MoneyRequestController::class, 'store'])->middleware(['throttle:20,1', 'cap:request']);
     Route::get('/money-requests/{moneyRequest}', [MoneyRequestController::class, 'show'])->whereNumber('moneyRequest');
-    Route::post('/money-requests/{moneyRequest}/pay', [MoneyRequestController::class, 'pay'])->whereNumber('moneyRequest')->middleware(['pin', 'idempotent']);
+    Route::post('/money-requests/{moneyRequest}/pay', [MoneyRequestController::class, 'pay'])->whereNumber('moneyRequest')->middleware(['cap:send', 'pin', 'idempotent']);
     Route::post('/money-requests/{moneyRequest}/decline', [MoneyRequestController::class, 'decline'])->whereNumber('moneyRequest');
     Route::post('/money-requests/{moneyRequest}/cancel', [MoneyRequestController::class, 'cancel'])->whereNumber('moneyRequest');
     Route::post('/money-requests/{moneyRequest}/remind', [MoneyRequestController::class, 'remind'])->whereNumber('moneyRequest');
 
     // --- Encaissement : marchand principal ET caissiers (§3.2.2, §3.2.3) ---
     Route::middleware('role:merchant,cashier')->prefix('merchant')->group(function () {
-        Route::post('/payment-requests', [MerchantToolsController::class, 'createRequest']);
+        Route::post('/payment-requests', [MerchantToolsController::class, 'createRequest'])->middleware('cap:collect');
         Route::get('/payment-requests', [MerchantToolsController::class, 'listRequests']);
         Route::get('/payment-requests/{token}', [MerchantToolsController::class, 'showRequest']);
         Route::post('/payment-requests/{token}/cancel', [MerchantToolsController::class, 'cancelRequest']);
@@ -151,17 +151,17 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/corridors', [PaymentController::class, 'corridors']);
         Route::post('/lookup', [PaymentController::class, 'lookup']);
         Route::post('/quote', [PaymentController::class, 'quote']);
-        Route::post('/transfer', [PaymentController::class, 'transfer'])->middleware(['pin', 'idempotent']);
-        Route::post('/deposit', [PaymentController::class, 'deposit'])->middleware('idempotent');
-        Route::post('/withdraw', [PaymentController::class, 'withdraw'])->middleware(['pin', 'idempotent']);
+        Route::post('/transfer', [PaymentController::class, 'transfer'])->middleware(['cap:send', 'pin', 'idempotent']);
+        Route::post('/deposit', [PaymentController::class, 'deposit'])->middleware(['cap:topup', 'idempotent']);
+        Route::post('/withdraw', [PaymentController::class, 'withdraw'])->middleware(['cap:withdraw,settlement', 'pin', 'idempotent']);
         Route::get('/merchant/{code}', [PaymentController::class, 'merchantInfo'])->where('code', '.*');
-        Route::post('/merchant', [PaymentController::class, 'payMerchant'])->middleware(['pin', 'idempotent']);
+        Route::post('/merchant', [PaymentController::class, 'payMerchant'])->middleware(['cap:pay', 'pin', 'idempotent']);
         Route::get('/transactions/{transaction}/status', [PaymentController::class, 'status']);
         // Moyens proposés selon le pays + code QR de paiement + bons de retrait
         Route::get('/methods', [CashController::class, 'methods']);
         Route::post('/code', [CashController::class, 'payCode'])->middleware('throttle:30,1');
         Route::get('/vouchers', [CashController::class, 'vouchers']);
-        Route::post('/vouchers', [CashController::class, 'createVoucher'])->middleware(['pin', 'idempotent']);
+        Route::post('/vouchers', [CashController::class, 'createVoucher'])->middleware(['cap:withdraw,settlement', 'pin', 'idempotent']);
         Route::post('/vouchers/{voucher}/cancel', [CashController::class, 'cancelVoucher']);
     });
 
@@ -175,12 +175,12 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     // --- Client ---
     Route::middleware('role:client')->group(function () {
-        Route::post('/transactions/send-money', [TransactionController::class, 'sendMoney'])->middleware(['pin', 'idempotent']);
-        Route::post('/transactions/pay-merchant', [TransactionController::class, 'payMerchant'])->middleware(['pin', 'idempotent']);
+        Route::post('/transactions/send-money', [TransactionController::class, 'sendMoney'])->middleware(['cap:send', 'pin', 'idempotent']);
+        Route::post('/transactions/pay-merchant', [TransactionController::class, 'payMerchant'])->middleware(['cap:pay', 'pin', 'idempotent']);
         // Recharge du wallet depuis MTN / Airtel (collecte PEEX)
-        Route::post('/transactions/cash-in-mobile', [PeexController::class, 'cashInMobile']);
+        Route::post('/transactions/cash-in-mobile', [PeexController::class, 'cashInMobile'])->middleware('cap:topup');
         // Transfert mobile money -> mobile money (ex: MTN CG -> Airtel CG) via PEEX
-        Route::post('/transactions/mobile-transfer', [PeexController::class, 'mobileTransfer'])->middleware(['pin', 'idempotent']);
+        Route::post('/transactions/mobile-transfer', [PeexController::class, 'mobileTransfer'])->middleware(['cap:send', 'pin', 'idempotent']);
     });
 
     // --- Marchand ---
@@ -189,25 +189,25 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/outlets', [MerchantController::class, 'outlets']);
         Route::post('/outlets', [MerchantController::class, 'createOutlet']);
         Route::get('/collections', [MerchantController::class, 'collections']);
-        Route::post('/withdraw', [MerchantController::class, 'requestWithdrawal'])->middleware(['pin', 'idempotent']);
-        Route::post('/collect-ussd', [MerchantController::class, 'collectUssd']);
-        Route::post('/charge-code', [CashController::class, 'chargeCode'])->middleware('throttle:30,1');
+        Route::post('/withdraw', [MerchantController::class, 'requestWithdrawal'])->middleware(['cap:settlement', 'pin', 'idempotent']);
+        Route::post('/collect-ussd', [MerchantController::class, 'collectUssd'])->middleware('cap:collect');
+        Route::post('/charge-code', [CashController::class, 'chargeCode'])->middleware(['throttle:30,1', 'cap:scan_client']);
         // Règlements : comptes (mobile money, banque, wallet, cash), règlement manuel / automatique
         Route::get('/settlement', [SettlementController::class, 'show']);
         Route::post('/settlement/accounts', [SettlementController::class, 'addAccount']);
         Route::post('/settlement/accounts/{account}/default', [SettlementController::class, 'setDefault']);
         Route::delete('/settlement/accounts/{account}', [SettlementController::class, 'deleteAccount']);
-        Route::post('/settlement/settle', [SettlementController::class, 'settle'])->middleware(['throttle:20,1', 'pin', 'idempotent']);
-        Route::post('/settlement/auto', [SettlementController::class, 'auto']);
+        Route::post('/settlement/settle', [SettlementController::class, 'settle'])->middleware(['throttle:20,1', 'cap:settlement', 'pin', 'idempotent']);
+        Route::post('/settlement/auto', [SettlementController::class, 'auto'])->middleware('cap:settlement');
         Route::get('/qr', [MerchantController::class, 'qr']);
         // Caissiers, remboursements, rapports, paiement en ligne (§3.2.3–3.2.5, §13.2)
         Route::get('/cashiers', [MerchantToolsController::class, 'cashiers']);
-        Route::post('/cashiers', [MerchantToolsController::class, 'createCashier']);
-        Route::post('/cashiers/{cashier}', [MerchantToolsController::class, 'updateCashier']);
+        Route::post('/cashiers', [MerchantToolsController::class, 'createCashier'])->middleware('cap:cashiers');
+        Route::post('/cashiers/{cashier}', [MerchantToolsController::class, 'updateCashier'])->middleware('cap:cashiers');
         Route::get('/refunds', [MerchantToolsController::class, 'refunds']);
-        Route::post('/refunds', [MerchantToolsController::class, 'refund'])->middleware(['pin', 'idempotent']);
-        Route::get('/reports', [MerchantToolsController::class, 'reports']);
-        Route::get('/statement', [MerchantToolsController::class, 'statement']);
+        Route::post('/refunds', [MerchantToolsController::class, 'refund'])->middleware(['cap:reports', 'pin', 'idempotent']);
+        Route::get('/reports', [MerchantToolsController::class, 'reports'])->middleware('cap:reports');
+        Route::get('/statement', [MerchantToolsController::class, 'statement'])->middleware('cap:reports');
         Route::get('/api-keys', [MerchantToolsController::class, 'apiKeys']);
         Route::post('/api-keys', [MerchantToolsController::class, 'issueApiKeys'])->middleware('pin');
         Route::post('/api-keys/{key}', [MerchantToolsController::class, 'updateApiKey']);
@@ -217,24 +217,24 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     // --- Agent ---
     Route::middleware('role:agent')->prefix('agent')->group(function () {
         Route::get('/dashboard', [AgentController::class, 'dashboard']);
-        Route::post('/cash-in', [CashController::class, 'agentCashIn'])->middleware(['pin', 'idempotent']);
-        Route::get('/vouchers/{code}', [CashController::class, 'agentVoucher'])->middleware('throttle:20,1');
-        Route::post('/vouchers/redeem', [CashController::class, 'agentRedeem'])->middleware('throttle:20,1');
-        Route::post('/cash-out', [AgentController::class, 'cashOut']);
+        Route::post('/cash-in', [CashController::class, 'agentCashIn'])->middleware(['cap:cash_in', 'pin', 'idempotent']);
+        Route::get('/vouchers/{code}', [CashController::class, 'agentVoucher'])->middleware(['throttle:20,1', 'cap:cash_out']);
+        Route::post('/vouchers/redeem', [CashController::class, 'agentRedeem'])->middleware(['throttle:20,1', 'cap:cash_out']);
+        Route::post('/cash-out', [AgentController::class, 'cashOut'])->middleware('cap:cash_out');
         Route::get('/history', [AgentController::class, 'history']);
         // Approvisionnement, caisse, commissions (§3.1.2, §3.1.6, §3.1.7)
         Route::get('/float-requests', [AgentController::class, 'floatRequests']);
-        Route::post('/float-requests', [AgentController::class, 'createFloatRequest']);
+        Route::post('/float-requests', [AgentController::class, 'createFloatRequest'])->middleware('cap:float');
         Route::post('/float-requests/{floatRequest}/cancel', [AgentController::class, 'cancelFloatRequest']);
-        Route::post('/float-requests/{floatRequest}/review', [AgentController::class, 'reviewFloatRequest'])->middleware('pin');
+        Route::post('/float-requests/{floatRequest}/review', [AgentController::class, 'reviewFloatRequest'])->middleware(['cap:sub_agents', 'pin']);
         Route::get('/float', [AgentController::class, 'float']);
-        Route::get('/journal', [AgentController::class, 'journal']);
-        Route::get('/reconciliation', [AgentController::class, 'reconciliation']);
+        Route::get('/journal', [AgentController::class, 'journal'])->middleware('cap:reports');
+        Route::get('/reconciliation', [AgentController::class, 'reconciliation'])->middleware('cap:reports');
         Route::get('/commissions', [AgentController::class, 'commissions']);
     });
 
     // --- Support / Opérations ---
-    Route::middleware('role:support,super_admin')->prefix('support')->group(function () {
+    Route::middleware(['role:support,super_admin', 'cap:desk'])->prefix('support')->group(function () {
         Route::get('/transactions/{transaction}', [SupportController::class, 'transactionDetail']);
         Route::get('/transactions/{transaction}/trace', [SupportController::class, 'transactionTrace']);
         Route::post('/transactions/{transaction}/notes', [SupportController::class, 'addNote']);
@@ -277,6 +277,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
         // Rôles & habilitations (maquettes v2) et supervision des caissiers
         Route::get('/roles', [RolesAdminController::class, 'index']);
+        Route::put('/roles/{role}/grants/{capability}', [RolesAdminController::class, 'setGrant'])->where(['role' => '[a-z_]+', 'capability' => '[a-z_]+']);
+        Route::post('/roles/reset', [RolesAdminController::class, 'reset']);
         Route::get('/cashiers', [RolesAdminController::class, 'cashiers']);
         Route::post('/cashiers/{cashier}/status', [RolesAdminController::class, 'cashierStatus'])->whereNumber('cashier');
         Route::get('/geo', [AdminController::class, 'geo']);

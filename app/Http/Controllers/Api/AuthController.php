@@ -35,6 +35,8 @@ class AuthController extends Controller
             'business_name' => 'required_if:profile,merchant|string|max:150',
             'business_category' => 'nullable|string|max:80',
             'address' => 'nullable|string|max:255',
+            'date_of_birth' => 'nullable|date|before:today',
+            'place_of_birth' => 'nullable|string|max:150',
             'otp' => (config('security.require_otp_on_register') ? 'required' : 'nullable') . '|string|max:10',
             'pin' => 'nullable|string',
             'language' => 'nullable|in:fr,en',
@@ -61,6 +63,8 @@ class AuthController extends Controller
             'email' => $validated['email'] ?? null,
             'password' => Hash::make($validated['password']),
             'language' => $validated['language'] ?? 'fr',
+            'date_of_birth' => $validated['date_of_birth'] ?? null,
+            'place_of_birth' => $validated['place_of_birth'] ?? null,
             'kyc_tier' => 0,
         ]);
         $user->forceFill(['phone_verified_at' => ! empty($validated['otp']) ? now() : null])->save();
@@ -254,7 +258,12 @@ class AuthController extends Controller
 
     public function updateProfile(Request $request)
     {
-        $v = $request->validate(['language' => 'nullable|in:fr,en', 'email' => 'nullable|email|unique:users,email,' . $request->user()->id]);
+        $v = $request->validate([
+            'language' => 'nullable|in:fr,en',
+            'email' => 'nullable|email|unique:users,email,' . $request->user()->id,
+            'date_of_birth' => 'nullable|date|before:today',
+            'place_of_birth' => 'nullable|string|max:150',
+        ]);
         $request->user()->update(array_filter($v, fn ($x) => $x !== null));
         return response()->json($this->userPayload($request->user()->fresh()));
     }
@@ -303,6 +312,8 @@ class AuthController extends Controller
             'kyc_status' => $user->kyc_status,
             'kyc_tier' => (int) $user->kyc_tier,
             'has_pin' => $user->hasPin(),
+            'date_of_birth' => optional($user->date_of_birth)->format('Y-m-d'),
+            'place_of_birth' => $user->place_of_birth,
             'language' => $user->language ?? 'fr',
             'blocked_until' => $user->blocked_until,
             'limits' => app(\App\Services\Compliance\LimitService::class)->summary($user),
@@ -311,6 +322,8 @@ class AuthController extends Controller
             'wallet' => $user->wallet,
             'merchant' => $user->merchant,
             'agent' => $user->agent,
+            // Habilitations effectives (console « Rôles & habilitations ») : l'app masque le reste
+            'permissions' => app(\App\Services\Security\Permissions::class)->granted($user),
         ];
     }
 }
