@@ -31,5 +31,8 @@ class DatabaseSeeder extends Seeder
         if (config('flashpay.peex.sandbox') && app()->environment('local') && $wallet->balance == 0) {
             $wallet->update(['balance' => 1_000_000]);
         }
+
+        // Comptes de démonstration (code 2580) — hors production, ou si FLASHPAY_DEMO_ACCOUNTS=true
+        $this->call(DemoAccountsSeeder::class);
     }
 }

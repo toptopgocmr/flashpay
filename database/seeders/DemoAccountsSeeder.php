@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Hash;
  *   Caissier    +242 06 567 89 01   (caisse de la Boutique Jennifer)
  *
  * Idempotent : ne recrée rien et ne touche pas aux soldes si le compte existe.
- * Ignoré en production.
+ * Ignoré en production, sauf si FLASHPAY_DEMO_ACCOUNTS=true (recette / Railway).
  */
 class DemoAccountsSeeder extends Seeder
 {
@@ -30,7 +30,7 @@ class DemoAccountsSeeder extends Seeder
 
     public function run(): void
     {
-        if (app()->environment('production')) {
+        if (app()->environment('production') && ! filter_var(env('FLASHPAY_DEMO_ACCOUNTS', false), FILTER_VALIDATE_BOOL)) {
             return;
         }
 
