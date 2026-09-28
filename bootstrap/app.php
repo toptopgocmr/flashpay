@@ -13,6 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Railway (et tout hébergeur derrière un proxy HTTPS) : on fait confiance
+        // aux en-têtes X-Forwarded-* pour que Laravel sache que la page est en HTTPS.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'role' => EnsureRole::class,
             'active' => \App\Http\Middleware\EnsureActiveAccount::class,
