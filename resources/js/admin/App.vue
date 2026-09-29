@@ -206,7 +206,7 @@ function toggleSound() {
   soundOn.value = !soundOn.value
   try { localStorage.setItem('fp_admin_sound', soundOn.value ? 'on' : 'off') } catch (_) {}
   unlockAudio()
-  if (soundOn.value) playNotificationSound('info')
+  if (soundOn.value) playNotificationSound('info') // son de test à l'activation
   if (soundOn.value && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {})
 }
 const toast = ref(null)
@@ -227,8 +227,14 @@ async function loadBadges() {
     const { data } = await api.get('/admin/badges')
     badges.value = data
     const n = data.last_notification
+    const unread = Number(data.notifications || 0)
     if (n) {
       if (lastNotifId !== null && n.id > lastNotifId) announce(n)
+      else if (lastNotifId === null && unread > 0 && !announcedAtLogin) {
+        // À l'ouverture de la console : un son si des notifications ne sont pas lues
+        announcedAtLogin = true
+        if (soundOn.value) playNotificationSound(n.severity)
+      }
       lastNotifId = Math.max(lastNotifId ?? 0, n.id)
     } else if (lastNotifId === null) {
       lastNotifId = 0
@@ -236,6 +242,7 @@ async function loadBadges() {
   } catch (_) {}
 }
 let pollTimer = null
+let announcedAtLogin = false
 const allLinks = groups.flatMap((g) => g.links.map((l) => ({ ...l, group: g.name })))
 
 const isLoginPage = computed(() => route.path === '/login')
@@ -343,8 +350,11 @@ watch(() => route.path, (path) => {
 onMounted(() => {
   window.addEventListener('keydown', onKey)
   window.addEventListener('resize', onResize)
-  window.addEventListener('pointerdown', unlockAudio, { once: true })
-  window.addEventListener('keydown', unlockAudio, { once: true })
+  // Débloque le son à chaque interaction (le navigateur peut le re-suspendre)
+  window.addEventListener('pointerdown', unlockAudio)
+  window.addEventListener('keydown', unlockAudio)
+  // Une page (ex. Notifications) demande de recompter les non lues
+  window.addEventListener('fp:badges', loadBadges)
   loadEnv()
   // Vérifie les nouvelles notifications toutes les 15 secondes
   pollTimer = setInterval(() => { if (!isLoginPage.value) loadBadges() }, 15000)
@@ -352,6 +362,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('resize', onResize)
+  window.removeEventListener('pointerdown', unlockAudio)
+  window.removeEventListener('keydown', unlockAudio)
+  window.removeEventListener('fp:badges', loadBadges)
   clearInterval(pollTimer)
 })
 </script>

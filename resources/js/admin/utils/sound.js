@@ -14,7 +14,15 @@ function context() {
 
 export function unlockAudio() {
   const c = context()
-  if (c && c.state === 'suspended') c.resume().catch(() => {})
+  if (!c) return
+  if (c.state === 'suspended') c.resume().catch(() => {})
+  // Son silencieux : certains navigateurs n'activent l'audio qu'après une vraie lecture
+  try { tone(c, 440, 0, 0.01, 0.0002) } catch (_) {}
+}
+
+/** true si le navigateur autorise le son (après un clic sur la page). */
+export function audioReady() {
+  return !!ctx && ctx.state === 'running'
 }
 
 function tone(c, freq, start, duration, volume, type = 'sine') {
@@ -31,10 +39,12 @@ function tone(c, freq, start, duration, volume, type = 'sine') {
 }
 
 /** info/success : carillon doux · warning : double bip · critical : alarme répétée */
-export function playNotificationSound(severity = 'info') {
+export async function playNotificationSound(severity = 'info') {
   const c = context()
   if (!c) return
-  if (c.state === 'suspended') c.resume().catch(() => {})
+  if (c.state !== 'running') {
+    try { await c.resume() } catch (_) { return }
+  }
   if (severity === 'critical') {
     for (let i = 0; i < 3; i++) {
       tone(c, 880, i * 0.36, 0.16, 0.35, 'square')

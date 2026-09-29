@@ -4,10 +4,12 @@
       <div><h1>Centre de notifications</h1><p>KYC en attente, approvisionnements, alertes anti-fraude, anomalies de rapprochement, interventions manuelles et incidents techniques (§11.4).</p></div>
       <div class="actions">
         <ExportButton filename="notifications" :columns="EXP_COLS" :fetch="expFetch" />
-        <button class="btn-normal" @click="load">Actualiser</button>
-        <button class="btn" @click="readAll">Tout marquer comme lu</button>
+        <button class="btn-normal" :disabled="loading" @click="load">{{ loading ? 'Actualisation…' : 'Actualiser' }}</button>
+        <button class="btn" :disabled="!d?.unread || marking" @click="readAll">Tout marquer comme lu</button>
       </div>
     </div>
+    <div v-if="error" class="flash err mb"><div>{{ error }}</div></div>
+    <p v-if="updatedAt" class="upd">Mis à jour à {{ updatedAt }} · {{ d?.unread || 0 }} non lue(s)</p>
     <div class="tabs mb">
       <button v-for="t in tabs" :key="t.k" :class="{ on: filter === t.k }" @click="filter = t.k; load()">{{ t.l }}<span v-if="t.k === 'critical' && d?.critical_unread" class="n">{{ d.critical_unread }}</span></button>
     </div>
@@ -16,12 +18,15 @@
         <table>
           <thead><tr><th>Gravité</th><th>Événement</th><th>Détail</th><th>Date</th><th></th></tr></thead>
           <tbody>
-            <tr v-for="n in d?.data || []" :key="n.id" :style="n.read_at ? 'opacity:.6' : ''">
+            <tr v-for="n in d?.data || []" :key="n.id" :style="n.read_at ? 'opacity:.6' : ''" :class="{ unread: !n.read_at }">
               <td><span class="status" :class="cls(n.severity)">{{ SEV[n.severity] || n.severity }}</span></td>
               <td><strong>{{ n.title }}</strong><br /><small class="mono" style="color:var(--text-2)">{{ n.type }}</small></td>
               <td>{{ n.body }}</td>
               <td>{{ date(n.created_at) }}</td>
-              <td class="actions-cell"><IconAction v-if="link(n)" icon="open" label="Ouvrir" :to="link(n)" /></td>
+              <td class="actions-cell">
+                <IconAction v-if="!n.read_at" icon="check" tone="ok" label="Marquer comme lu" @click="markRead(n)" />
+                <IconAction v-if="link(n)" icon="open" label="Ouvrir" :to="link(n)" @click="markRead(n)" />
+              </td>
             </tr>
           </tbody>
         </table>
@@ -51,14 +56,46 @@ const link = (n) => (n.type?.startsWith('payment_') && n.data?.transaction_id ? 
   manual_intervention: n.data?.transaction_id ? `/transactions/${n.data.transaction_id}` : '/audit', account_lost: '/fraud',
 })[n.type]
 
+const loading = ref(false)
+const marking = ref(false)
+const error = ref('')
+const updatedAt = ref('')
+// Prévient l'en-tête (cloche + menu) de recompter tout de suite les non lues.
+const refreshBadges = () => window.dispatchEvent(new Event('fp:badges'))
+
 async function load() {
-  const params = paramsFor(filter.value)
-  const { data } = await api.get('/admin/notifications', { params })
-  d.value = data
+  loading.value = true
+  error.value = ''
+  try {
+    const { data } = await api.get('/admin/notifications', { params: { ...paramsFor(filter.value), _: Date.now() } })
+    d.value = data
+    updatedAt.value = new Date().toLocaleTimeString('fr-FR')
+  } catch (e) {
+    error.value = 'Actualisation impossible : ' + (e.response?.data?.message || e.message)
+  } finally {
+    loading.value = false
+  }
+  refreshBadges()
 }
 async function readAll() {
-  await api.post('/admin/notifications/read')
-  load()
+  marking.value = true
+  try {
+    await api.post('/admin/notifications/read')
+  } catch (e) {
+    error.value = e.response?.data?.message || e.message
+  } finally {
+    marking.value = false
+  }
+  await load()
+}
+async function markRead(n) {
+  if (n.read_at) return
+  n.read_at = new Date().toISOString() // retour visuel immédiat
+  try {
+    await api.post('/admin/notifications/read', { ids: [n.id] })
+  } catch (_) {}
+  refreshBadges()
+  if (filter.value === 'unread') d.value.data = d.value.data.filter((x) => x.id !== n.id)
 }
 onMounted(load)
 
@@ -73,3 +110,8 @@ const EXP_COLS = [
 ]
 const expFetch = (onP) => fetchAllPages('/admin/notifications', paramsFor(filter.value), onP)
 </script>
+
+<style scoped>
+.upd { font-size: 12.5px; color: var(--text-2); margin: -6px 0 10px; }
+tr.unread td:first-child { box-shadow: inset 3px 0 0 var(--link, #1e3a8a); }
+</style>
