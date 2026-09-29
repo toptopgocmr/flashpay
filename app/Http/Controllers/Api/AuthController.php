@@ -189,26 +189,31 @@ class AuthController extends Controller
     }
 
     /**
-     * Réinitialisation du PIN oublié (§15) : ré-authentification forte par
-     * OTP + mot de passe (+ numéro de pièce d'identité si enregistré au KYC).
+     * Réinitialisation du PIN oublié — parcours simple : numéro + code SMS + nouveau PIN.
+     * Mot de passe et n° de pièce sont facultatifs : vérifiés seulement s'ils sont fournis.
+     * Garde-fous : code SMS à usage unique, limitation (throttle), journal d'audit et
+     * notification « PIN réinitialisé » à l'utilisateur.
      */
     public function resetPin(Request $request, \App\Services\Security\OtpService $otp, \App\Services\Security\PinService $pins)
     {
         $v = $request->validate([
-            'phone' => 'required|string', 'otp' => 'required|string', 'password' => 'required|string',
+            'phone' => 'required|string', 'otp' => 'required|string', 'password' => 'nullable|string',
             'id_number' => 'nullable|string|max:60', 'new_pin' => 'required|string',
         ]);
         $user = User::whereIn('phone', \App\Support\Phone::candidates($v['phone']))->first();
-        if (! $user || ! Hash::check($v['password'], $user->password)) {
+        if (! $user) {
+            return response()->json(['message' => 'Code invalide ou expiré.'], 422);
+        }
+        if (! empty($v['password']) && ! Hash::check($v['password'], $user->password)) {
             return response()->json(['message' => 'Identifiants invalides.'], 401);
         }
         $otp->verify($user->phone, 'pin_reset', $v['otp']);
-        if ($user->id_number && strcasecmp(trim($user->id_number), trim((string) ($v['id_number'] ?? ''))) !== 0) {
+        if (! empty($v['id_number']) && $user->id_number && strcasecmp(trim($user->id_number), trim((string) ($v['id_number'] ?? ''))) !== 0) {
             return response()->json(['message' => 'Numéro de pièce d\'identité incorrect.', 'code' => 'id_mismatch'], 422);
         }
         $pins->set($user, $v['new_pin']);
         \App\Support\Audit::log('security.pin_reset', $user, [], $user->id);
-        app(\App\Services\Notifications\NotificationService::class)->toUser($user, 'pin_changed', 'Code PIN réinitialisé', 'Votre PIN a été réinitialisé après vérification d\'identité.', ['severity' => 'warning']);
+        app(\App\Services\Notifications\NotificationService::class)->toUser($user, 'pin_changed', 'Code PIN réinitialisé', 'Votre code PIN a été réinitialisé. Si ce n\'est pas vous, bloquez votre compte immédiatement.', ['severity' => 'warning']);
 
         return response()->json(['message' => 'PIN réinitialisé.']);
     }
