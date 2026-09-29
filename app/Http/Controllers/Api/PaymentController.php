@@ -151,6 +151,23 @@ class PaymentController extends Controller
             403
         );
 
+        // Sans callback PEEX ni planificateur, le statut n'avancerait jamais : l'app
+        // interroge cette route toutes les 3 s, on vérifie donc auprès de PEEX
+        // (au plus une fois toutes les 10 s par demande).
+        if ($transaction->status === 'processing') {
+            $handler = app(\App\Services\Peex\PeexStatusHandler::class);
+            foreach ($transaction->peexRequests()->whereNull('finalized_at')->get() as $req) {
+                if (\Illuminate\Support\Facades\Cache::add('peex:poll:' . $req->id, 1, 10)) {
+                    try {
+                        $handler->refresh($req);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('PEEX : vérification du statut impossible', ['track_id' => $req->track_id, 'error' => $e->getMessage()]);
+                    }
+                }
+            }
+            $transaction->refresh();
+        }
+
         return response()->json($this->txPayload($transaction));
     }
 
