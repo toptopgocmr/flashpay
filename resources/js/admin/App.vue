@@ -6,6 +6,10 @@
     <router-link v-if="toast" to="/notifications" class="fp-toast" :class="toast.severity" @click="toast = null">
       <strong>{{ toast.title }}</strong><span v-if="toast.body">{{ toast.body }}</span>
     </router-link>
+    <!-- Le navigateur bloque le son tant qu'on n'a pas cliqué : bandeau pour l'activer -->
+    <button v-if="soundOn && soundBlocked" class="fp-sound-bar" @click.stop="enableSound">
+      🔔 Cliquez ici pour activer le son et les alertes Windows des notifications
+    </button>
     <!-- ============ Barre de navigation supérieure ============ -->
     <header class="topnav" @click.stop>
       <router-link to="/" class="brand">
@@ -206,20 +210,45 @@ function toggleSound() {
   soundOn.value = !soundOn.value
   try { localStorage.setItem('fp_admin_sound', soundOn.value ? 'on' : 'off') } catch (_) {}
   unlockAudio()
-  if (soundOn.value) playNotificationSound('info') // son de test à l'activation
+  if (soundOn.value) ring('info') // son de test à l'activation
   if (soundOn.value && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {})
 }
 const toast = ref(null)
+// Tant qu'aucun clic n'a eu lieu, le navigateur bloque le son : on l'annonce d'emblée.
+const soundBlocked = ref(true)
+function onFirstGesture() {
+  unlockAudio()
+  // Le bandeau reste si les alertes Windows n'ont jamais été proposées
+  if (!('Notification' in window) || Notification.permission !== 'default') soundBlocked.value = false
+}
+// Clic sur le bandeau : débloque le son, demande l'autorisation des notifications
+// Windows (elles ont leur propre son, même onglet en arrière-plan), joue un test.
+async function enableSound() {
+  unlockAudio()
+  if ('Notification' in window && Notification.permission === 'default') {
+    try { await Notification.requestPermission() } catch (_) {}
+  }
+  soundBlocked.value = !(await playNotificationSound('info'))
+}
+async function ring(severity) {
+  if (!soundOn.value) return
+  const ok = await playNotificationSound(severity)
+  soundBlocked.value = !ok
+}
 let lastNotifId = null
 let toastTimer = null
 function announce(n) {
-  if (soundOn.value) playNotificationSound(n.severity)
+  ring(n.severity)
   toast.value = n
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toast.value = null }, 8000)
   // Notification du système si l'onglet n'est pas au premier plan
-  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-    try { new Notification('FlashPay · ' + n.title, { body: n.body || '', tag: 'fp-' + n.id }) } catch (_) {}
+  // Alerte Windows / système (avec son du système), toujours émise si autorisée
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      const sys = new Notification('FlashPay · ' + n.title, { body: n.body || '', tag: 'fp-' + n.id, silent: false, icon: '/images/flashpay-logo.svg' })
+      sys.onclick = () => { window.focus(); router.push('/notifications'); sys.close() }
+    } catch (_) {}
   }
 }
 async function loadBadges() {
@@ -233,7 +262,7 @@ async function loadBadges() {
       else if (lastNotifId === null && unread > 0 && !announcedAtLogin) {
         // À l'ouverture de la console : un son si des notifications ne sont pas lues
         announcedAtLogin = true
-        if (soundOn.value) playNotificationSound(n.severity)
+        ring(n.severity)
       }
       lastNotifId = Math.max(lastNotifId ?? 0, n.id)
     } else if (lastNotifId === null) {
@@ -351,8 +380,8 @@ onMounted(() => {
   window.addEventListener('keydown', onKey)
   window.addEventListener('resize', onResize)
   // Débloque le son à chaque interaction (le navigateur peut le re-suspendre)
-  window.addEventListener('pointerdown', unlockAudio)
-  window.addEventListener('keydown', unlockAudio)
+  window.addEventListener('pointerdown', onFirstGesture)
+  window.addEventListener('keydown', onFirstGesture)
   // Une page (ex. Notifications) demande de recompter les non lues
   window.addEventListener('fp:badges', loadBadges)
   loadEnv()
@@ -362,8 +391,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('resize', onResize)
-  window.removeEventListener('pointerdown', unlockAudio)
-  window.removeEventListener('keydown', unlockAudio)
+  window.removeEventListener('pointerdown', onFirstGesture)
+  window.removeEventListener('keydown', onFirstGesture)
   window.removeEventListener('fp:badges', loadBadges)
   clearInterval(pollTimer)
 })
@@ -372,6 +401,7 @@ onBeforeUnmount(() => {
 <style>
 .bell-count { background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; border-radius: 10px; padding: 0 6px; margin-left: 2px; }
 .fp-toast { position: fixed; top: 70px; right: 20px; z-index: 200; max-width: 380px; background: #fff; border-left: 5px solid var(--brand); border-radius: 12px; box-shadow: 0 12px 30px rgba(15, 23, 42, .18); padding: 12px 16px; display: grid; gap: 2px; color: var(--text); text-decoration: none; animation: fpToast .25s ease-out; }
+.fp-sound-bar { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 210; background: var(--brand, #1e3a8a); color: #fff; border: 0; border-radius: 999px; padding: 12px 22px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 10px 28px rgba(15, 23, 42, .3); }
 .fp-toast span { font-size: 13px; color: var(--text-2); }
 .fp-toast.warning { border-left-color: #f59e0b; }
 .fp-toast.critical { border-left-color: var(--err); }
