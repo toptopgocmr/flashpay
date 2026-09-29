@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Peex\PeexCorridors;
 use App\Services\Peex\PeexException;
+use App\Services\Peex\PeexGuard;
 
 /**
  * Devis d'une opération interopérable : route (pays / opérateurs), zone,
@@ -81,6 +82,20 @@ class QuoteService
             $problems[] = 'Solde insuffisant (' . number_format($src['balance'], 0, ',', ' ') . ' ' . $src['currency'] . ').';
         }
 
+        // Règle FlashPay : pas de transfert mobile money -> mobile money chez le MÊME
+        // opérateur (ex. MTN -> MTN). Le retrait wallet -> MTN reste autorisé.
+        if ($operation === 'transfer' && $src['type'] === 'mobile' && $dst['type'] === 'mobile'
+            && ! empty($src['corridor']) && $src['corridor'] === $dst['corridor']) {
+            $problems[] = "Les transferts {$src['operator']} vers {$src['operator']} ne sont pas pris en charge par FlashPay. "
+                . "Utilisez directement {$src['operator']}, ou envoyez depuis votre wallet FlashPay.";
+        }
+
+        // Contrôles PEEX avant tout débit (comptes, services, soldes) — seulement
+        // si l'opération est par ailleurs possible, pour limiter les appels.
+        if (empty($problems)) {
+            $this->peexChecks($src, $dst, (int) $fx['amount'], $problems);
+        }
+
         return [
             'operation' => $operation,
             'scope' => $scope,
@@ -99,6 +114,47 @@ class QuoteService
             'problems' => array_values(array_unique($problems)),
             'async' => in_array($src['type'], ['mobile', 'card'], true) || $dst['type'] === 'mobile',
         ];
+    }
+
+    /**
+     * 1. payeur mobile : collecte PEEX activée + compte actif (nom du titulaire) ;
+     * 2. bénéficiaire mobile : compte actif (nom du titulaire) + service de
+     *    versement activé + solde PEEX suffisant ;
+     * 3. si payeur ET bénéficiaire mobiles : remboursement automatique possible
+     *    vers le pays du payeur (sinon on refuse d'encaisser).
+     */
+    protected function peexChecks(array &$src, array &$dst, int $outAmount, array &$problems): void
+    {
+        $guard = app(PeexGuard::class);
+
+        if ($src['type'] === 'mobile') {
+            if ($p = $guard->checkCollect()) {
+                $problems[] = $p;
+                return;
+            }
+            $v = $guard->verifyAccount($src, 'source');
+            if ($v['problem']) {
+                $problems[] = $v['problem'];
+            }
+            $src['verified_name'] = $v['name'];
+        }
+
+        if ($dst['type'] === 'mobile') {
+            $v = $guard->verifyAccount($dst, 'destination');
+            if ($v['problem']) {
+                $problems[] = $v['problem'];
+            }
+            $dst['verified_name'] = $v['name'];
+            if ($v['name'] && empty($dst['name'])) {
+                $dst['name'] = $v['name'];
+            }
+            if ($p = $guard->checkPayout($dst['country'], $outAmount)) {
+                $problems[] = $p;
+            }
+            if ($src['type'] === 'mobile' && ! $src['payout']) {
+                $problems[] = "Remboursement automatique impossible vers {$src['country_name']} en cas d'échec : opération non disponible.";
+            }
+        }
     }
 
     protected function endpoint(array $e, string $side, array &$problems): array

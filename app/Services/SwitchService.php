@@ -7,6 +7,7 @@ use App\Models\Wallet;
 use App\Services\Connectors\Contracts\PaymentRailConnector;
 use App\Services\Connectors\PeexConnector;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
@@ -251,7 +252,63 @@ class SwitchService
             return $this->notified($tx->fresh());
         }
 
+        // Source mobile money (PEEX) : remboursement automatique sur le numéro débité.
+        // N'est appelé qu'après un échec de versement CERTAIN (vérifié auprès de PEEX).
+        if ($tx->source_rail === 'peex' && $tx->source_account) {
+            return $this->startRefund($tx, $reason);
+        }
+
         return $this->fail($tx, $reason . ' — fonds collectés en suspense, remboursement manuel requis');
+    }
+
+    /** Lance le remboursement PEEX du payeur (montant + frais). */
+    protected function startRefund(Transaction $tx, string $reason): Transaction
+    {
+        $reason = mb_substr($reason, 0, 180);
+        $tx->update(['stage' => 'awaiting_refund', 'failure_reason' => $reason . ' — remboursement en cours']);
+
+        try {
+            $result = app(PeexConnector::class)->refund($tx->fresh());
+        } catch (\Throwable $e) {
+            $result = ['status' => 'failed', 'raw' => ['error' => $e->getMessage()]];
+        }
+
+        if ($result['status'] === 'pending') {
+            return $tx->fresh();
+        }
+        if ($result['status'] === 'successful') {
+            return $this->refunded($tx->fresh(), $reason);
+        }
+
+        Log::critical('Remboursement PEEX impossible : remboursement manuel requis', ['reference' => $tx->reference, 'error' => $this->reason($result)]);
+        return $this->fail($tx, $reason . ' — remboursement automatique impossible (' . $this->reason($result) . '), remboursement manuel requis');
+    }
+
+    public function onRefundConfirmed(Transaction $tx): Transaction
+    {
+        return $this->withLock($tx, 'awaiting_refund', fn (Transaction $tx) => $this->refunded($tx, (string) $tx->failure_reason));
+    }
+
+    public function onRefundFailed(Transaction $tx, string $reason): Transaction
+    {
+        return $this->withLock($tx, 'awaiting_refund', function (Transaction $tx) use ($reason) {
+            Log::critical('Remboursement PEEX refusé : remboursement manuel requis', ['reference' => $tx->reference, 'reason' => $reason]);
+            return $this->fail($tx, str_replace(' — remboursement en cours', '', (string) $tx->failure_reason) . ' — remboursement refusé (' . $reason . '), remboursement manuel requis');
+        });
+    }
+
+    /** Remboursement confirmé : écritures inverses et statut « reversed ». */
+    protected function refunded(Transaction $tx, string $reason): Transaction
+    {
+        $payer = "{$tx->source_rail}:{$tx->source_account}";
+        $this->ledgerService->recordDoubleEntry($tx, 'flashpay:suspense', $payer, $tx->amount, null, 'Remboursement');
+        if ($tx->fee > 0) {
+            $this->ledgerService->recordDoubleEntry($tx, 'flashpay:fees', $payer, $tx->fee, null, 'Remboursement des frais');
+        }
+        $reason = str_replace(' — remboursement en cours', '', $reason);
+        $tx->update(['status' => 'reversed', 'stage' => null, 'failure_reason' => mb_substr($reason . ' — remboursé sur ' . $tx->source_account, 0, 250)]);
+
+        return $this->notified($tx->fresh());
     }
 
     /** Montant et devise versés au bénéficiaire (après change éventuel). */

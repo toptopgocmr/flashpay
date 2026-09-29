@@ -6,6 +6,9 @@
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="CACHE_STORE" value="array"/>
+        <!-- Contrôles PEEX testés à part (PeexSafetyTest) avec des réponses PEEX simulées -->
+        <env name="PEEX_VERIFY_ACCOUNTS" value="false"/>
+        <env name="PEEX_CHECK_BALANCE" value="false"/>
         <env name="FLASHPAY_AGENT_COUNTRIES" value="CG"/>
         <env name="FLASHPAY_ATM_COUNTRIES" value="CG"/>
         <env name="FLASHPAY_ATM_PARTNER_KEY" value="bank-secret"/>

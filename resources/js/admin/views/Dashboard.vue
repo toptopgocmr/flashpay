@@ -39,6 +39,48 @@
       </div>
     </div>
 
+    <!-- ===== Soldes PEEX ===== -->
+    <section class="container mb">
+      <div class="container-head">
+        <div>
+          <h3>Soldes PEEX <span v-if="peex?.sandbox" class="status pending">Sandbox</span></h3>
+          <p>Comptes FlashPay chez PEEX — disponible = solde − montants déjà engagés</p>
+        </div>
+        <div class="peex-head-actions">
+          <span class="muted" v-if="peex">Vérifié à {{ peexAt }}</span>
+          <button class="btn-normal" @click="loadPeex(true)" :disabled="peexLoading">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" :class="{ rot: peexLoading }"><path d="M14 8a6 6 0 1 1-2-4.5M14 2v4h-4"/></svg>
+            Soldes
+          </button>
+          <router-link to="/peex" class="btn-link">Passerelle PEEX →</router-link>
+        </div>
+      </div>
+      <div class="container-body">
+        <div v-if="peexError" class="flash err"><div>{{ peexError }}</div></div>
+        <div class="tiles">
+          <router-link class="tile peex-total" to="/peex">
+            <div class="k">Total PEEX</div>
+            <div class="v" :class="{ skeleton: !peex }">{{ short(peex?.total) }} <small>XAF</small></div>
+            <div class="sub">{{ peex ? xaf(peex.total) : '—' }}</div>
+          </router-link>
+          <router-link v-for="s in PEEX_ACCOUNTS" :key="s.key" class="tile" :class="{ 'peex-low': acc(s.key)?.low, 'peex-off': acc(s.key) && (!acc(s.key).ok || acc(s.key).activated === false) }" to="/peex">
+            <div class="k">{{ s.label }}</div>
+            <template v-if="!peex"><div class="v skeleton">&nbsp;</div><div class="sub">&nbsp;</div></template>
+            <template v-else-if="!acc(s.key)?.ok"><div class="v err-v">Indisponible</div><div class="sub" :title="acc(s.key)?.error">PEEX injoignable</div></template>
+            <template v-else>
+              <div class="v">{{ acc(s.key).balance === null ? '—' : short(acc(s.key).balance) }} <small>XAF</small></div>
+              <div class="sub" v-if="acc(s.key).activated === false">Service désactivé chez PEEX</div>
+              <div class="sub" v-else-if="s.payout">
+                Disponible : <strong>{{ xaf(acc(s.key).available) }}</strong><br />
+                Engagé : {{ xaf(acc(s.key).reserved) }}<span v-if="acc(s.key).low" class="low-tag"> · Solde bas</span>
+              </div>
+              <div class="sub" v-else>Fonds encaissés (mobile money → PEEX)</div>
+            </template>
+          </router-link>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== Réseau par rôle (maquettes v2) ===== -->
     <section v-if="net" class="container mb">
       <div class="container-head">
@@ -428,12 +470,36 @@ const NET_ROLES = [
   { key: 'sub_agent', label: 'Sous-agents', to: '/agents?level=sub', blue: true, icon: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M12 11v6M9 14h6"/>' },
   { key: 'super_agent', label: 'Super-agents', to: '/agents?level=super', icon: '<path d="M3 18h18M4 18l-1-10 5 4 4-7 4 7 5-4-1 10"/>' },
 ]
+// ----- Soldes PEEX -----
+const PEEX_ACCOUNTS = [
+  { key: 'remittance', label: 'Remittance / distribution', payout: true },
+  { key: 'disbursement', label: 'Décaissement', payout: true },
+  { key: 'collect', label: 'Collecte', payout: false },
+]
+const peex = ref(null)
+const peexLoading = ref(false)
+const peexError = ref('')
+const peexAt = ref('')
+const acc = (k) => peex.value?.accounts?.[k]
+function loadPeex(refresh = false) {
+  peexLoading.value = true
+  peexError.value = ''
+  api.get('/admin/peex/balances', { params: refresh ? { refresh: 1 } : {} })
+    .then(({ data }) => {
+      peex.value = data
+      peexAt.value = new Date(data.checked_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    })
+    .catch((e) => { peexError.value = 'Soldes PEEX indisponibles : ' + (e.response?.data?.message || e.message) })
+    .finally(() => { peexLoading.value = false })
+}
+
 function loadNet() {
   api.get('/admin/roles').then(({ data }) => { net.value = data }).catch(() => {})
 }
 
 async function load() {
   loadNet()
+  loadPeex()
   loading.value = true
   error.value = ''
   try {
@@ -458,6 +524,13 @@ onBeforeUnmount(() => clearInterval(timer))
 
 <style scoped>
 .rot { animation: spin 1s linear infinite; }
+.peex-head-actions { display: flex; align-items: center; gap: 12px; }
+.peex-head-actions .muted { color: var(--text-2); font-size: 13px; }
+.peex-total { background: var(--surface-2, #f5f7fb); }
+.peex-low { border-color: #f59e0b; background: #fffbeb; }
+.peex-off { border-color: #ef4444; background: #fef2f2; }
+.low-tag { color: #b45309; font-weight: 700; }
+.err-v { color: #b91c1c; font-size: 18px; }
 .date-range { display: inline-flex; align-items: center; gap: 6px; }
 .date-range span { color: var(--text-2); font-size: 13px; }
 .date-range input { padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 8px; font: inherit; }

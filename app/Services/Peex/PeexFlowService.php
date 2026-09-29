@@ -166,6 +166,16 @@ class PeexFlowService
         $dst = $q['destination'];
         $converted = $q['currency'] !== $q['receive_currency'];
 
+        // Revérification à l'instant du débit, sans cache : service de collecte
+        // actif et solde PEEX de versement suffisant (montants engagés déduits).
+        $guard = app(PeexGuard::class);
+        if ($src['type'] === 'mobile' && ($p = $guard->checkCollect(fresh: true))) {
+            throw new PeexException($p);
+        }
+        if ($dst['type'] === 'mobile' && ($p = $guard->checkPayout($dst['country'], (int) $q['gross_destination_amount'], fresh: true))) {
+            throw new PeexException($p);
+        }
+
         $payload = [
             'type' => $type,
             'scope' => $q['scope'],
@@ -193,6 +203,9 @@ class PeexFlowService
                 'sender_name' => $meta['payer_name'] ?? $src['name'] ?? $initiator->full_name,
                 'sender_phone' => $src['phone'] ?? $initiator->phone,
                 'payer_name' => $meta['payer_name'] ?? $src['name'] ?? $initiator->full_name,
+                // Titulaires vérifiés chez l'opérateur (Verify Wallet) : utilisés pour PEEX
+                'payer_verified_name' => $src['verified_name'] ?? null,
+                'beneficiary_verified_name' => $dst['verified_name'] ?? null,
                 'fx' => $converted ? $q['fx'] : null,
             ], fn ($v) => $v !== null && $v !== ''),
         ];

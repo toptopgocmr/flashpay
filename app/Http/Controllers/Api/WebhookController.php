@@ -41,7 +41,7 @@ class WebhookController extends Controller
             if (! is_array($item)) {
                 continue;
             }
-            $req = $handler->applyCallbackItem($item);
+            $req = $handler->applyCallbackItem($item, $service);
             $processed[] = [
                 'track_id' => $item['track_id'] ?? null,
                 'known' => (bool) $req,

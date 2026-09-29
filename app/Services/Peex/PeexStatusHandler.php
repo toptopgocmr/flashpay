@@ -9,6 +9,13 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Applique un statut PEEX (callback ou polling) à la transaction FlashPay liée.
+ *
+ * Règles :
+ *  - une demande déjà finalisée n'est plus modifiée par un callback tardif
+ *    (conflit journalisé en CRITICAL pour la réconciliation) ;
+ *  - un échec de versement (D) n'est appliqué — et donc le client remboursé —
+ *    qu'après CONFIRMATION du statut auprès de PEEX (all_requests) ;
+ *  - selon l'étape (track_id …-C / -D / -R) : collecte, versement ou remboursement.
  */
 class PeexStatusHandler
 {
@@ -19,7 +26,7 @@ class PeexStatusHandler
     }
 
     /** Traite un élément de callback PEEX (un objet du tableau reçu). */
-    public function applyCallbackItem(array $item): ?PeexRequest
+    public function applyCallbackItem(array $item, ?string $service = null): ?PeexRequest
     {
         $trackId = $item['track_id'] ?? null;
         $req = $trackId ? PeexRequest::where('track_id', $trackId)->first() : null;
@@ -29,8 +36,25 @@ class PeexStatusHandler
             return null;
         }
 
+        if ($service && $req->service !== $service) {
+            Log::warning('Callback PEEX : service incohérent, ignoré', ['track_id' => $trackId, 'attendu' => $req->service, 'recu' => $service]);
+            return null;
+        }
+
+        $status = strtolower($item['status'] ?? $req->status);
+
+        if ($req->finalized_at) {
+            if ($status !== $req->status) {
+                Log::critical('Callback PEEX en conflit avec une demande déjà finalisée', [
+                    'track_id' => $trackId, 'statut_final' => $req->status, 'statut_callback' => $status,
+                ]);
+            }
+            $req->update(['last_callback' => $item]);
+            return $req;
+        }
+
         $req->fill([
-            'status' => strtolower($item['status'] ?? $req->status),
+            'status' => $status,
             'peex_id' => $item['id'] ?? $req->peex_id,
             'payment_proof' => isset($item['payment_proof']) && $item['payment_proof'] !== '' ? (string) $item['payment_proof'] : $req->payment_proof,
             'message' => isset($item['message']) && $item['message'] !== '' ? (string) $item['message'] : $req->message,
@@ -40,20 +64,41 @@ class PeexStatusHandler
         return $this->finalize($req);
     }
 
-    /** Interroge PEEX pour une demande en attente puis applique le résultat. */
+    /** Interroge PEEX pour une demande non finalisée puis applique le résultat. */
     public function refresh(PeexRequest $req): PeexRequest
     {
-        if (! $req->finalized_at) {
-            $this->connector->checkStatus($req->track_id);
-            $req->refresh();
+        if ($req->finalized_at) {
+            return $req;
         }
-        return $this->finalize($req);
+        $check = $this->connector->checkStatus($req->track_id);
+        $req->refresh();
+
+        return $this->finalize($req, confirmed: ($check['checked'] ?? false) === true);
     }
 
-    public function finalize(PeexRequest $req): PeexRequest
+    public function finalize(PeexRequest $req, bool $confirmed = false): PeexRequest
     {
         if ($req->finalized_at || ! $req->isFinal()) {
             return $req;
+        }
+
+        $leg = PeexConnector::legOf($req->track_id);
+        $ok = PeexRequest::normalize($req->status) === 'successful';
+
+        // Vérifier avant de rembourser : un échec de versement reçu par callback
+        // est confirmé auprès de PEEX. « error » = refus explicite ou demande
+        // jamais reçue (déjà vérifiée) : pas de nouvel appel.
+        if (! $ok && $leg === 'D' && ! $confirmed && $req->status !== 'error') {
+            $check = $this->connector->checkStatus($req->track_id);
+            $req->refresh();
+            if (($check['checked'] ?? false) !== true) {
+                Log::warning('Échec PEEX non confirmé (PEEX injoignable) : remboursement différé', ['track_id' => $req->track_id]);
+                return $req; // reste non finalisée : peex:sync réessaiera
+            }
+            if (! $req->isFinal()) {
+                return $req;
+            }
+            $ok = PeexRequest::normalize($req->status) === 'successful';
         }
 
         $req->update(['finalized_at' => now()]);
@@ -62,14 +107,13 @@ class PeexStatusHandler
             return $req;
         }
 
-        $ok = PeexRequest::normalize($req->status) === 'successful';
         $reason = trim("{$req->status} " . ($req->payment_proof ?? $req->message ?? ''));
 
-        if ($req->service === 'collect') {
-            $ok ? $this->switch->onSourceConfirmed($tx) : $this->switch->onSourceFailed($tx, $reason);
-        } else {
-            $ok ? $this->switch->onDestinationConfirmed($tx) : $this->switch->onDestinationFailed($tx, $reason);
-        }
+        match ($leg) {
+            'C' => $ok ? $this->switch->onSourceConfirmed($tx) : $this->switch->onSourceFailed($tx, $reason),
+            'R' => $ok ? $this->switch->onRefundConfirmed($tx) : $this->switch->onRefundFailed($tx, $reason),
+            default => $ok ? $this->switch->onDestinationConfirmed($tx) : $this->switch->onDestinationFailed($tx, $reason),
+        };
 
         return $req->fresh();
     }

@@ -8,6 +8,7 @@ use App\Models\Transaction;
 use App\Services\Peex\PeexClient;
 use App\Services\Peex\PeexException;
 use App\Services\Peex\PeexFlowService;
+use App\Services\Peex\PeexGuard;
 use App\Services\Peex\PeexStatusHandler;
 use Illuminate\Http\Request;
 
@@ -44,6 +45,58 @@ class PeexAdminController extends Controller
                 'rejected' => ['699100001', '699100002'],
                 'note' => 'Numéros de test Cameroun (avec ou sans 237). En sandbox le montant réel est fixé à 10 FCFA.',
             ] : null,
+        ]);
+    }
+
+    /**
+     * Soldes des trois comptes PEEX (tableau de bord Super Admin) :
+     *   remittance    GET clients/me       -> solde
+     *   disbursement  GET disbursement/me  -> disbursement_solde
+     *   collect       GET collection/me    -> collect_solde
+     * « engagé » = montants promis (collectes en cours, remboursements) ;
+     * « disponible » = solde - engagé. ?refresh=1 force l'appel PEEX (sinon cache 30 s).
+     */
+    public function balances(Request $request, PeexGuard $guard, PeexClient $client)
+    {
+        $fresh = $request->boolean('refresh');
+        $low = (int) config('flashpay.peex.low_balance_alert', 100000);
+        $defs = [
+            'remittance' => ['label' => 'Remittance / distribution', 'field' => 'solde', 'payout' => true],
+            'disbursement' => ['label' => 'Décaissement', 'field' => 'disbursement_solde', 'payout' => true],
+            'collect' => ['label' => 'Collecte', 'field' => 'collect_solde', 'payout' => false],
+        ];
+
+        $out = [];
+        $total = 0;
+        foreach ($defs as $service => $def) {
+            try {
+                $me = $guard->account($service, $fresh);
+                $balance = $me[$def['field']] ?? ($service === 'remittance' ? null : ($me['solde'] ?? null));
+                $reserved = $def['payout'] ? $guard->reserved($service) : 0;
+                $available = is_numeric($balance) ? (float) $balance - $reserved : null;
+                $total += is_numeric($balance) ? (float) $balance : 0;
+                $out[$service] = [
+                    'ok' => true,
+                    'label' => $def['label'],
+                    'balance' => is_numeric($balance) ? (float) $balance : null,
+                    'reserved' => $reserved,
+                    'available' => $available,
+                    'activated' => $me['is_activated'] ?? null,
+                    'fees' => array_filter(['mtn' => $me['mtn_fees'] ?? null, 'orange' => $me['orange_fees'] ?? null], fn ($v) => $v !== null),
+                    'low' => $def['payout'] && $available !== null && $available < $low,
+                ];
+            } catch (PeexException $e) {
+                $out[$service] = ['ok' => false, 'label' => $def['label'], 'error' => $e->getMessage()];
+            }
+        }
+
+        return response()->json([
+            'sandbox' => $client->isSandbox(),
+            'currency' => 'XAF',
+            'total' => $total,
+            'low_balance_alert' => $low,
+            'accounts' => $out,
+            'checked_at' => now()->toIso8601String(),
         ]);
     }
 
@@ -107,7 +160,7 @@ class PeexAdminController extends Controller
 
     public function sync(PeexStatusHandler $handler)
     {
-        $pending = PeexRequest::whereNull('finalized_at')->whereIn('status', PeexRequest::PENDING_STATUSES)->limit(50)->get();
+        $pending = PeexRequest::whereNull('finalized_at')->limit(50)->get();
         $result = $pending->map(fn ($r) => ['track_id' => $r->track_id, 'status' => $handler->refresh($r)->status]);
 
         return response()->json(['checked' => $result->count(), 'results' => $result]);

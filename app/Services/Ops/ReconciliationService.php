@@ -101,8 +101,17 @@ class ReconciliationService
                 if (! $tx) {
                     continue;
                 }
-                $bad = ($peex === 'successful' && in_array($tx->status, ['failed', 'reversed'], true) && $r->service === 'collect')
-                    || ($peex === 'failed' && $tx->status === 'successful');
+                $leg = \App\Services\Connectors\PeexConnector::legOf($r->track_id);
+                $bad = match ($leg) {
+                    // débité chez l'opérateur mais transaction en échec sans remboursement
+                    'C' => $peex === 'successful' && $tx->status === 'failed' && $tx->source_rail === 'peex',
+                    // bénéficiaire payé alors que le client a été remboursé (double paiement) / ou l'inverse
+                    'D' => ($peex === 'successful' && $tx->status === 'reversed')
+                        || ($peex === 'failed' && $tx->status === 'successful'),
+                    // remboursement payé mais transaction non remboursée
+                    'R' => $peex === 'successful' && $tx->status !== 'reversed' && $tx->stage !== 'awaiting_refund',
+                    default => false,
+                };
                 if ($bad && count($out) < 200) {
                     $out[] = ['peex_request_id' => $r->id, 'track_id' => $r->track_id, 'service' => $r->service, 'peex_status' => $r->status, 'transaction' => $tx->reference, 'transaction_status' => $tx->status];
                 }

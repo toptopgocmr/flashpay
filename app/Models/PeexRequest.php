@@ -6,7 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class PeexRequest extends Model
 {
-    public const PENDING_STATUSES = ['new', 'pending'];
+    /** « unknown » : appel interrompu, issue à vérifier auprès de PEEX (jamais traité comme un échec). */
+    public const PENDING_STATUSES = ['new', 'pending', 'unknown'];
     public const SUCCESS_STATUSES = ['paid'];
     public const FAILED_STATUSES = ['failed', 'rejected', 'canceled', 'cancelled', 'error'];
 

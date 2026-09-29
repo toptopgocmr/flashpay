@@ -19,8 +19,9 @@ class PeexSyncCommand extends Command
 
     public function handle(PeexStatusHandler $handler): int
     {
+        // Toutes les demandes non finalisées : en attente, « unknown » (appel
+        // interrompu) et échecs reçus par callback en attente de confirmation.
         $pending = PeexRequest::whereNull('finalized_at')
-            ->whereIn('status', PeexRequest::PENDING_STATUSES)
             ->where('created_at', '>=', now()->subDays(3)) // PEEX n'expose que 3 jours d'historique
             ->orderBy('last_checked_at')
             ->limit((int) $this->option('limit'))

@@ -128,6 +128,41 @@ class PeexClient
         return $this->call('GET', 'clients/me');
     }
 
+    /**
+     * Vérification du compte mobile money + titulaire (Verify Wallet / Get KYC).
+     * Réponse normalisée : {valid, name, status, operator, raw}.
+     * 404 = compte inexistant chez l'opérateur (valid=false).
+     */
+    public function verifyWallet(string $countryIso, string $localNumber): array
+    {
+        try {
+            $r = $this->call('POST', config('flashpay.peex.verify_wallet_path', 'clients/verify_wallet'), [
+                'countryCode' => strtoupper($countryIso),
+                'accountNumber' => $localNumber,
+            ]);
+        } catch (PeexException $e) {
+            if ($e->httpStatus === 404) {
+                return ['valid' => false, 'name' => null, 'status' => 'NOT_FOUND', 'operator' => null, 'raw' => $e->body];
+            }
+            throw $e;
+        }
+
+        $valid = $r['isValid'] ?? $r['valid'] ?? null;
+        $status = $r['status'] ?? $r['accountStatus'] ?? null;
+        $valid ??= ($r['accountName'] ?? $r['accountTitle'] ?? null) !== null;
+        if (is_string($status) && ! in_array(strtoupper($status), ['ACTIVE', 'ACTIF'], true)) {
+            $valid = false;
+        }
+
+        return [
+            'valid' => (bool) $valid,
+            'name' => $r['accountName'] ?? $r['accountTitle'] ?? null,
+            'status' => $status,
+            'operator' => $r['operator'] ?? null,
+            'raw' => $r,
+        ];
+    }
+
     public function verifyPhone(string $internationalPhone): array
     {
         return $this->call('POST', 'clients/verify_phoneNumber', ['mobile_phone' => $internationalPhone]);
@@ -147,14 +182,26 @@ class PeexClient
 
     public function statusFor(string $service, string $trackId): array
     {
-        $list = match ($service) {
+        try {
+            $list = $this->statusList($service, $trackId);
+        } catch (PeexException $e) {
+            if ($e->httpStatus === 404) {
+                return []; // inconnue chez PEEX (jamais reçue, ou plus de 3 jours)
+            }
+            throw $e;
+        }
+
+        return self::extractRequest($list, $trackId) ?? [];
+    }
+
+    protected function statusList(string $service, string $trackId): array
+    {
+        return match ($service) {
             'collect' => $this->collectStatus($trackId),
             'disbursement' => $this->disbursementStatus($trackId),
             'remittance' => $this->remittanceStatus($trackId),
             default => throw new PeexException("Service PEEX inconnu : {$service}"),
         };
-
-        return self::extractRequest($list, $trackId) ?? [];
     }
 
     /**

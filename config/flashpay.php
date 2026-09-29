@@ -42,6 +42,20 @@ return [
         'default_fund_origin' => 'SALARY',
         // Pays d'origine déclaré pour les envois "remittance" (clients/request_payment)
         'sender_country' => env('PEEX_SENDER_COUNTRY', 'CG'),
+
+        // ---- Contrôles avant toute opération via PEEX (PeexGuard) ----
+        // Vérifier que chaque numéro mobile money (payeur ET bénéficiaire) est un
+        // compte actif, et récupérer le nom du titulaire (Verify Wallet / Get KYC).
+        'verify_accounts' => (bool) env('PEEX_VERIFY_ACCOUNTS', true),
+        'verify_wallet_path' => env('PEEX_VERIFY_WALLET_PATH', 'clients/verify_wallet'),
+        // Vérifier que le service PEEX est activé et que le solde de versement
+        // (disbursement_solde / solde) couvre le montant + frais PEEX + encours.
+        'check_balance' => (bool) env('PEEX_CHECK_BALANCE', true),
+        // Délai après lequel une demande « unknown » introuvable chez PEEX est
+        // considérée comme jamais reçue (échec certain -> remboursement).
+        'unknown_grace_minutes' => (int) env('PEEX_UNKNOWN_GRACE_MINUTES', 10),
+        // Alerte « solde bas » sur le tableau de bord (XAF disponibles par compte de versement)
+        'low_balance_alert' => (int) env('PEEX_LOW_BALANCE_ALERT', 100000),
     ],
 
     /*
