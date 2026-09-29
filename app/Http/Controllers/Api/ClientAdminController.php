@@ -198,6 +198,8 @@ class ClientAdminController extends Controller
             'kyc_status' => $u->kyc_status,
             'status' => $u->status,
             'active' => $u->status === 'active',
+            'lost_reported_at' => $u->lost_reported_at,
+            'blocked_until' => $u->blocked_until,
             'status_reason' => $u->status_reason,
             'status_changed_at' => $u->status_changed_at,
             'roles' => $u->relationLoaded('roles') ? $u->roles->pluck('name') : [],

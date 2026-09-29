@@ -17,6 +17,15 @@
     </div>
 
     <div v-if="msg" class="flash" :class="msg.type"><div>{{ msg.text }}</div></div>
+    <div v-if="c && (c.lost_reported_at || (c.blocked_until && new Date(c.blocked_until) > new Date()))" class="flash err">
+      <div>
+        <strong>{{ c.lost_reported_at ? 'Téléphone / SIM déclaré perdu ou volé' : 'Compte bloqué par la sécurité' }}</strong>
+        <template v-if="c.lost_reported_at"> le {{ dt(c.lost_reported_at) }} : connexion et opérations impossibles.</template>
+        <template v-else> jusqu'au {{ dt(c.blocked_until) }}.</template>
+        Débloquez après vérification de la pièce d'identité du client.
+        <button class="btn-normal" style="margin-left: 10px" @click="unblock">Débloquer le compte</button>
+      </div>
+    </div>
     <div v-if="c && !c.active" class="flash err"><div><strong>Compte désactivé</strong><template v-if="c.status_changed_at"> le {{ dt(c.status_changed_at) }}</template><template v-if="c.status_changed_by"> par {{ c.status_changed_by }}</template><template v-if="c.status_reason"> — motif : {{ c.status_reason }}</template></div></div>
     <div v-if="c && c.wallet_status === 'frozen'" class="flash warn"><div><strong>Wallet gelé :</strong> le client peut recevoir de l'argent mais aucun débit (envoi, paiement, retrait) n'est possible.</div></div>
 
@@ -148,6 +157,11 @@ async function load() {
 }
 async function act(fn) {
   try { const { data: r } = await fn(); msg.value = { type: 'info', text: r.message }; await load() } catch (e) { msg.value = { type: 'err', text: e.response?.data?.message || e.message } }
+}
+function unblock() {
+  const reason = prompt('Motif du déblocage (ex. : identité vérifiée en agence, pièce n°…)')
+  if (!reason) return
+  act(() => api.post(`/admin/users/${c.value.id}/unblock`, { reason }))
 }
 const kyc = (decision) => act(() => api.post(`/admin/clients/${c.value.id}/kyc`, { decision }))
 function freeze(frozen) {

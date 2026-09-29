@@ -144,6 +144,15 @@ class AuthController extends Controller
             return response()->json(['message' => 'Compte suspendu ou bloqué. Contactez le support.'], 403);
         }
 
+        // Téléphone / SIM déclaré perdu ou volé : aucune connexion avant déblocage par le support
+        if ($user->lost_reported_at) {
+            return response()->json([
+                'message' => 'Compte bloqué suite à la déclaration de perte ou de vol du téléphone le ' . $user->lost_reported_at->format('d/m/Y')
+                    . '. Présentez-vous dans une agence FlashPay avec votre pièce d\'identité, ou contactez le support, pour le débloquer.',
+                'code' => 'account_lost_blocked',
+            ], 423);
+        }
+
         if ($user->cashier && $user->cashier->status !== 'active') {
             return response()->json(['message' => 'Accès caissier révoqué par le marchand.'], 403);
         }
@@ -227,10 +236,13 @@ class AuthController extends Controller
         $v = $request->validate(['phone' => 'required|string', 'password' => 'required|string']);
         $user = User::whereIn('phone', \App\Support\Phone::candidates($v['phone']))->first();
         if (! $user || ! Hash::check($v['password'], $user->password)) {
-            return response()->json(['message' => 'Identifiants invalides.'], 401);
+            return response()->json(['message' => 'Numéro ou mot de passe incorrect. Mot de passe oublié ? Contactez le support FlashPay.'], 401);
+        }
+        if ($user->lost_reported_at) {
+            return response()->json(['message' => 'Ce compte est déjà bloqué (perte déclarée le ' . $user->lost_reported_at->format('d/m/Y') . '). Présentez-vous en agence ou contactez le support pour le débloquer.']);
         }
         app(\App\Services\Security\DeviceService::class)->revokeAll($user);
-        $user->forceFill(['blocked_until' => now()->addDays(30)])->save();
+        $user->forceFill(['blocked_until' => now()->addYears(10), 'lost_reported_at' => now()])->save();
         \App\Support\Audit::log('security.report_lost', $user, [], $user->id);
         app(\App\Services\Client\SupportService::class)->openTicket($user, 'security_report', 'Perte / vol du téléphone ou de la SIM', 'Blocage demandé par l\'utilisateur. Vérification d\'identité requise avant déblocage.', 'critical');
         app(\App\Services\Notifications\NotificationService::class)->toAdmins('account_lost', 'Compte bloqué (perte/vol)', "{$user->full_name} ({$user->phone})", ['severity' => 'critical', 'data' => ['user_id' => $user->id]]);

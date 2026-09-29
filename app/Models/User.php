@@ -23,7 +23,7 @@ class User extends Authenticatable
     protected $fillable = [
         'full_name', 'email', 'phone', 'password', 'kyc_status', 'status', 'linked_user_id',
         'status_reason', 'status_changed_at', 'status_changed_by',
-        'kyc_tier', 'id_number', 'date_of_birth', 'place_of_birth', 'language', 'risk_score', 'blocked_until',
+        'kyc_tier', 'id_number', 'date_of_birth', 'place_of_birth', 'language', 'risk_score', 'blocked_until', 'lost_reported_at',
         'pin_hash', 'pin_attempts', 'pin_locked_until', 'pin_changed_at',
     ];
 
@@ -34,7 +34,7 @@ class User extends Authenticatable
 
     protected function casts(): array
     {
-        return ['password' => 'hashed', 'status_changed_at' => 'datetime', 'kyc_tier' => 'integer', 'pin_locked_until' => 'datetime', 'pin_changed_at' => 'datetime', 'blocked_until' => 'datetime', 'date_of_birth' => 'date'];
+        return ['password' => 'hashed', 'status_changed_at' => 'datetime', 'kyc_tier' => 'integer', 'pin_locked_until' => 'datetime', 'pin_changed_at' => 'datetime', 'blocked_until' => 'datetime', 'lost_reported_at' => 'datetime', 'date_of_birth' => 'date'];
     }
 
     /** Téléphone toujours enregistré au format international (indicatif pays inclus). */

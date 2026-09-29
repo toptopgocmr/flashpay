@@ -94,7 +94,7 @@ class AdminOpsController extends Controller
     public function unblockUser(Request $request, User $user)
     {
         $v = $request->validate(['reason' => 'required|string|max:190']);
-        $user->forceFill(['blocked_until' => null, 'pin_locked_until' => null, 'pin_attempts' => 0])->save();
+        $user->forceFill(['blocked_until' => null, 'lost_reported_at' => null, 'pin_locked_until' => null, 'pin_attempts' => 0])->save();
         Audit::log('user.unblock', $user, $v);
         return response()->json(['message' => 'Compte débloqué.']);
     }
