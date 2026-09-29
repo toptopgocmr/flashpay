@@ -70,7 +70,8 @@ class PeexGuard
             }
             try {
                 $info = $this->client->verifyPhone($route['phone']);
-                if (($info['valid'] ?? true) === false) {
+                $infoMsg = strtolower((string) ($info['message'] ?? ''));
+                if (($info['valid'] ?? true) === false && ! preg_match('/unsupported|not supported|non support/', $infoMsg)) {
                     return ['ok' => false, 'name' => null, 'problem' => "{$who} {$route['phone']} n'est pas un numéro mobile valide."];
                 }
             } catch (\Throwable $e) {
@@ -155,8 +156,15 @@ class PeexGuard
 
         $balance = $me[$service === 'disbursement' ? 'disbursement_solde' : 'solde'] ?? $me['solde'] ?? null;
         if (! is_numeric($balance)) {
-            Log::critical("PEEX {$service}/me : solde non communiqué — contrôle impossible", ['me' => $me]);
-            return 'Versements mobile money momentanément indisponibles. Réessayez plus tard.';
+            // PEEX production renvoie disbursement_solde = null : le solde n'est pas
+            // exposé. On ne bloque pas (PEEX refusera le versement si le solde manque,
+            // et le payeur est alors remboursé automatiquement), sauf réglage strict.
+            if (config('flashpay.peex.require_payout_balance', false)) {
+                Log::critical("PEEX {$service}/me : solde non communiqué — contrôle impossible", ['me' => $me]);
+                return 'Versements mobile money momentanément indisponibles. Réessayez plus tard.';
+            }
+            Log::warning("PEEX {$service}/me : solde non communiqué — contrôle du solde ignoré");
+            return null;
         }
 
         $feePct = max((float) ($me['orange_fees'] ?? 0), (float) ($me['mtn_fees'] ?? 0));

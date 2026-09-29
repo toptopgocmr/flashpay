@@ -183,6 +183,12 @@ class PeexClient
             if (is_string($valid)) {
                 $valid = filter_var($valid, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
             }
+            // Ex. production PEEX : {"valid":false,"message":"Unsupported account code: CG"}
+            // = la vérification n'existe pas pour ce pays, ce n'est PAS un verdict sur le compte.
+            $msg = strtolower((string) ($r['message'] ?? $r['error'] ?? ''));
+            if ($valid === false && preg_match('/unsupported|not supported|non support|not available|not implemented/', $msg)) {
+                return ['valid' => null, 'name' => null, 'status' => 'UNSUPPORTED', 'operator' => null, 'raw' => $r];
+            }
             if ($valid === null && $name) {
                 $valid = true;
             }
