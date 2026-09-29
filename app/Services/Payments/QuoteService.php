@@ -82,13 +82,8 @@ class QuoteService
             $problems[] = 'Solde insuffisant (' . number_format($src['balance'], 0, ',', ' ') . ' ' . $src['currency'] . ').';
         }
 
-        // Règle FlashPay : pas de transfert mobile money -> mobile money chez le MÊME
-        // opérateur (ex. MTN -> MTN). Le retrait wallet -> MTN reste autorisé.
-        if ($operation === 'transfer' && $src['type'] === 'mobile' && $dst['type'] === 'mobile'
-            && ! empty($src['corridor']) && $src['corridor'] === $dst['corridor']) {
-            $problems[] = "Les transferts {$src['operator']} vers {$src['operator']} ne sont pas pris en charge par FlashPay. "
-                . "Utilisez directement {$src['operator']}, ou envoyez depuis votre wallet FlashPay.";
-        }
+        // Mobile money -> mobile money autorisé sur TOUS les opérateurs, y compris
+        // le même opérateur (décision du 29/09/2026) : collecte PEEX puis versement PEEX.
 
         // Contrôles PEEX avant tout débit (comptes, services, soldes) — seulement
         // si l'opération est par ailleurs possible, pour limiter les appels.

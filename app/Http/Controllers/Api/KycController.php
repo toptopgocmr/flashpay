@@ -24,6 +24,7 @@ class KycController extends Controller
             'kyc_status' => $u->kyc_status,
             'kyc_tier' => (int) $u->kyc_tier,
             'documents' => $u->kycDocuments()->latest()->get(['id', 'type', 'status', 'rejection_reason', 'created_at', 'reviewed_at']),
+            'has_photo' => self::latestPhoto($u) !== null,
             'types' => KycService::TYPES,
             'limits' => $limits->summary($u),
         ]);
@@ -57,14 +58,47 @@ class KycController extends Controller
 
     public function userDocuments(User $user)
     {
-        return response()->json($user->kycDocuments()->latest()->get()->map(fn ($d) => $d->toArray() + ['type_label' => KycService::TYPES[$d->type] ?? $d->type]));
+        return response()->json($user->kycDocuments()->latest()->get()->map(fn ($d) => $d->toArray() + ['type_label' => KycService::TYPES[$d->type] ?? $d->type, 'has_file' => $d->hasFile()]));
     }
 
     public function file(KycDocument $document)
     {
-        abort_unless(Storage::disk('local')->exists($document->path), 404);
+        abort_unless($document->hasFile(), 404, 'Fichier introuvable. Merci de demander au client de renvoyer la pièce.');
         \App\Support\Audit::log('kyc.view_document', $document);
-        return Storage::disk('local')->response($document->path);
+        return $document->fileResponse();
+    }
+
+    /** Photo de profil d'un utilisateur (console). */
+    public function userPhoto(User $user)
+    {
+        $doc = self::latestPhoto($user);
+        abort_unless($doc, 404);
+        return $doc->fileResponse();
+    }
+
+    // ---------------------------------------------------------- Propriétaire
+
+    /** L'utilisateur consulte une de SES pièces (aperçu dans l'app). */
+    public function myFile(Request $request, KycDocument $document)
+    {
+        abort_unless($document->user_id === $request->user()->id, 403);
+        abort_unless($document->hasFile(), 404, 'Fichier introuvable. Merci de renvoyer la pièce.');
+        return $document->fileResponse();
+    }
+
+    /** Photo de profil de l'utilisateur connecté (avatar dans l'app). */
+    public function myPhoto(Request $request)
+    {
+        $doc = self::latestPhoto($request->user());
+        abort_unless($doc, 404);
+        return $doc->fileResponse();
+    }
+
+    public static function latestPhoto(User $user): ?KycDocument
+    {
+        return $user->kycDocuments()->where('type', 'profile_photo')
+            ->where(fn ($q) => $q->where('status', '!=', 'rejected')->orWhere('rejection_reason', 'Remplacé par un nouvel envoi'))
+            ->latest('id')->get()->first(fn ($d) => $d->hasFile());
     }
 
     public function review(Request $request, KycDocument $document)

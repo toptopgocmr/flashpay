@@ -122,7 +122,7 @@ class PaymentController extends Controller
     {
         $v = $request->validate([
             'merchant_code' => 'required|string',
-            'source' => 'required|in:wallet,mobile',
+            'source' => 'required|in:wallet,mobile,card',
             'source_phone' => 'required_if:source,mobile|nullable|string|max:25',
             'source_country' => 'nullable|string|size:2',
             'amount' => 'required|integer|min:10',

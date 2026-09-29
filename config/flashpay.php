@@ -48,6 +48,8 @@ return [
         // compte actif, et récupérer le nom du titulaire (Verify Wallet / Get KYC).
         'verify_accounts' => (bool) env('PEEX_VERIFY_ACCOUNTS', true),
         'verify_wallet_path' => env('PEEX_VERIFY_WALLET_PATH', 'clients/verify_wallet'),
+        // true = bloquer quand PEEX ne peut pas vérifier le compte (pays non couvert…)
+        'verify_strict' => (bool) env('PEEX_VERIFY_STRICT', false),
         // Vérifier que le service PEEX est activé et que le solde de versement
         // (disbursement_solde / solde) couvre le montant + frais PEEX + encours.
         'check_balance' => (bool) env('PEEX_CHECK_BALANCE', true),

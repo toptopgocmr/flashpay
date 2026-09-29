@@ -47,15 +47,36 @@ class PeexGuard
             $r = Cache::get($key);
             if ($r === null) {
                 $r = $this->client->verifyWallet($route['country'], $route['local']);
-                Cache::put($key, $r, $r['valid'] ? now()->addMinutes(10) : now()->addMinutes(2));
+                Cache::put($key, $r, $r['valid'] === true ? now()->addMinutes(10) : now()->addMinutes(2));
             }
         } catch (PeexException $e) {
             Log::warning('PEEX verify_wallet indisponible', ['phone' => $route['phone'], 'error' => $e->getMessage()]);
             return ['ok' => false, 'name' => null, 'problem' => "Vérification du compte {$route['phone']} impossible pour le moment. Réessayez dans quelques instants."];
         }
 
-        if (! $r['valid']) {
+        if ($r['valid'] === false) {
             return ['ok' => false, 'name' => null, 'problem' => "{$who} {$route['phone']} n'est pas un compte mobile money actif."];
+        }
+
+        if ($r['valid'] === null) {
+            // PEEX n'a pas tranché (vérification non disponible pour ce pays / ce
+            // compte, numéro hors liste de test sandbox…). On contrôle au moins que
+            // le numéro existe bien chez un opérateur ; la collecte reste soumise à
+            // la validation du client sur son téléphone, et un versement échoué est
+            // remboursé automatiquement.
+            Log::info('PEEX verify_wallet sans verdict', ['phone' => $route['phone'], 'status' => $r['status'] ?? null]);
+            if (config('flashpay.peex.verify_strict', false)) {
+                return ['ok' => false, 'name' => null, 'problem' => "Vérification du compte {$route['phone']} indisponible pour ce pays. Réessayez plus tard."];
+            }
+            try {
+                $info = $this->client->verifyPhone($route['phone']);
+                if (($info['valid'] ?? true) === false) {
+                    return ['ok' => false, 'name' => null, 'problem' => "{$who} {$route['phone']} n'est pas un numéro mobile valide."];
+                }
+            } catch (\Throwable $e) {
+                // verify_phoneNumber indisponible : on n'en fait pas un blocage.
+            }
+            return ['ok' => true, 'name' => null, 'problem' => null];
         }
 
         return ['ok' => true, 'name' => $r['name'] ?: null, 'problem' => null];

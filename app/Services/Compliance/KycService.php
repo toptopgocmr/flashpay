@@ -43,7 +43,12 @@ class KycService
         $path = $file->store("kyc/{$user->id}", 'local');
 
         KycDocument::where('user_id', $user->id)->where('type', $type)->where('status', 'pending')->update(['status' => 'rejected', 'rejection_reason' => 'Remplacé par un nouvel envoi']);
-        $doc = KycDocument::create(['user_id' => $user->id, 'type' => $type, 'path' => $path, 'status' => 'pending']);
+        // Copie en base : le disque d'un conteneur (Railway) est effacé à chaque redéploiement.
+        $doc = KycDocument::create([
+            'user_id' => $user->id, 'type' => $type, 'path' => $path, 'status' => 'pending',
+            'mime' => $file->getMimeType(),
+            'content' => base64_encode((string) file_get_contents($file->getRealPath())),
+        ]);
 
         $user->update(array_filter(['kyc_status' => $user->kyc_status === 'verified' ? 'verified' : 'submitted', 'id_number' => $idNumber]));
         $role = $user->getRoleNames()->first() ?? 'client';

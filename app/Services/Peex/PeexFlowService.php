@@ -93,9 +93,12 @@ class PeexFlowService
         return $this->quotes->quote([
             'operation' => 'merchant_payment',
             'amount' => $amount,
-            'source' => $source === 'wallet'
-                ? ['type' => 'wallet', 'wallet' => $this->walletOf($payer)]
-                : ['type' => 'mobile', 'phone' => $payerPhone ?: $payer?->phone, 'country' => $opt['source_country'] ?? null],
+            'source' => match ($source) {
+                'wallet' => ['type' => 'wallet', 'wallet' => $this->walletOf($payer)],
+                // Carte Visa / Mastercard liée au profil : page de paiement 3-D Secure
+                'card' => ['type' => 'card', 'wallet' => $this->walletOf($payer)],
+                default => ['type' => 'mobile', 'phone' => $payerPhone ?: $payer?->phone, 'country' => $opt['source_country'] ?? null],
+            },
             'destination' => ['type' => 'merchant', 'merchant' => $merchant],
         ]);
     }

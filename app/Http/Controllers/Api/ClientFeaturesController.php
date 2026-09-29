@@ -47,7 +47,7 @@ class ClientFeaturesController extends Controller
 
     public function linkedAccounts(Request $request)
     {
-        return response()->json($request->user()->linkedAccounts);
+        return response()->json($request->user()->linkedAccounts()->orderBy('id')->get());
     }
 
     public function addLinkedAccount(Request $request)
@@ -90,12 +90,23 @@ class ClientFeaturesController extends Controller
         }
         $acc = LinkedAccount::create(array_intersect_key($v, array_flip(['type', 'label', 'phone', 'bank_name', 'account_holder', 'account_number'])) + $cardFields + [
             'user_id' => $u->id, 'country' => $country, 'operator' => is_array($operator) ? ($operator['label'] ?? null) : $operator,
-            'is_default' => (bool) ($v['is_default'] ?? ! $u->linkedAccounts()->exists()),
+            // Un compte par défaut PAR TYPE (mobile money, carte, banque) : c'est lui
+            // qui est débité par défaut pour les recharges, envois et paiements.
+            'is_default' => (bool) ($v['is_default'] ?? ! $u->linkedAccounts()->where('type', $v['type'])->exists()),
         ]);
         if ($acc->is_default) {
-            LinkedAccount::where('user_id', $u->id)->where('id', '<>', $acc->id)->update(['is_default' => false]);
+            LinkedAccount::where('user_id', $u->id)->where('type', $acc->type)->where('id', '<>', $acc->id)->update(['is_default' => false]);
         }
         return response()->json($acc, 201);
+    }
+
+    /** Définit le compte lié débité par défaut pour son type. */
+    public function defaultLinkedAccount(Request $request, LinkedAccount $account)
+    {
+        abort_unless($account->user_id === $request->user()->id, 403);
+        LinkedAccount::where('user_id', $account->user_id)->where('type', $account->type)->update(['is_default' => false]);
+        $account->update(['is_default' => true]);
+        return response()->json($account->fresh());
     }
 
     private function cardBrand(string $digits): string
@@ -111,7 +122,12 @@ class ClientFeaturesController extends Controller
     public function deleteLinkedAccount(Request $request, LinkedAccount $account)
     {
         abort_unless($account->user_id === $request->user()->id, 404);
+        $wasDefault = $account->is_default;
         $account->delete();
+        if ($wasDefault) {
+            // Le plus récent du même type devient le compte débité par défaut.
+            LinkedAccount::where('user_id', $account->user_id)->where('type', $account->type)->latest('id')->first()?->update(['is_default' => true]);
+        }
         return response()->json(['message' => 'Compte supprimé.']);
     }
 

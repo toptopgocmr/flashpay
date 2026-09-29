@@ -14,7 +14,7 @@ use Tests\TestCase;
 /**
  * Sécurité des parcours PEEX :
  *  - vérification des comptes (Verify Wallet) et des soldes PEEX avant débit ;
- *  - pas de transfert mobile -> mobile chez le même opérateur ;
+ *  - transfert mobile -> mobile autorisé sur tous les opérateurs (même opérateur inclus) ;
  *  - issue incertaine (timeout) = statut vérifié, jamais un échec présumé ;
  *  - échec de versement confirmé auprès de PEEX puis remboursement automatique du payeur.
  */
@@ -74,14 +74,13 @@ class PeexSafetyTest extends TestCase
             ->assertOk();
     }
 
-    public function test_same_operator_mobile_transfer_is_refused_but_wallet_withdrawal_is_allowed(): void
+    public function test_mobile_to_mobile_is_allowed_on_all_operators_and_wallet_withdrawal_too(): void
     {
         $c = $this->client('242061000501', 50000);
         $this->actingAs($c, 'sanctum');
 
         $q = $this->postJson('/api/pay/quote', ['operation' => 'transfer', 'source' => 'mobile', 'source_phone' => '+242061000501', 'destination_phone' => '+242066000502', 'deliver_to' => 'mobile', 'amount' => 1000])->assertOk();
-        $this->assertFalse($q->json('available'));
-        $this->assertStringContainsString('MTN Mobile Money vers MTN Mobile Money', implode(' ', $q->json('problems')));
+        $this->assertTrue($q->json('available'), implode(' ', $q->json('problems'))); // MTN -> MTN
 
         // MTN -> Airtel : autorisé, titulaire vérifié affiché
         $q = $this->postJson('/api/pay/quote', ['operation' => 'transfer', 'source' => 'mobile', 'source_phone' => '+242061000501', 'destination_phone' => '+242055000502', 'deliver_to' => 'mobile', 'amount' => 1000])->assertOk();

@@ -37,6 +37,8 @@
         <div class="card-kpi"><span>Envoyé / reçu</span><b>{{ short(s.volume_out) }} / {{ short(s.volume_in) }}</b><small>Dernière activité : {{ s.last_activity ? dt(s.last_activity) : '—' }}</small></div>
       </div>
 
+      <KycGallery :user-id="c.id" />
+
       <div class="two-col mb">
         <section class="container">
           <div class="container-head"><h3>Profil</h3></div>
@@ -122,6 +124,7 @@ import api from '../services/api'
 import AccountStatusModal from '../components/AccountStatusModal.vue'
 import PasswordReset from '../components/PasswordReset.vue'
 import WalletAdjust from '../components/WalletAdjust.vue'
+import KycGallery from '../components/KycGallery.vue'
 
 const route = useRoute()
 const data = ref(null)

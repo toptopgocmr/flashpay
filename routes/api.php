@@ -87,6 +87,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     // --- KYC (§3.3.1, §12) ---
     Route::get('/kyc', [KycController::class, 'show']);
+    Route::get('/kyc/documents/{document}/file', [KycController::class, 'myFile']);
+    Route::get('/me/photo', [KycController::class, 'myPhoto']);
     Route::post('/kyc/documents', [KycController::class, 'upload'])->middleware(['throttle:20,1', 'cap:kyc']);
 
     // --- Notifications (§11) ---
@@ -113,6 +115,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/linked-accounts', [ClientFeaturesController::class, 'linkedAccounts']);
     Route::post('/linked-accounts', [ClientFeaturesController::class, 'addLinkedAccount']);
     Route::delete('/linked-accounts/{account}', [ClientFeaturesController::class, 'deleteLinkedAccount']);
+    Route::post('/linked-accounts/{account}/default', [ClientFeaturesController::class, 'defaultLinkedAccount']);
     Route::post('/pay/withdraw-bank', [ClientFeaturesController::class, 'withdrawToBank'])->middleware(['cap:withdraw', 'pin', 'idempotent']);
     Route::get('/gifts', [ClientFeaturesController::class, 'gifts']);
     Route::post('/gifts', [ClientFeaturesController::class, 'sendGift'])->middleware(['cap:send', 'pin', 'idempotent']);
@@ -247,6 +250,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/desk/kyc', [KycController::class, 'queue']);
         Route::get('/desk/kyc/users/{user}', [KycController::class, 'userDocuments']);
         Route::get('/desk/kyc/documents/{document}/file', [KycController::class, 'file']);
+        Route::get('/desk/kyc/users/{user}/photo', [KycController::class, 'userPhoto']);
     });
 
     // --- Super Admin ---
