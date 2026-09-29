@@ -27,6 +27,7 @@ class PeexSafetyTest extends TestCase
         'disburse' => 'new',          // new | timeout
         'status' => [],               // track_id => statut renvoyé par all_requests
         'calls' => [],
+        'collect_me' => 200,          // code HTTP renvoyé par collection/me
     ];
 
     protected function setUp(): void
@@ -44,7 +45,9 @@ class PeexSafetyTest extends TestCase
                 str_ends_with($path, 'clients/verify_wallet') => in_array($data['accountNumber'] ?? '', $this->peex['invalid_accounts'], true)
                     ? Http::response(['error' => ['statusCode' => 404, 'message' => 'Account not found on the provider network']], 404)
                     : Http::response(['valid' => true, 'accountTitle' => 'JEAN MOUKALA', 'accountStatus' => 'ACTIVE', 'accountType' => 'MOBILE_WALLET']),
-                str_ends_with($path, 'collection/me') => Http::response(['name' => 'flashpay', 'is_activated' => true, 'collect_solde' => 0]),
+                str_ends_with($path, 'collection/me') => $this->peex['collect_me'] === 200
+                    ? Http::response(['name' => 'flashpay', 'is_activated' => true, 'collect_solde' => 0])
+                    : Http::response($this->peex['collect_me'] === 403 ? '<html>403 Forbidden</html>' : ['message' => 'Server Error'], $this->peex['collect_me']),
                 str_ends_with($path, 'disbursement/me') => Http::response(['name' => 'flashpay', 'is_activated' => true, 'disbursement_solde' => $this->peex['disbursement_solde'], 'mtn_fees' => 1, 'orange_fees' => 1]),
                 str_ends_with($path, 'clients/me') => Http::response(['name' => 'flashpay', 'is_activated' => true, 'solde' => 1_000_000]),
                 str_ends_with($path, 'collection/request_payment') => Http::response(['id' => 1, 'track_id' => $data['track_id'], 'status' => 'pending']),
@@ -199,5 +202,23 @@ class PeexSafetyTest extends TestCase
         $this->peexCallback('disbursement', $payout->track_id, 'paid');
         $this->assertSame('failed', $payout->fresh()->status);
         $this->assertSame('reversed', Transaction::find($tx['id'])->status);
+    }
+
+    public function test_collection_me_error_does_not_block_mobile_payment_unless_access_denied(): void
+    {
+        $c = $this->client('242061000591', 0);
+        $this->actingAs($c, 'sanctum');
+        $body = ['operation' => 'transfer', 'source' => 'mobile', 'source_phone' => '+242067601919', 'destination_phone' => '+242055212223', 'deliver_to' => 'mobile', 'amount' => 50];
+
+        // Fiche collection/me en erreur 500 : contrôle ignoré, l'envoi MTN -> Airtel reste possible
+        $this->peex['collect_me'] = 500;
+        $q = $this->postJson('/api/pay/quote', $body)->assertOk();
+        $this->assertTrue($q->json('available'), implode(' ', $q->json('problems')));
+
+        // Accès refusé (pare-feu PEEX) : bloqué
+        \Illuminate\Support\Facades\Cache::flush();
+        $this->peex['collect_me'] = 403;
+        $q = $this->postJson('/api/pay/quote', $body)->assertOk();
+        $this->assertFalse($q->json('available'));
     }
 }

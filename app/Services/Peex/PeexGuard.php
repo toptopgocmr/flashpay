@@ -114,6 +114,14 @@ class PeexGuard
         return $me;
     }
 
+    /** Une erreur de la fiche partenaire doit-elle bloquer l'opération ? */
+    private function blocking(PeexException $e): bool
+    {
+        return config('flashpay.peex.require_account_check', false)
+            || in_array((int) $e->getCode(), [401, 403], true)
+            || str_contains($e->getMessage(), 'PEEX_SECRET_KEY manquant');
+    }
+
     public function checkCollect(bool $fresh = false): ?string
     {
         if (! config('flashpay.peex.check_balance', true)) {
@@ -122,8 +130,16 @@ class PeexGuard
         try {
             $me = $this->account('collect', $fresh);
         } catch (PeexException $e) {
-            Log::warning('PEEX collection/me indisponible', ['error' => $e->getMessage()]);
-            return 'Paiement mobile money momentanément indisponible. Réessayez plus tard.';
+            // La fiche partenaire n'est qu'un contrôle préalable : si elle ne répond pas
+            // (timeout, 404, 5xx…), on laisse passer — PEEX refusera lui-même la collecte
+            // si le service est vraiment indisponible, et rien n'est débité dans ce cas.
+            // On ne bloque que si l'accès est refusé (pare-feu / clé) ou en mode strict.
+            if ($this->blocking($e)) {
+                Log::critical('PEEX collection/me refusé — collecte bloquée', ['error' => $e->getMessage(), 'code' => $e->getCode()]);
+                return 'Paiement mobile money momentanément indisponible. Réessayez plus tard.';
+            }
+            Log::warning('PEEX collection/me indisponible — contrôle préalable ignoré', ['error' => $e->getMessage(), 'code' => $e->getCode()]);
+            return null;
         }
         if (($me['is_activated'] ?? true) === false) {
             Log::critical('PEEX : service de collecte désactivé');
@@ -145,8 +161,12 @@ class PeexGuard
         try {
             $me = $this->account($service, $fresh);
         } catch (PeexException $e) {
-            Log::warning("PEEX {$service}/me indisponible", ['error' => $e->getMessage()]);
-            return 'Versements mobile money momentanément indisponibles. Réessayez plus tard.';
+            if ($this->blocking($e)) {
+                Log::critical("PEEX {$service}/me refusé — versements bloqués", ['error' => $e->getMessage(), 'code' => $e->getCode()]);
+                return 'Versements mobile money momentanément indisponibles. Réessayez plus tard.';
+            }
+            Log::warning("PEEX {$service}/me indisponible — contrôle préalable ignoré", ['error' => $e->getMessage(), 'code' => $e->getCode()]);
+            return null;
         }
 
         if (($me['is_activated'] ?? true) === false) {
