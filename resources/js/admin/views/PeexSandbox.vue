@@ -103,6 +103,7 @@
     <div class="card" style="margin-top:24px; font-size:13px;" v-if="overview">
       <h3>Callbacks à déclarer chez PEEX</h3>
       <div v-for="(url, k) in overview.callback_urls" :key="k"><strong>{{ k }}</strong> : <code>{{ url }}</code></div>
+      <div style="margin-top:8px"><strong>IP sortante du serveur</strong> (à faire autoriser par PEEX) : <code>{{ overview.server_ip || 'inconnue' }}</code></div>
       <p class="stat-label">En local, PEEX ne peut pas joindre localhost : les statuts sont récupérés par polling
         (fenêtre « Planificateur » / bouton Synchroniser) ou via un tunnel HTTPS (ngrok, cloudflared).</p>
     </div>

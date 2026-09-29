@@ -31,6 +31,15 @@ class PeexAdminController extends Controller
         return response()->json([
             'sandbox' => $client->isSandbox(),
             'base_url' => $client->baseUrl(),
+            // IP sortante du serveur : à faire autoriser par PEEX (pare-feu). Elle change à
+            // chaque redéploiement Railway tant qu'aucune IP statique n'est configurée.
+            'server_ip' => \Illuminate\Support\Facades\Cache::remember('server:egress_ip', now()->addMinutes(10), function () {
+                try {
+                    return trim(\Illuminate\Support\Facades\Http::timeout(5)->get('https://api.ipify.org')->body()) ?: null;
+                } catch (\Throwable) {
+                    return null;
+                }
+            }),
             'callback_urls' => [
                 'collect' => url('/api/webhooks/peex/collect'),
                 'disbursement' => url('/api/webhooks/peex/disbursement'),
