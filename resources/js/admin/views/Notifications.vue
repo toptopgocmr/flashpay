@@ -52,7 +52,7 @@ const SEV = { info: 'Info', success: 'OK', warning: 'Attention', critical: 'Crit
 const cls = (s) => ({ critical: 'err', warning: 'warn', success: 'ok' })[s] || 'pending'
 const link = (n) => (n.type?.startsWith('payment_') && n.data?.transaction_id ? `/transactions/${n.data.transaction_id}` : null) || ({
   kyc_pending: '/kyc', float_request: '/float-requests', fraud_alert: '/fraud', security_report: '/support',
-  reconciliation_anomaly: '/reconciliation', dispute_opened: '/support', support_ticket: '/support',
+  reconciliation_anomaly: n.data?.report_id ? `/reconciliation?report=${n.data.report_id}` : '/reconciliation', dispute_opened: '/support', support_ticket: '/support',
   manual_intervention: n.data?.transaction_id ? `/transactions/${n.data.transaction_id}` : '/audit', account_lost: '/fraud',
 })[n.type]
 
