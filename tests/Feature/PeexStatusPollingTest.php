@@ -52,5 +52,11 @@ class PeexStatusPollingTest extends TestCase
         $s = $this->getJson("/api/pay/transactions/{$id}/status")->assertOk()->json();
 
         $this->assertSame(100, $u->wallet->fresh()->balance, json_encode($s));
+
+        // La console voit le paiement entrant réussi dans ses notifications
+        $n = \App\Models\AppNotification::where('audience', 'admin')->where('type', 'payment_in')->first();
+        $this->assertNotNull($n);
+        $this->assertStringContainsString('Paiement entrant réussi', $n->title);
+        $this->assertSame($id, $n->data['transaction_id']);
     }
 }

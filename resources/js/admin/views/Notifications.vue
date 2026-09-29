@@ -41,17 +41,18 @@ import { date } from '../utils/format'
 
 const d = ref(null)
 const filter = ref('unread')
-const tabs = [{ k: 'unread', l: 'Non lues' }, { k: 'critical', l: 'Critiques' }, { k: 'all', l: 'Toutes' }]
+const tabs = [{ k: 'unread', l: 'Non lues' }, { k: 'payments', l: 'Paiements' }, { k: 'critical', l: 'Critiques' }, { k: 'all', l: 'Toutes' }]
+const paramsFor = (f) => (f === 'unread' ? { unread: 1 } : f === 'critical' ? { severity: 'critical' } : f === 'payments' ? { kind: 'payments' } : {})
 const SEV = { info: 'Info', success: 'OK', warning: 'Attention', critical: 'Critique' }
 const cls = (s) => ({ critical: 'err', warning: 'warn', success: 'ok' })[s] || 'pending'
-const link = (n) => ({
+const link = (n) => (n.type?.startsWith('payment_') && n.data?.transaction_id ? `/transactions/${n.data.transaction_id}` : null) || ({
   kyc_pending: '/kyc', float_request: '/float-requests', fraud_alert: '/fraud', security_report: '/support',
   reconciliation_anomaly: '/reconciliation', dispute_opened: '/support', support_ticket: '/support',
   manual_intervention: n.data?.transaction_id ? `/transactions/${n.data.transaction_id}` : '/audit', account_lost: '/fraud',
 })[n.type]
 
 async function load() {
-  const params = filter.value === 'unread' ? { unread: 1 } : filter.value === 'critical' ? { severity: 'critical' } : {}
+  const params = paramsFor(filter.value)
   const { data } = await api.get('/admin/notifications', { params })
   d.value = data
 }
@@ -70,5 +71,5 @@ const EXP_COLS = [
   { label: 'Lue', value: (n) => (n.read_at ? 'Oui' : 'Non') },
   { label: 'Date', value: (n) => fmtDate(n.created_at) },
 ]
-const expFetch = (onP) => fetchAllPages('/admin/notifications', filter.value === 'unread' ? { unread: 1 } : filter.value === 'critical' ? { severity: 'critical' } : {}, onP)
+const expFetch = (onP) => fetchAllPages('/admin/notifications', paramsFor(filter.value), onP)
 </script>

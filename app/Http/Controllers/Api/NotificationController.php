@@ -36,6 +36,11 @@ class NotificationController extends Controller
     public function admin(Request $request)
     {
         $q = AppNotification::where('audience', 'admin')->latest('id');
+        if ($request->input('kind') === 'payments') {
+            $q->where('type', 'like', 'payment\_%');
+        } elseif ($request->input('kind') === 'others') {
+            $q->where('type', 'not like', 'payment\_%');
+        }
         if ($request->filled('severity')) {
             $q->where('severity', $request->input('severity'));
         }
