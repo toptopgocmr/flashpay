@@ -65,25 +65,37 @@
           <button class="btn" @click="syncAll" :disabled="syncing">{{ syncing ? 'Synchronisation…' : 'Synchroniser les statuts' }}</button>
         </div>
       </div>
-      <table>
+      <div class="req-wrap">
+      <table class="req-table">
         <thead>
           <tr><th>Date</th><th>Service</th><th>track_id</th><th>Corridor</th><th>Numéro</th><th>Montant</th><th>PEEX</th><th>Transaction</th><th>Actions</th></tr>
         </thead>
         <tbody>
           <tr v-for="r in requests" :key="r.id">
-            <td>{{ new Date(r.created_at).toLocaleString('fr-FR') }}</td>
-            <td>{{ r.service }}</td>
-            <td style="font-family:monospace; font-size:12px;">{{ r.track_id }}</td>
-            <td>{{ r.country }} · {{ r.corridor || '?' }}</td>
-            <td>{{ $phone(r.phone) }}</td>
-            <td>{{ formatXaf(r.amount) }}</td>
-            <td>
-              <span class="badge" :class="badge(r.status)">{{ r.status }}</span>
-              <div v-if="r.payment_proof || r.message" style="font-size:11px; color:#6b7280; max-width:220px;">{{ r.payment_proof || r.message }}</div>
+            <td class="nowrap">{{ new Date(r.created_at).toLocaleDateString('fr-FR') }}<br /><small class="muted">{{ new Date(r.created_at).toLocaleTimeString('fr-FR') }}</small></td>
+            <td>{{ SERVICE[r.service] || r.service }}</td>
+            <td class="mono small">{{ r.track_id }}</td>
+            <td class="nowrap">{{ r.country }} · {{ r.corridor || '?' }}</td>
+            <td class="nowrap">{{ $phone(r.phone) }}</td>
+            <td class="nowrap">{{ formatXaf(r.amount) }}</td>
+            <td class="peex-cell">
+              <span class="badge" :class="badge(r.status)">{{ STATUS[r.status] || r.status }}</span>
+              <template v-for="p in [proof(r)]" :key="'p' + r.id">
+                <div v-if="p.lines.length" class="proof">
+                  <div v-for="l in p.lines" :key="l[0]"><span class="muted">{{ l[0] }} :</span> <span class="mono">{{ l[1] }}</span></div>
+                </div>
+                <details v-if="p.raw" class="raw">
+                  <summary>Réponse brute PEEX</summary>
+                  <pre>{{ p.raw }}</pre>
+                </details>
+              </template>
             </td>
-            <td>
-              <router-link v-if="r.transaction" :to="'/transactions/' + r.transaction.id">{{ r.transaction.reference }}</router-link>
-              <div v-if="r.transaction"><span class="badge" :class="badge(r.transaction.status)">{{ r.transaction.status }}</span></div>
+            <td class="tx-cell">
+              <template v-if="r.transaction">
+                <router-link class="mono small" :to="'/transactions/' + r.transaction.id">{{ r.transaction.reference }}</router-link>
+                <div><span class="badge" :class="badge(r.transaction.status)">{{ STATUS[r.transaction.status] || r.transaction.status }}</span></div>
+              </template>
+              <span v-else class="muted">—</span>
             </td>
             <td style="white-space:nowrap;">
               <template v-if="!r.finalized_at">
@@ -98,6 +110,7 @@
           <tr v-if="!requests.length"><td colspan="9" class="stat-label">Aucune demande pour l'instant.</td></tr>
         </tbody>
       </table>
+      </div>
     </div>
 
     <div class="card" style="margin-top:24px; font-size:13px;" v-if="overview">
@@ -182,6 +195,29 @@ async function syncAll() {
   try { await api.post('/admin/peex/sync'); await loadRequests() } finally { syncing.value = false }
 }
 
+const SERVICE = { collect: 'Collecte', disbursement: 'Décaissement', remittance: 'Remittance' }
+const STATUS = {
+  new: 'Nouvelle', pending: 'En attente', processing: 'En cours', paid: 'Payée', successful: 'Réussie',
+  failed: 'Échouée', error: 'Erreur', reversed: 'Rejetée', canceled: 'Annulée', expired: 'Expirée',
+}
+// Résumé lisible de la preuve / du message PEEX (JSON opérateur ou texte d'erreur)
+function proof(r) {
+  const txt = r.payment_proof || r.message || ''
+  if (!txt) return { lines: [], raw: '' }
+  let j = null
+  const start = txt.indexOf('{')
+  if (start >= 0) { try { j = JSON.parse(txt.slice(start)) } catch { j = null } }
+  if (!j || typeof j !== 'object') return { lines: [['Message', txt.length > 140 ? txt.slice(0, 140) + '…' : txt]], raw: txt.length > 140 ? txt : '' }
+  const lines = []
+  const add = (label, v) => { if (v !== undefined && v !== null && v !== '') lines.push([label, String(v)]) }
+  add('Code HTTP', start > 0 ? txt.slice(0, start).replace(/[^0-9]/g, '') || null : null)
+  add('ID opérateur', j.financialTransactionId)
+  add('Statut opérateur', j.status)
+  add('Payeur', j.payer?.partyId)
+  add('Motif', j.reason?.message || j.reason || j.message)
+  return { lines, raw: JSON.stringify(j, null, 2) }
+}
+
 function badge(s) {
   if (['paid', 'successful'].includes(s)) return 'badge-success'
   if (['new', 'pending', 'processing'].includes(s)) return 'badge-pending'
@@ -202,3 +238,20 @@ watch(autoRefresh, startTimer)
 onMounted(() => { loadOverview(); loadRequests(); startTimer() })
 onBeforeUnmount(stopTimer)
 </script>
+
+<style scoped>
+.req-wrap { overflow-x: auto; margin-top: 12px; }
+.req-table { width: 100%; border-collapse: collapse; table-layout: auto; }
+.req-table th, .req-table td { vertical-align: top; padding: 12px 10px; }
+.nowrap { white-space: nowrap; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.small { font-size: 12px; }
+.muted { color: #6b7280; }
+.peex-cell { min-width: 260px; max-width: 360px; }
+.proof { margin-top: 6px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.raw { margin-top: 6px; font-size: 12px; }
+.raw summary { cursor: pointer; color: var(--link, #0972d3); }
+.raw pre { margin: 6px 0 0; padding: 8px; background: #f6f7f9; border-radius: 6px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
+.tx-cell { min-width: 150px; white-space: nowrap; }
+.tx-cell .badge { margin-top: 4px; display: inline-block; }
+</style>
