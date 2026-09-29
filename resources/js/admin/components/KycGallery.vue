@@ -14,6 +14,8 @@
           <figcaption>
             <strong>{{ d.type_label }}</strong>
             <span class="status" :class="ST[d.status]?.cls">{{ ST[d.status]?.label || d.status }}</span>
+            <button v-if="d.error && d.status !== 'rejected'" class="btn-normal small-btn" :disabled="d.asking" @click.stop="askResend(d)">Demander un nouvel envoi</button>
+            <small v-if="d.info" class="muted">{{ d.info }}</small>
           </figcaption>
         </figure>
       </div>
@@ -58,6 +60,19 @@ async function load() {
   } catch { docs.value = [] } finally { loading.value = false }
 }
 
+async function askResend(d) {
+  d.asking = true
+  try {
+    const { data } = await api.post(`/support/desk/kyc/documents/${d.id}/request-resend`)
+    d.status = 'rejected'
+    d.info = data.message
+  } catch (e) {
+    d.info = e.response?.data?.message || e.message
+  } finally {
+    d.asking = false
+  }
+}
+
 watch(() => props.userId, (id) => { if (id) load() }, { immediate: true })
 onBeforeUnmount(revoke)
 </script>
@@ -69,5 +84,6 @@ onBeforeUnmount(revoke)
 .thumb.round { width: 130px; border-radius: 50%; margin: 0 auto; }
 .thumb img { width: 100%; height: 100%; object-fit: cover; }
 figcaption { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 13px; align-items: flex-start; }
+.small-btn { font-size: 12px; padding: 4px 10px; }
 .small { font-size: 12px; text-align: center; padding: 6px; }
 </style>

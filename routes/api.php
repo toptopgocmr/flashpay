@@ -251,6 +251,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/desk/kyc/users/{user}', [KycController::class, 'userDocuments']);
         Route::get('/desk/kyc/documents/{document}/file', [KycController::class, 'file']);
         Route::get('/desk/kyc/users/{user}/photo', [KycController::class, 'userPhoto']);
+        Route::post('/desk/kyc/documents/{document}/request-resend', [KycController::class, 'requestResend']);
     });
 
     // --- Super Admin ---

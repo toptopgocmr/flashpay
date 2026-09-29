@@ -23,7 +23,8 @@ class KycController extends Controller
         return response()->json([
             'kyc_status' => $u->kyc_status,
             'kyc_tier' => (int) $u->kyc_tier,
-            'documents' => $u->kycDocuments()->latest()->get(['id', 'type', 'status', 'rejection_reason', 'created_at', 'reviewed_at']),
+            // has_file = false : le fichier a été perdu (ancien envoi, avant la copie en base) -> à renvoyer
+            'documents' => $u->kycDocuments()->latest()->get()->map(fn ($d) => $d->only(['id', 'type', 'status', 'rejection_reason', 'created_at', 'reviewed_at']) + ['has_file' => $d->hasFile()]),
             'has_photo' => self::latestPhoto($u) !== null,
             'types' => KycService::TYPES,
             'limits' => $limits->summary($u),
@@ -66,6 +67,16 @@ class KycController extends Controller
         abort_unless($document->hasFile(), 404, 'Fichier introuvable. Merci de demander au client de renvoyer la pièce.');
         \App\Support\Audit::log('kyc.view_document', $document);
         return $document->fileResponse();
+    }
+
+    /** Console : le fichier est perdu -> on demande au client de renvoyer la pièce. */
+    public function requestResend(Request $request, KycDocument $document)
+    {
+        $label = KycService::TYPES[$document->type] ?? $document->type;
+        $document->update(['status' => 'rejected', 'rejection_reason' => 'Fichier illisible ou perdu : merci de renvoyer la pièce', 'reviewed_by' => $request->user()->id, 'reviewed_at' => now()]);
+        app(\App\Services\Notifications\NotificationService::class)->toUser($document->user, 'kyc_rejected', 'Merci de renvoyer une pièce', "{$label} : merci de la renvoyer depuis Profil › Identité & plafonds.", ['severity' => 'warning']);
+        \App\Support\Audit::log('kyc.request_resend', $document);
+        return response()->json(['message' => "Demande envoyée au client : {$label} à renvoyer."]);
     }
 
     /** Photo de profil d'un utilisateur (console). */

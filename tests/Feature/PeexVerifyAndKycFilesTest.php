@@ -38,11 +38,17 @@ class PeexVerifyAndKycFilesTest extends TestCase
                         : Http::response(['error' => ['statusCode' => 404, 'message' => 'Endpoint not found']], 404),
                     'unprocessable' => Http::response(['error' => ['statusCode' => 400, 'message' => 'invalid test number']], 400),
                     'no_verdict' => Http::response(['message' => 'ok']),
+                    // Réponse réelle de PEEX production (29/09/2026)
+                    'prod_cg' => Http::response(['valid' => false, 'message' => 'Unsupported account code: CG']),
                     'not_found' => Http::response(['error' => ['statusCode' => 404, 'message' => 'Account not found on the provider network']], 404),
                 };
             }
             if (str_contains($path, 'verify_phoneNumber')) {
                 return Http::response(['valid' => true, 'mnc' => 'mtn-cg']);
+            }
+            if (str_contains($path, 'disbursement/me')) {
+                // PEEX production : solde de décaissement non communiqué
+                return Http::response(['is_activated' => true, 'disbursement_solde' => null, 'mtn_fees' => 0]);
             }
             return Http::response(['ok' => true, 'is_activated' => true]);
         });
@@ -87,6 +93,23 @@ class PeexVerifyAndKycFilesTest extends TestCase
         }
     }
 
+    public function test_production_cg_answer_and_null_payout_balance_do_not_block(): void
+    {
+        $this->mode = 'prod_cg';
+        config(['flashpay.peex.check_balance' => true]);
+        $u = $this->client('242061000610');
+        $this->actingAs($u, 'sanctum');
+        $q = $this->postJson('/api/pay/quote', ['operation' => 'transfer', 'source' => 'mobile', 'source_phone' => '+242067601919',
+            'destination_phone' => '+242055212223', 'deliver_to' => 'mobile', 'amount' => 100])->assertOk()->json();
+        $this->assertTrue($q['available'], implode(' ', $q['problems'] ?? []));
+
+        config(['flashpay.peex.require_payout_balance' => true]);
+        \Illuminate\Support\Facades\Cache::flush();
+        $q = $this->postJson('/api/pay/quote', ['operation' => 'transfer', 'source' => 'mobile', 'source_phone' => '+242067601919',
+            'destination_phone' => '+242055212223', 'deliver_to' => 'mobile', 'amount' => 100])->assertOk()->json();
+        $this->assertFalse($q['available']);
+    }
+
     public function test_explicit_account_not_found_still_blocks(): void
     {
         $this->mode = 'not_found';
@@ -110,6 +133,16 @@ class PeexVerifyAndKycFilesTest extends TestCase
         $this->get("/api/kyc/documents/{$doc->id}/file")->assertOk();
         $this->assertTrue($this->getJson('/api/kyc')->json('has_photo'));
         $this->assertArrayNotHasKey('content', $this->getJson('/api/kyc')->json('documents.0'));
+
+        // Fichier perdu (ni disque ni base) : l'app le signale, la console demande un nouvel envoi
+        $doc->forceFill(['content' => null])->save();
+        $this->assertFalse($this->getJson('/api/kyc')->json('documents.0.has_file'));
+        $admin = User::create(['full_name' => 'Admin', 'phone' => '242060009999', 'password' => 'secret123']);
+        $admin->assignRole('super_admin');
+        $this->actingAs($admin, 'sanctum');
+        $this->postJson("/api/support/desk/kyc/documents/{$doc->id}/request-resend")->assertOk();
+        $this->assertSame('rejected', $doc->fresh()->status);
+        $this->actingAs($u, 'sanctum');
 
         $other = $this->client('242061000603');
         $this->actingAs($other, 'sanctum');
