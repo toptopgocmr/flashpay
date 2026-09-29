@@ -44,4 +44,14 @@ router.beforeEach((to) => {
   if (to.path === '/login' && isAuthenticated) return '/'
 })
 
+// Écrans récemment visités (widget « Récemment visités » du tableau de bord)
+router.afterEach((to) => {
+  if (to.path === '/' || to.path === '/login') return
+  try {
+    const list = JSON.parse(localStorage.getItem('fp_admin_recent') || '[]').filter((p) => p !== to.path)
+    list.unshift(to.path)
+    localStorage.setItem('fp_admin_recent', JSON.stringify(list.slice(0, 10)))
+  } catch (_) {}
+})
+
 export default router
