@@ -6,9 +6,9 @@
         <ExportButton label="Exporter les intégrations" filename="integrations-ecommerce" :columns="EXP_COLS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>
     <div class="grid grid-3 mb">
-      <div class="card"><div class="stat-label">Clés actives</div><div class="stat-value">{{ d?.keys.length ?? '—' }}</div></div>
-      <div class="card"><div class="stat-label">Webhooks en attente de nouvel essai</div><div class="stat-value">{{ d?.webhooks_pending ?? '—' }}</div></div>
-      <div class="card"><div class="stat-label">Webhooks en échec définitif</div><div class="stat-value">{{ d?.webhooks_failed.length ?? '—' }}</div></div>
+      <div class="card" v-go="'#eco-keys'"><div class="stat-label">Clés actives</div><div class="stat-value">{{ d?.keys.length ?? '—' }}</div></div>
+      <div class="card" v-go="'#eco-webhooks'"><div class="stat-label">Webhooks en attente de nouvel essai</div><div class="stat-value">{{ d?.webhooks_pending ?? '—' }}</div></div>
+      <div class="card" v-go="'#eco-webhooks'"><div class="stat-label">Webhooks en échec définitif</div><div class="stat-value">{{ d?.webhooks_failed.length ?? '—' }}</div></div>
     </div>
     <section class="container mb">
       <div class="container-head"><h3>Suivi des intégrations <span class="counter">({{ integ?.data.length ?? 0 }})</span></h3></div>
@@ -59,7 +59,7 @@
       </template>
     </Modal>
 
-    <section class="container mb">
+    <section id="eco-keys" class="container mb">
       <div class="container-head"><h3>Clés API</h3></div>
       <div class="container-body flush"><table>
         <thead><tr><th>Marchand</th><th>Env.</th><th>Clé publique</th><th>Secrète</th><th>Webhook</th><th>Dernier appel</th><th></th></tr></thead>
@@ -81,7 +81,7 @@
         </tr></tbody>
       </table></div>
     </section>
-    <section class="container" v-if="d?.webhooks_failed.length">
+    <section id="eco-webhooks" class="container" v-if="d?.webhooks_failed.length">
       <div class="container-head"><h3>Webhooks en échec</h3></div>
       <div class="container-body flush"><table>
         <thead><tr><th>Événement</th><th>URL</th><th>Tentatives</th><th>Erreur</th><th></th></tr></thead>

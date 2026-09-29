@@ -368,3 +368,11 @@ a.role-tile:hover { border-color: var(--brand); box-shadow: var(--shadow); color
   .kv .v { font-size: 20px; line-height: 28px; }
   .search input { min-width: 0; width: 100%; }
 }
+
+/* Cases cliquables (directive v-go) */
+.is-clickable { cursor: pointer; transition: border-color .15s, transform .15s, box-shadow .15s, background .15s; }
+.is-clickable:hover { border-color: var(--link, #0972d3) !important; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0, 0, 0, .08); }
+.is-clickable:focus-visible { outline: 2px solid var(--link, #0972d3); outline-offset: 2px; }
+.is-clickable:active { transform: translateY(0); }
+.go-flash { animation: goFlash 1.6s ease; }
+@keyframes goFlash { 0%, 40% { box-shadow: 0 0 0 3px rgba(9, 114, 211, .35); } 100% { box-shadow: none; } }

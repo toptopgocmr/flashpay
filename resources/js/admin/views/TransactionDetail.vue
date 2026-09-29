@@ -5,13 +5,13 @@
       <div class="actions"><router-link class="btn-normal" to="/transactions">‹ Transactions</router-link></div>
     </div>
     <div class="grid grid-4 mb">
-      <div class="card"><div class="stat-value">{{ formatXaf(t.amount) }}</div><div class="stat-label">Montant</div></div>
-      <div class="card"><div class="stat-value">{{ t.status }}</div><div class="stat-label">Statut</div></div>
-      <div class="card"><div class="stat-label">Expéditeur</div><div style="font-weight:700;font-size:17px">{{ sender.name || '—' }}</div><div class="mono stat-label">{{ sender.account || '' }} · {{ t.source_rail }}</div></div>
-      <div class="card"><div class="stat-label">Bénéficiaire</div><div style="font-weight:700;font-size:17px">{{ beneficiary.name || '—' }}</div><div class="mono stat-label">{{ beneficiary.account || '' }} · {{ t.destination_rail }}</div></div>
+      <div class="card" v-go="'#tx-ledger'" title="Voir les écritures"><div class="stat-value">{{ formatXaf(t.amount) }}</div><div class="stat-label">Montant</div></div>
+      <div class="card" v-go="{ path: '/transactions', query: { status: t.status } }" title="Transactions avec ce statut"><div class="stat-value">{{ t.status }}</div><div class="stat-label">Statut</div></div>
+      <div class="card" v-go="t.source_wallet?.user ? { path: '/transactions', query: { user: t.source_wallet.user.id } } : '#tx-ledger'" title="Opérations de l'expéditeur"><div class="stat-label">Expéditeur</div><div style="font-weight:700;font-size:17px">{{ sender.name || '—' }}</div><div class="mono stat-label">{{ sender.account || '' }} · {{ t.source_rail }}</div></div>
+      <div class="card" v-go="t.destination_wallet?.user ? { path: '/transactions', query: { user: t.destination_wallet.user.id } } : '#tx-ledger'" title="Opérations du bénéficiaire"><div class="stat-label">Bénéficiaire</div><div style="font-weight:700;font-size:17px">{{ beneficiary.name || '—' }}</div><div class="mono stat-label">{{ beneficiary.account || '' }} · {{ t.destination_rail }}</div></div>
     </div>
 
-    <div class="card" style="margin-bottom:24px;">
+    <div id="tx-ledger" class="card" style="margin-bottom:24px;">
       <h3>Écritures du grand livre</h3>
       <table>
         <thead><tr><th>Compte</th><th>Type</th><th>Montant</th></tr></thead>

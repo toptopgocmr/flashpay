@@ -4,7 +4,7 @@
 
     <!-- Comptes PEEX -->
     <div class="grid grid-4" style="grid-template-columns: repeat(3, 1fr); margin-bottom:24px;">
-      <div class="card" v-for="(acc, key) in overview?.accounts || {}" :key="key">
+      <div class="card" v-for="(acc, key) in overview?.accounts || {}" :key="key" v-go="'#peex-requests'" title="Voir les demandes PEEX">
         <div class="stat-label">{{ labels[key] }}</div>
         <template v-if="acc.ok">
           <div class="stat-value">{{ formatXaf(acc.data.collect_solde ?? acc.data.disbursement_solde ?? acc.data.solde) }}</div>
@@ -57,7 +57,7 @@
     </div>
 
     <!-- Demandes PEEX -->
-    <div class="card">
+    <div id="peex-requests" class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <h3>Demandes PEEX</h3>
         <div>

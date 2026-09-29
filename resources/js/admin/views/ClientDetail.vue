@@ -31,10 +31,10 @@
 
     <template v-if="c">
       <div class="cards mb">
-        <div class="card-kpi"><span>Solde du wallet</span><b>{{ money(c.balance, c.currency) }}</b><small><span class="status" :class="c.wallet_status === 'frozen' ? 'err' : 'ok'">{{ c.wallet_status === 'frozen' ? 'Gelé' : 'Actif' }}</span></small></div>
-        <div class="card-kpi"><span>Opérations</span><b>{{ n(s.count) }}</b><small>{{ n(s.successful) }} réussies · {{ n(s.failed) }} échouées · {{ n(s.reversed) }} rejetées · {{ n(s.processing) }} en attente</small></div>
-        <div class="card-kpi"><span>Taux de réussite</span><b :class="rateCls(s.success_rate)">{{ pct(s.success_rate) }}</b><small>Frais payés : {{ money(s.fees_paid) }}</small></div>
-        <div class="card-kpi"><span>Envoyé / reçu</span><b>{{ short(s.volume_out) }} / {{ short(s.volume_in) }}</b><small>Dernière activité : {{ s.last_activity ? dt(s.last_activity) : '—' }}</small></div>
+        <div class="card-kpi" v-go="{ path: '/transactions', query: { user: c.id } }" title="Voir ses transactions"><span>Solde du wallet</span><b>{{ money(c.balance, c.currency) }}</b><small><span class="status" :class="c.wallet_status === 'frozen' ? 'err' : 'ok'">{{ c.wallet_status === 'frozen' ? 'Gelé' : 'Actif' }}</span></small></div>
+        <div class="card-kpi" v-go="{ path: '/transactions', query: { user: c.id } }" title="Voir toutes ses opérations"><span>Opérations</span><b>{{ n(s.count) }}</b><small>{{ n(s.successful) }} réussies · {{ n(s.failed) }} échouées · {{ n(s.reversed) }} rejetées · {{ n(s.processing) }} en attente</small></div>
+        <div class="card-kpi" v-go="{ path: '/transactions', query: { user: c.id, status: 'failed' } }" title="Voir ses opérations échouées"><span>Taux de réussite</span><b :class="rateCls(s.success_rate)">{{ pct(s.success_rate) }}</b><small>Frais payés : {{ money(s.fees_paid) }}</small></div>
+        <div class="card-kpi" v-go="'#client-channels'" title="Voir l'utilisation par canal"><span>Envoyé / reçu</span><b>{{ short(s.volume_out) }} / {{ short(s.volume_in) }}</b><small>Dernière activité : {{ s.last_activity ? dt(s.last_activity) : '—' }}</small></div>
       </div>
 
       <KycGallery :user-id="c.id" />
@@ -69,7 +69,7 @@
           </div>
         </section>
 
-        <section class="container">
+        <section id="client-channels" class="container">
           <div class="container-head"><h3>Utilisation par canal</h3></div>
           <div class="container-body flush">
             <table class="info">

@@ -140,11 +140,11 @@
           <!-- ---------- État des services (type « AWS Health ») ---------- -->
           <div v-else-if="w.key === 'health'">
             <div class="counters">
-              <div><span>Incidents ouverts</span><b :class="{ 't-err': openIssues }">{{ openIssues }}</b></div>
-              <div><span>Demandes PEEX en attente</span><b>{{ n(d?.peex.awaiting ?? 0) }}</b></div>
+              <div v-go="'/notifications'" title="Voir les alertes"><span>Incidents ouverts</span><b :class="{ 't-err': openIssues }">{{ openIssues }}</b></div>
+              <div v-go="'/peex'" title="Voir les demandes PEEX"><span>Demandes PEEX en attente</span><b>{{ n(d?.peex.awaiting ?? 0) }}</b></div>
             </div>
             <ul class="svc-list">
-              <li v-for="s in services" :key="s.label">
+              <li v-for="s in services" :key="s.label" v-go="/peex/i.test(s.label) ? '/peex' : '/notifications'">
                 <StatusIcon :kind="s.kind" /><span class="lbl">{{ s.label }}</span><span class="st-txt" :class="'t-' + s.kind">{{ s.state }}</span>
               </li>
             </ul>
@@ -154,7 +154,7 @@
           <!-- ---------- À traiter (type « Trusted Advisor ») ---------- -->
           <div v-else-if="w.key === 'todo'">
             <div class="todo-sum">
-              <div v-for="c in todoSummary" :key="c.kind" :class="'t-' + c.kind"><StatusIcon :kind="c.kind" /><b>{{ c.n }}</b><span>{{ c.l }}</span></div>
+              <div v-for="c in todoSummary" :key="c.kind" :class="'t-' + c.kind" v-go="'/notifications'"><StatusIcon :kind="c.kind" /><b>{{ c.n }}</b><span>{{ c.l }}</span></div>
             </div>
             <ul class="todo-list">
               <li v-for="t in todos" :key="t.label">
@@ -590,7 +590,7 @@ const kpiCards = computed(() => {
     card('rate', 'Taux de réussite', k.value?.success_rate == null ? '—' : String(k.value.success_rate).replace('.', ',') + ' %', '', `${n(k.value?.failed)} échouée(s)`, tx(null, 'failed'), c.success_rate, p.success_rate, { points: true }),
     card('fees', 'Frais perçus', short(k.value?.fees), 'XAF', 'Commissions de la période', '/tariffs', c.fees, p.fees),
     card('users', 'Utilisateurs actifs', n(c.active_users), '', `${n(c.new_accounts)} nouveau(x) compte(s)`, '/accounts', c.active_users, p.active_users),
-    card('wallets', 'Solde des wallets', short(k.value?.wallets_balance), 'XAF', `${n(d.value?.users.active)} compte(s) actif(s)`, '/accounts', null, null),
+    card('wallets', 'Solde des wallets', short(k.value?.wallets_balance), 'XAF', `${n(d.value?.users.active)} compte(s) actif(s)`, { path: '/clients', query: { sort: 'balance' } }, null, null),
   ]
 })
 
@@ -863,9 +863,9 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('clic
 
 /* ================= Synthèse ================= */
 .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
-.kpi { position: relative; display: block; padding: 6px 18px 30px; border-left: 1px solid var(--border); color: inherit; text-decoration: none; border-radius: 8px; overflow: hidden; }
+.kpi { position: relative; display: block; cursor: pointer; transition: background .15s, box-shadow .15s; padding: 6px 18px 30px; border-left: 1px solid var(--border); color: inherit; text-decoration: none; border-radius: 8px; overflow: hidden; }
 .kpi:first-child { border-left: 0; padding-left: 4px; }
-.kpi:hover { background: var(--surface-2); color: inherit; }
+.kpi:hover { background: var(--surface-2); color: inherit; box-shadow: inset 0 0 0 1px var(--link, #0972d3); }
 .kpi .k { font-size: 13px; color: var(--text-2); font-weight: 600; margin-bottom: 2px; }
 .kpi .v { font-size: 28px; line-height: 36px; font-weight: 750; letter-spacing: -.02em; white-space: nowrap; }
 .kpi .v.skeleton { max-width: 90px; }

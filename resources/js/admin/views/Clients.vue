@@ -102,11 +102,12 @@ import ExportButton from '../components/ExportButton.vue'
 import { fetchAllPages, fmtDate, fmtPhone } from '../utils/export'
 import IconAction from '../components/IconAction.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import api from '../services/api'
 import AccountStatusModal from '../components/AccountStatusModal.vue'
 
 const router = useRouter()
+const route = useRoute()
 const KYC = {
   pending: { label: 'Non fourni', cls: 'muted' }, submitted: { label: 'À vérifier', cls: 'pending' },
   verified: { label: 'Validé', cls: 'ok' }, rejected: { label: 'Rejeté', cls: 'err' },
@@ -137,8 +138,9 @@ const short = (v) => (v == null ? '—' : v >= 1e6 ? (v / 1e6).toFixed(1).replac
 const dt = (s) => new Date(s).toLocaleString('fr-FR', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 const initials = (s) => (s || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 
-const isOn = (t) => t.f && ['status', 'kyc', 'wallet'].every((k) => (t.f[k] || '') === f[k])
+const isOn = (t) => t.key === 'balance' ? f.sort === 'balance' : t.f && ['status', 'kyc', 'wallet'].every((k) => (t.f[k] || '') === f[k])
 function applyTile(t) {
+  if (t.key === 'balance') { f.sort = f.sort === 'balance' ? '' : 'balance'; load(1); return }
   if (!t.f) return
   f.status = t.f.status || ''; f.kyc = t.f.kyc || ''; f.wallet = t.f.wallet || ''
   load(1)
@@ -180,7 +182,7 @@ async function bulk(active) {
   }
 }
 
-onMounted(() => load())
+onMounted(() => { if (route.query.sort) f.sort = String(route.query.sort); load() })
 
 // --- Export de la liste (tous les résultats filtrés)
 const EXP_COLS = [

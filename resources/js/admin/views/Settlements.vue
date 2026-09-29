@@ -10,12 +10,12 @@
     </div>
 
     <div class="grid grid-3 mb">
-      <div class="card"><div class="stat-label">Virements à exécuter</div><div class="stat-value">{{ d?.pending.length ?? '—' }}</div></div>
-      <div class="card"><div class="stat-label">Montant à virer</div><div class="stat-value">{{ money(d?.pending_total) }}</div></div>
-      <div class="card"><div class="stat-label">Traités récemment</div><div class="stat-value">{{ d?.recent.length ?? '—' }}</div></div>
+      <div class="card" v-go="'#stl-pending'"><div class="stat-label">Virements à exécuter</div><div class="stat-value">{{ d?.pending.length ?? '—' }}</div></div>
+      <div class="card" v-go="'#stl-pending'"><div class="stat-label">Montant à virer</div><div class="stat-value">{{ money(d?.pending_total) }}</div></div>
+      <div class="card" v-go="'#stl-history'"><div class="stat-label">Traités récemment</div><div class="stat-value">{{ d?.recent.length ?? '—' }}</div></div>
     </div>
 
-    <section class="container mb">
+    <section id="stl-pending" class="container mb">
       <div class="container-head"><h3>À exécuter <span class="counter">({{ d?.pending.length ?? 0 }})</span></h3></div>
       <div class="container-body flush" style="overflow-x:auto;">
         <table>
@@ -38,7 +38,7 @@
       </div>
     </section>
 
-    <section class="container">
+    <section id="stl-history" class="container">
       <div class="container-head"><h3>Historique</h3></div>
       <div class="container-body flush" style="overflow-x:auto;">
         <table>

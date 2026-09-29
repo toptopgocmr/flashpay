@@ -35,19 +35,19 @@
         </div>
         <div class="container-body">
           <div class="cards">
-            <div class="card-kpi"><span>Float disponible</span><b>{{ money(a.float, a.currency) }}</b><small><span class="status" :class="a.wallet_status === 'frozen' ? 'err' : 'ok'">{{ a.wallet_status === 'frozen' ? 'Gelé' : 'Actif' }}</span></small></div>
-            <div class="card-kpi"><span>Identifiant agent</span><b class="mono">{{ a.agent_code || '—' }}</b><small>PV {{ a.pos_code }} · {{ a.is_super_agent ? `Super-agent (${a.sub_agents} sous-agents)` : (a.parent_name ? 'Rattaché à ' + a.parent_name : 'Agent') }}<span v-if="a.pending_float_requests"> · {{ a.pending_float_requests }} demande(s) de float</span></small></div>
-            <div class="card-kpi"><span>Dépôts cash</span><b>{{ n(p.deposits.count) }}</b><small>{{ money(p.deposits.volume, a.currency) }}</small></div>
-            <div class="card-kpi"><span>Retraits wallet</span><b>{{ n(p.withdrawals_wallet.count) }}</b><small>{{ money(p.withdrawals_wallet.volume, a.currency) }}</small></div>
-            <div class="card-kpi"><span>Retraits QR code</span><b>{{ n(p.withdrawals_qr.count) }}</b><small>{{ money(p.withdrawals_qr.volume, a.currency) }}</small></div>
-            <div class="card-kpi"><span>Commissions gagnées</span><b>{{ money(p.commission, a.currency) }}</b><small>{{ n(p.clients_served) }} client(s) servi(s)</small></div>
-            <div class="card-kpi"><span>Approvisionnements</span><b>{{ n(p.float_topups.count) }}</b><small>{{ money(p.float_topups.volume, a.currency) }}</small></div>
+            <div class="card-kpi" v-go="'/float-requests'" title="Demandes de float"><span>Float disponible</span><b>{{ money(a.float, a.currency) }}</b><small><span class="status" :class="a.wallet_status === 'frozen' ? 'err' : 'ok'">{{ a.wallet_status === 'frozen' ? 'Gelé' : 'Actif' }}</span></small></div>
+            <div class="card-kpi" v-go="'#agent-profile'" title="Voir le profil"><span>Identifiant agent</span><b class="mono">{{ a.agent_code || '—' }}</b><small>PV {{ a.pos_code }} · {{ a.is_super_agent ? `Super-agent (${a.sub_agents} sous-agents)` : (a.parent_name ? 'Rattaché à ' + a.parent_name : 'Agent') }}<span v-if="a.pending_float_requests"> · {{ a.pending_float_requests }} demande(s) de float</span></small></div>
+            <div class="card-kpi" v-go="{ path: '/transactions', query: { user: a.user_id, channel: 'deposit_agent' } }" title="Voir les dépôts"><span>Dépôts cash</span><b>{{ n(p.deposits.count) }}</b><small>{{ money(p.deposits.volume, a.currency) }}</small></div>
+            <div class="card-kpi" v-go="{ path: '/transactions', query: { user: a.user_id, channel: 'withdrawal_wallet' } }" title="Voir les retraits wallet"><span>Retraits wallet</span><b>{{ n(p.withdrawals_wallet.count) }}</b><small>{{ money(p.withdrawals_wallet.volume, a.currency) }}</small></div>
+            <div class="card-kpi" v-go="{ path: '/transactions', query: { user: a.user_id, channel: 'withdrawal_qr' } }" title="Voir les retraits QR"><span>Retraits QR code</span><b>{{ n(p.withdrawals_qr.count) }}</b><small>{{ money(p.withdrawals_qr.volume, a.currency) }}</small></div>
+            <div class="card-kpi" v-go="'#agent-ops'" title="Voir toutes les opérations"><span>Commissions gagnées</span><b>{{ money(p.commission, a.currency) }}</b><small>{{ n(p.clients_served) }} client(s) servi(s)</small></div>
+            <div class="card-kpi" v-go="'/float-requests'" title="Voir les approvisionnements"><span>Approvisionnements</span><b>{{ n(p.float_topups.count) }}</b><small>{{ money(p.float_topups.volume, a.currency) }}</small></div>
           </div>
         </div>
       </section>
 
       <div class="two-col mb">
-        <section class="container">
+        <section id="agent-profile" class="container">
           <div class="container-head"><h3>Profil</h3></div>
           <div class="container-body flush">
             <table class="info"><tbody>
@@ -60,7 +60,7 @@
             </tbody></table>
           </div>
         </section>
-        <section class="container">
+        <section id="agent-ops" class="container">
           <div class="container-head"><h3>Toutes opérations</h3></div>
           <div class="container-body flush">
             <table class="info"><tbody>

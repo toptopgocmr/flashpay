@@ -9,9 +9,9 @@
       <span class="status" :class="last.anomalies ? 'err' : 'ok'">{{ last.anomalies ? last.anomalies + ' anomalie(s)' : 'Aucune anomalie' }}</span>
     </div>
     <div class="grid grid-4 mb" v-if="last">
-      <div class="card" v-for="(v, k) in last.results" :key="k"><div class="stat-label">{{ LBL[k] }}</div><div class="stat-value" :style="v.length ? 'color:var(--err)' : ''">{{ v.length }}</div></div>
+      <div class="card" v-for="(v, k) in last.results" :key="k" v-go="v.length ? '#rec-' + k : ''" :title="v.length ? 'Voir le détail' : 'Aucune anomalie'"><div class="stat-label">{{ LBL[k] }}</div><div class="stat-value" :style="v.length ? 'color:var(--err)' : ''">{{ v.length }}</div></div>
     </div>
-    <section class="container mb" v-for="(rows, k) in last?.results || {}" :key="k" v-show="rows.length">
+    <section :id="'rec-' + k" class="container mb" v-for="(rows, k) in last?.results || {}" :key="k" v-show="rows.length">
       <div class="container-head"><h3>{{ LBL[k] }}</h3></div>
       <div class="container-body flush" style="overflow-x:auto;">
         <table>

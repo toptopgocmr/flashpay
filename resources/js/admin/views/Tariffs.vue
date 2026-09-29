@@ -16,10 +16,10 @@
 
     <!-- Indicateurs -->
     <div class="kpis mb">
-      <div class="kpi"><span>Paliers actifs</span><b>{{ n(kpi.active) }} <small>/ {{ n(kpi.tiers) }}</small></b></div>
-      <div class="kpi"><span>Opérations gratuites</span><b>{{ n(kpi.free_operations) }} <small>/ {{ Object.keys(operations).length }}</small></b></div>
-      <div class="kpi"><span>Frais perçus (30 j)</span><b>{{ short(kpi.fees_30d) }} <small>XAF</small></b></div>
-      <div class="kpi"><span>Taux de prélèvement moyen</span><b>{{ kpi.volume_30d ? (kpi.fees_30d * 100 / kpi.volume_30d).toFixed(2).replace('.', ',') + ' %' : '—' }}</b></div>
+      <div class="kpi" v-go="() => showTiers('1')" title="Voir les paliers actifs"><span>Paliers actifs</span><b>{{ n(kpi.active) }} <small>/ {{ n(kpi.tiers) }}</small></b></div>
+      <div class="kpi" v-go="'#tariff-matrix'" title="Voir la vue d'ensemble"><span>Opérations gratuites</span><b>{{ n(kpi.free_operations) }} <small>/ {{ Object.keys(operations).length }}</small></b></div>
+      <div class="kpi" v-go="{ path: '/transactions', query: { status: 'successful', days: '30' } }" title="Voir les transactions réussies des 30 derniers jours"><span>Frais perçus (30 j)</span><b>{{ short(kpi.fees_30d) }} <small>XAF</small></b></div>
+      <div class="kpi" v-go="'#tariff-sim'" title="Ouvrir le simulateur"><span>Taux de prélèvement moyen</span><b>{{ kpi.volume_30d ? (kpi.fees_30d * 100 / kpi.volume_30d).toFixed(2).replace('.', ',') + ' %' : '—' }}</b></div>
     </div>
 
     <div class="zones mb">
@@ -28,7 +28,7 @@
 
     <div class="layout mb">
       <!-- Matrice par famille -->
-      <section class="container">
+      <section id="tariff-matrix" class="container">
         <div class="container-head"><div><h3>Vue d'ensemble</h3><p>Frais du premier palier actif — cliquez sur une case pour voir et modifier ses paliers</p></div></div>
         <div class="container-body flush" style="overflow-x:auto;">
           <table class="matrix">
@@ -57,7 +57,7 @@
       </section>
 
       <!-- Simulateur -->
-      <section class="container sim">
+      <section id="tariff-sim" class="container sim">
         <div class="container-head"><div><h3>Simulateur</h3><p>Comparez les frais dans les 3 zones</p></div></div>
         <div class="container-body">
           <label class="field">Opération</label>
@@ -81,7 +81,7 @@
     </div>
 
     <!-- Tous les paliers -->
-    <section class="container">
+    <section id="tariff-list" class="container">
       <div class="container-head">
         <h3>Tous les paliers <span class="counter">({{ filtered.length }})</span></h3>
         <div class="filters">
@@ -185,6 +185,10 @@ const tariffs = ref([])
 const revenue = ref({})
 const kpi = ref({})
 const flt = reactive({ op: '', scope: '', active: '' })
+function showTiers(active) {
+  flt.op = ''; flt.scope = ''; flt.active = flt.active === active ? '' : active
+  const el = document.getElementById('tariff-list'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 const form = ref(null)
 const cell = ref(null)
 const saving = ref(false)
