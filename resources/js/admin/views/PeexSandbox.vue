@@ -74,7 +74,7 @@
           <tr v-for="r in requests" :key="r.id">
             <td class="nowrap">{{ new Date(r.created_at).toLocaleDateString('fr-FR') }}<br /><small class="muted">{{ new Date(r.created_at).toLocaleTimeString('fr-FR') }}</small></td>
             <td>{{ SERVICE[r.service] || r.service }}</td>
-            <td class="mono small">{{ r.track_id }}</td>
+            <td class="mono track" :title="r.track_id">{{ r.track_id }}</td>
             <td class="nowrap">{{ r.country }} · {{ r.corridor || '?' }}</td>
             <td class="nowrap">{{ $phone(r.phone) }}</td>
             <td class="nowrap">{{ formatXaf(r.amount) }}</td>
@@ -82,7 +82,7 @@
               <span class="badge" :class="badge(r.status)">{{ STATUS[r.status] || r.status }}</span>
               <template v-for="p in [proof(r)]" :key="'p' + r.id">
                 <div v-if="p.lines.length" class="proof">
-                  <div v-for="l in p.lines" :key="l[0]"><span class="muted">{{ l[0] }} :</span> <span class="mono">{{ l[1] }}</span></div>
+                  <div v-for="l in p.lines" :key="l[0]"><span class="muted">{{ l[0] }} :</span> <span :class="{ mono: l[0] !== 'Motif' && l[0] !== 'Message' }">{{ l[1] }}</span></div>
                 </div>
                 <details v-if="p.raw" class="raw">
                   <summary>Réponse brute PEEX</summary>
@@ -241,17 +241,21 @@ onBeforeUnmount(stopTimer)
 
 <style scoped>
 .req-wrap { overflow-x: auto; margin-top: 12px; }
-.req-table { width: 100%; border-collapse: collapse; table-layout: auto; }
-.req-table th, .req-table td { vertical-align: top; padding: 12px 10px; }
+.req-table { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 13px; line-height: 1.4; }
+.req-table th { font-size: 11px; letter-spacing: .04em; padding: 8px 8px; white-space: nowrap; }
+.req-table td { vertical-align: top; padding: 9px 8px; }
+.req-table small { font-size: 11.5px; }
 .nowrap { white-space: nowrap; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.small { font-size: 12px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; }
+.small { font-size: 11.5px; }
+.track { font-size: 11px; white-space: nowrap; }
 .muted { color: #6b7280; }
-.peex-cell { min-width: 260px; max-width: 360px; }
-.proof { margin-top: 6px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
-.raw { margin-top: 6px; font-size: 12px; }
+.peex-cell { min-width: 240px; max-width: 340px; }
+.peex-cell .badge, .tx-cell .badge { font-size: 11.5px; padding: 1px 8px; }
+.proof { margin-top: 4px; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.raw { margin-top: 4px; font-size: 11.5px; }
 .raw summary { cursor: pointer; color: var(--link, #0972d3); }
-.raw pre { margin: 6px 0 0; padding: 8px; background: #f6f7f9; border-radius: 6px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
-.tx-cell { min-width: 150px; white-space: nowrap; }
-.tx-cell .badge { margin-top: 4px; display: inline-block; }
+.raw pre { margin: 6px 0 0; padding: 8px; background: #f6f7f9; border-radius: 6px; max-height: 200px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
+.tx-cell { min-width: 130px; white-space: nowrap; }
+.tx-cell .badge { margin-top: 3px; display: inline-block; }
 </style>
