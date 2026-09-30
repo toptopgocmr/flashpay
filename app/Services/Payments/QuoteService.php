@@ -122,6 +122,14 @@ class QuoteService
     {
         $guard = app(PeexGuard::class);
 
+        // PEEX refuse les petits montants (« Fees is not yet defined… ») : aucune grille
+        // de frais n'existe chez lui sous ce seuil. On l'annonce avant tout débit.
+        $min = (int) config('flashpay.peex.min_amount', 100);
+        if (($src['type'] === 'mobile' || $dst['type'] === 'mobile') && $outAmount < $min) {
+            $problems[] = 'Montant minimum pour le mobile money : ' . number_format($min, 0, ',', ' ') . ' XAF.';
+            return;
+        }
+
         if ($src['type'] === 'mobile') {
             if ($p = $guard->checkCollect()) {
                 $problems[] = $p;

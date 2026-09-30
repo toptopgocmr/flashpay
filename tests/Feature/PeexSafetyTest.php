@@ -208,7 +208,7 @@ class PeexSafetyTest extends TestCase
     {
         $c = $this->client('242061000591', 0);
         $this->actingAs($c, 'sanctum');
-        $body = ['operation' => 'transfer', 'source' => 'mobile', 'source_phone' => '+242067601919', 'destination_phone' => '+242055212223', 'deliver_to' => 'mobile', 'amount' => 50];
+        $body = ['operation' => 'transfer', 'source' => 'mobile', 'source_phone' => '+242067601919', 'destination_phone' => '+242055212223', 'deliver_to' => 'mobile', 'amount' => 100];
 
         // Fiche collection/me en erreur 500 : contrôle ignoré, l'envoi MTN -> Airtel reste possible
         $this->peex['collect_me'] = 500;
@@ -220,5 +220,17 @@ class PeexSafetyTest extends TestCase
         $this->peex['collect_me'] = 403;
         $q = $this->postJson('/api/pay/quote', $body)->assertOk();
         $this->assertFalse($q->json('available'));
+    }
+
+    public function test_small_mobile_amount_is_refused_before_peex_and_peex_errors_are_explained(): void
+    {
+        $c = $this->client('242061000595', 0);
+        $this->actingAs($c, 'sanctum');
+        $q = $this->postJson('/api/pay/quote', ['operation' => 'transfer', 'source' => 'mobile', 'source_phone' => '+242067601919', 'destination_phone' => '+242055212223', 'deliver_to' => 'mobile', 'amount' => 50])->assertOk();
+        $this->assertFalse($q->json('available'));
+        $this->assertStringContainsString('Montant minimum pour le mobile money : 100 XAF', implode(' ', $q->json('problems')));
+
+        $msg = \App\Services\Peex\PeexClient::explain('Fees is not yet defined corresponding to your requirements!, please contact peex support');
+        $this->assertStringContainsString('montant non pris en charge par PEEX', $msg);
     }
 }

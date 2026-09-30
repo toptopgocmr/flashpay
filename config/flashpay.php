@@ -56,6 +56,8 @@ return [
         // (disbursement_solde / solde) couvre le montant + frais PEEX + encours.
         'check_balance' => (bool) env('PEEX_CHECK_BALANCE', true),
         // true : une fiche PEEX (collection/me, disbursement/me) injoignable bloque l'opération
+        // Montant minimum accepté par PEEX (en dessous : « Fees is not yet defined »)
+        'min_amount' => (int) env('PEEX_MIN_AMOUNT', 100),
         'require_account_check' => (bool) env('PEEX_REQUIRE_ACCOUNT_CHECK', false),
         // Délai après lequel une demande « unknown » introuvable chez PEEX est
         // considérée comme jamais reçue (échec certain -> remboursement).

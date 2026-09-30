@@ -73,11 +73,11 @@ class PeexClient
                 Log::critical('PEEX 403 : IP du serveur refusée par le pare-feu PEEX', ['path' => $path, 'ip_hint' => 'Faire autoriser l\'IP sortante Railway par PEEX']);
                 throw new PeexException('PEEX 403 : accès refusé par le pare-feu PEEX (adresse IP du serveur FlashPay non autorisée).', 403, $body);
             }
-            $message = $body['message'] ?? $body['error'] ?? $body['errors'] ?? $response->reason();
+            $message = $body['message'] ?? $body['error']['message'] ?? $body['error'] ?? $body['errors'] ?? $response->reason();
             if (is_array($message)) {
                 $message = json_encode($message, JSON_UNESCAPED_UNICODE);
             }
-            throw new PeexException("PEEX {$response->status()} : {$message}", $response->status(), $body);
+            throw new PeexException("PEEX {$response->status()} : " . self::explain((string) $message), $response->status(), $body);
         }
 
         return $body;
@@ -303,5 +303,22 @@ class PeexClient
         }
 
         return isset($body['status']) || isset($body['track_id']) ? $body : null;
+    }
+
+    /** Traduit en français les messages d'erreur PEEX connus (le texte d'origine reste entre parenthèses). */
+    public static function explain(string $message): string
+    {
+        $known = [
+            'fees is not yet defined' => 'montant non pris en charge par PEEX (aucune grille de frais pour ce montant ou cet opérateur — montant trop faible ?)',
+            'unsupported account code' => 'vérification de compte non disponible pour ce pays',
+            'insufficient' => 'solde PEEX insuffisant',
+            'not activated' => 'service PEEX non activé',
+        ];
+        foreach ($known as $needle => $fr) {
+            if (stripos($message, $needle) !== false) {
+                return "{$fr} (« {$message} »)";
+            }
+        }
+        return $message;
     }
 }
