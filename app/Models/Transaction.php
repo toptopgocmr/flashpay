@@ -33,6 +33,10 @@ class Transaction extends Model
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('Notification paiement non créée : ' . $e->getMessage());
             }
+            // Recharge « cadeau » payée par mobile money / carte : envoi du cadeau.
+            if ($tx->status === 'successful' && ! empty(($tx->meta ?? [])['pending_gift'])) {
+                \Illuminate\Support\Facades\DB::afterCommit(fn () => app(\App\Services\Client\GiftService::class)->completeFunding($tx->fresh()));
+            }
         });
     }
 

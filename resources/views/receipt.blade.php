@@ -16,7 +16,9 @@
   .card { background: #fff; border-radius: 18px; box-shadow: 0 6px 24px rgba(15, 23, 42, .08); overflow: hidden; }
   .head { background: #1e3a8a; color: #fff; padding: 20px 22px; display: flex; justify-content: space-between; align-items: center; }
   .brand { font-weight: 800; font-size: 20px; letter-spacing: -.01em; }
+  .brand { display: flex; align-items: center; gap: 10px; }
   .brand span { color: #fca5a5; }
+  .logo { width: 38px; height: 38px; background: #fff; border-radius: 10px; padding: 4px; object-fit: contain; }
   .head small { opacity: .8; }
   .hero { text-align: center; padding: 22px 22px 8px; }
   .status { display: inline-block; padding: 3px 12px; border-radius: 999px; font-weight: 700; font-size: 13px; color: {{ $tone }}; background: {{ $tone }}1a; }
@@ -39,7 +41,7 @@
 <div class="wrap">
   <div class="card">
     <div class="head">
-      <div class="brand">Flash<span>Pay</span></div>
+      <div class="brand"><img src="{{ asset('images/flashpay-logo.png') }}" alt="" class="logo"> Flash<span>Pay</span></div>
       <small>Reçu de transaction</small>
     </div>
     <div class="hero">

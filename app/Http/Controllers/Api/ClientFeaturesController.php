@@ -163,7 +163,30 @@ class ClientFeaturesController extends Controller
             'message' => 'nullable|string|max:190',
             'occasion' => 'nullable|in:anniversaire,fete,felicitations,mariage,naissance,autre',
             'expires_in_hours' => 'nullable|integer|min:1|max:72',
+            'source' => 'nullable|in:wallet,mobile,card',
+            'source_phone' => 'required_if:source,mobile|nullable|string|max:25',
         ]);
+        $source = $v['source'] ?? 'wallet';
+
+        // Cadeau payé par mobile money ou carte : on encaisse d'abord le montant sur
+        // le wallet (collecte PEEX / 3-D Secure) ; le cadeau part automatiquement dès
+        // la confirmation (Transaction::booted → GiftService::completeFunding).
+        if ($source !== 'wallet') {
+            $gift = collect($v)->except(['source', 'source_phone'])->all();
+            $total = $v['mode'] === 'fixed' ? (int) $v['amount'] * count(array_unique($v['recipients'] ?? [])) : (int) $v['amount'];
+            if ($total <= 0) {
+                return response()->json(['message' => 'Ajoutez au moins un destinataire.'], 422);
+            }
+            $gifts->precheck($request->user(), $gift);
+            $flows = app(\App\Services\Peex\PeexFlowService::class);
+            $meta = ['pending_gift' => $gift, 'purpose' => 'gift'];
+            $tx = $source === 'card'
+                ? $flows->cardDeposit($request->user(), $total, $meta)
+                : $flows->deposit($request->user(), $v['source_phone'], $total, ['meta' => $meta]);
+
+            return response()->json(app(PaymentController::class)->txPayload($tx) + ['funding' => true], 202);
+        }
+
         $env = $gifts->create($request->user(), $v);
         return response()->json($env->toArray() + ['share_link' => url("/g/{$env->code}"), 'share_code' => $env->code], 201);
     }

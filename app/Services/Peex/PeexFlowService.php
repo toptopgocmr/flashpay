@@ -73,9 +73,9 @@ class PeexFlowService
         ]);
     }
 
-    public function cardDeposit(User $user, int $amount): Transaction
+    public function cardDeposit(User $user, int $amount, array $meta = []): Transaction
     {
-        return $this->execute($user, $this->quoteCardDeposit($user, $amount), 'cash_in');
+        return $this->execute($user, $this->quoteCardDeposit($user, $amount), 'cash_in', $meta);
     }
 
     public function quoteWithdraw(User $user, string $phone, int $amount, array $opt = []): array
@@ -118,7 +118,7 @@ class PeexFlowService
 
     public function deposit(User $user, string $phone, int $amount, array $opt = []): Transaction
     {
-        return $this->execute($user, $this->quoteDeposit($user, $phone, $amount, $opt), 'cash_in');
+        return $this->execute($user, $this->quoteDeposit($user, $phone, $amount, $opt), 'cash_in', $opt['meta'] ?? []);
     }
 
     public function withdraw(User $user, string $phone, int $amount, array $opt = []): Transaction

@@ -19,13 +19,13 @@
             <tr v-for="x in disputes?.data || []" :key="x.id">
               <td class="mono">{{ x.reference }}</td>
               <td><strong>{{ x.user?.full_name }}</strong><br /><small class="mono">{{ $phone(x.user?.phone) }}</small></td>
-              <td>{{ x.reason_label }}<br /><small>{{ x.description }}</small></td>
+              <td>{{ x.reason_label }}<br /><small>{{ x.description }}</small><div v-if="x.counterparty_response" class="hint" style="margin-top:4px">Réponse de {{ x.counterparty?.name || 'l\'autre partie' }} : « {{ x.counterparty_response }} »</div></td>
               <td><router-link :to="`/transactions/${x.transaction_id}`" class="mono">{{ x.transaction?.reference }}</router-link><br /><small>{{ x.transaction?.type }} · {{ money(x.transaction?.amount, x.transaction?.currency) }}</small></td>
               <td><span :style="x.overdue ? 'color:var(--err);font-weight:600' : ''">{{ date(x.sla_due_at) }}</span></td>
               <td><span class="status" :class="x.status === 'investigating' ? 'warn' : 'pending'">{{ x.status === 'investigating' ? 'En instruction' : 'Ouvert' }}</span></td>
               <td class="actions-cell">
                 <IconAction v-if="x.status === 'open'" icon="search" label="Instruire le litige" @click="investigate(x)" />
-                <IconAction icon="scale" tone="accent" label="Arbitrer (rembourser / rejeter)" @click="resolving = { x, action: 'refund', amount: x.transaction?.amount, resolution: '' }" />
+                <IconAction icon="scale" tone="accent" label="Arbitrer (rembourser / rejeter)" @click="resolving = { x, action: 'refund', amount: x.transaction?.amount, resolution: '', source: x.counterparty ? 'counterparty' : 'auto' }" />
               </td>
             </tr>
           </tbody>
@@ -59,8 +59,17 @@
         <div><label class="field">Décision</label><select v-model="resolving.action"><option value="refund">Rembourser le client</option><option value="reject">Rejeter la contestation</option></select></div>
         <div v-if="resolving.action === 'refund'"><label class="field">Montant remboursé</label><input v-model.number="resolving.amount" type="number" /></div>
       </div>
-      <div><label class="field">Décision motivée (envoyée au client)</label><input v-model.trim="resolving.resolution" /></div>
-      <div class="hint">Paiement marchand : remboursement depuis le wallet du marchand. Autre opération : correction exceptionnelle tracée.</div>
+      <div v-if="resolving.action === 'refund'">
+        <label class="field">Débiter</label>
+        <select v-model="resolving.source">
+          <option v-if="resolving.x.counterparty" value="counterparty">Le wallet de {{ resolving.x.counterparty.name }} ({{ ROLE[resolving.x.counterparty.role] || resolving.x.counterparty.role }} · solde {{ money(resolving.x.counterparty.balance, resolving.x.counterparty.currency) }})</option>
+          <option value="flashpay">FlashPay (correction exceptionnelle tracée)</option>
+          <option value="auto">Automatique (marchand si paiement marchand, sinon FlashPay)</option>
+        </select>
+        <div class="hint">Le montant est crédité sur le wallet de {{ resolving.x.user?.full_name }} (auteur de la contestation).</div>
+      </div>
+      <div v-if="resolving.action === 'refund' && resolving.x.transaction?.status === 'failed'" class="flash warn" style="margin:0"><div>Attention : cette opération est <strong>échouée</strong>. En principe rien n'a été débité ; vérifiez chez l'opérateur avant de rembourser.</div></div>
+      <div><label class="field">Décision motivée (envoyée au client)</label><input v-model.trim="resolving.resolution" placeholder="Ex. Débit confirmé par MTN, remboursement effectué." /></div>
       <template #foot><button class="btn-normal" @click="resolving = null">Annuler</button><button class="btn" :disabled="!resolving.resolution || busy" @click="resolve">Valider</button></template>
     </Modal>
     <Modal v-if="replying" :title="replying.t.subject" :subtitle="replying.t.reference" @close="replying = null">
@@ -88,6 +97,7 @@ const tickets = ref(null)
 const resolving = ref(null)
 const replying = ref(null)
 const busy = ref(false)
+const ROLE = { client: 'client', merchant: 'marchand', agent: 'agent', super_agent: 'super-agent', cashier: 'caissier' }
 const error = ref('')
 const msg = ref('')
 
@@ -104,7 +114,7 @@ async function resolve() {
   error.value = ''
   try {
     const r = resolving.value
-    await api.post(`/admin/disputes/${r.x.id}`, { action: r.action, amount: r.amount, resolution: r.resolution })
+    await api.post(`/admin/disputes/${r.x.id}`, { action: r.action, amount: r.amount, resolution: r.resolution, source: r.source })
     msg.value = `Litige ${r.x.reference} ${r.action === 'refund' ? 'résolu avec remboursement' : 'rejeté'}.`
     resolving.value = null
     load()

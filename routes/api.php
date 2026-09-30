@@ -102,6 +102,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/support/tickets/{ticket}/messages', [SupportCenterController::class, 'replyTicket']);
     Route::get('/disputes', [SupportCenterController::class, 'disputes']);
     Route::post('/disputes', [SupportCenterController::class, 'openDispute'])->middleware('throttle:10,1');
+    Route::get('/disputes/received', [SupportCenterController::class, 'receivedDisputes']);
+    Route::post('/disputes/{dispute}/refund', [SupportCenterController::class, 'counterpartyRefund'])->whereNumber('dispute')->middleware(['pin', 'idempotent']);
+    Route::post('/disputes/{dispute}/respond', [SupportCenterController::class, 'counterpartyRespond'])->whereNumber('dispute');
 
     // --- QR dynamique / lien de paiement / NFC / e-commerce côté payeur ---
     Route::get('/pay/requests/{token}', [PaymentRequestController::class, 'show']);

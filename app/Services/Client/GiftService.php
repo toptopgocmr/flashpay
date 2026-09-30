@@ -41,6 +41,54 @@ class GiftService
     ) {
     }
 
+    /** Contrôles avant d'encaisser un cadeau payé par mobile money / carte. */
+    public function precheck(User $sender, array $d): void
+    {
+        if (($d['mode'] ?? '') === 'fixed') {
+            $phones = collect($d['recipients'] ?? [])->map(fn ($p) => $this->corridors->resolve((string) $p)['phone'])->unique();
+            if ($phones->isEmpty()) {
+                throw new BusinessException('Ajoutez au moins un destinataire.', 'no_recipient');
+            }
+        } elseif ((int) $d['amount'] < (int) ($d['shares'] ?? 1) * 50) {
+            throw new BusinessException('Montant trop faible pour ' . (int) $d['shares'] . ' parts (50 minimum par part).', 'amount_too_low');
+        }
+    }
+
+    /**
+     * Recharge « cadeau » confirmée (mobile money / carte) : le montant est sur le
+     * wallet, on crée maintenant le cadeau. En cas d'échec, l'argent reste sur le
+     * wallet et l'expéditeur est prévenu.
+     */
+    public function completeFunding(Transaction $tx): void
+    {
+        $meta = $tx->meta ?? [];
+        if (empty($meta['pending_gift']) || ! empty($meta['gift_code']) || ! empty($meta['gift_error'])) {
+            return;
+        }
+        $lock = \Illuminate\Support\Facades\Cache::lock('gift-funding:' . $tx->id, 30);
+        if (! $lock->get()) {
+            return;
+        }
+        try {
+            $tx->refresh();
+            $meta = $tx->meta ?? [];
+            if (! empty($meta['gift_code']) || ! empty($meta['gift_error'])) {
+                return;
+            }
+            $sender = User::find($tx->initiated_by);
+            try {
+                $env = $this->create($sender, $meta['pending_gift']);
+                $tx->forceFill(['meta' => $meta + ['gift_code' => $env->code]])->saveQuietly();
+                $this->notify->toUser($sender, 'gift_sent', 'Cadeau envoyé 🧧', 'Paiement reçu : votre cadeau est parti. Code ' . $env->code . ' — lien ' . url('/g/' . $env->code), ['severity' => 'success', 'data' => ['code' => $env->code]]);
+            } catch (\Throwable $e) {
+                $tx->forceFill(['meta' => $meta + ['gift_error' => mb_substr($e->getMessage(), 0, 200)]])->saveQuietly();
+                $this->notify->toUser($sender, 'gift_failed', 'Cadeau non envoyé', 'Le montant a bien été crédité sur votre wallet, mais le cadeau n\'a pas pu partir : ' . $e->getMessage(), ['severity' => 'warning']);
+            }
+        } finally {
+            $lock->release();
+        }
+    }
+
     public function create(User $sender, array $d): GiftEnvelope
     {
         $wallet = $this->flows->walletOf($sender);
