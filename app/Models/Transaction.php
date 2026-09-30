@@ -73,6 +73,39 @@ class Transaction extends Model
         return ['amount' => 'integer', 'fee' => 'integer', 'merchant_fee' => 'integer', 'destination_amount' => 'integer', 'completed_at' => 'datetime', 'meta' => 'array'];
     }
 
+    /** Libellés lisibles (reçu, application). */
+    public const TYPE_LABELS = [
+        'p2p' => "Envoi d'argent", 'transfer' => "Envoi d'argent", 'merchant_payment' => 'Paiement marchand',
+        'cash_in' => 'Recharge', 'deposit' => 'Recharge', 'withdrawal' => 'Retrait', 'cash_out' => 'Retrait chez un agent',
+        'cash_pickup' => 'Retrait avec code', 'bank_transfer' => 'Virement bancaire', 'gift' => 'Cadeau envoyé',
+        'gift_claim' => 'Cadeau reçu', 'gift_refund' => 'Cadeau remboursé', 'refund' => 'Remboursement',
+        'split_payment' => 'Part de note partagée', 'float_topup' => 'Approvisionnement agent', 'adjustment' => 'Ajustement',
+    ];
+
+    public const STATUS_LABELS = [
+        'successful' => 'Réussie', 'failed' => 'Échouée', 'reversed' => 'Remboursée', 'processing' => 'En cours', 'pending' => 'En cours',
+    ];
+
+    public function typeLabel(): string
+    {
+        return self::TYPE_LABELS[$this->type] ?? ucfirst(str_replace('_', ' ', (string) $this->type));
+    }
+
+    public function statusLabel(): string
+    {
+        return self::STATUS_LABELS[$this->status] ?? (string) $this->status;
+    }
+
+    /** L'utilisateur est-il partie prenante (initiateur, payeur ou bénéficiaire) ? */
+    public function concerns(User $u): bool
+    {
+        if ((int) $this->initiated_by === (int) $u->id) {
+            return true;
+        }
+        $walletIds = Wallet::where('user_id', $u->id)->pluck('id')->map(fn ($i) => (int) $i)->all();
+        return in_array((int) $this->source_wallet_id, $walletIds, true) || in_array((int) $this->destination_wallet_id, $walletIds, true);
+    }
+
     public function sourceWallet()
     {
         return $this->belongsTo(Wallet::class, 'source_wallet_id');

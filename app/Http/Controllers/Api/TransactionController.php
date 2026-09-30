@@ -34,8 +34,13 @@ class TransactionController extends Controller
 
     public function show(Request $request, Transaction $transaction)
     {
+        // Un client ne voit que ses propres opérations.
+        abort_unless($transaction->concerns($request->user()), 404);
         $transaction->load('ledgerEntries', 'notes.author', 'initiator');
-        return response()->json($transaction);
+        return response()->json($transaction->toArray() + [
+            'type_label' => $transaction->typeLabel(),
+            'status_label' => $transaction->statusLabel(),
+        ]);
     }
 
     /**

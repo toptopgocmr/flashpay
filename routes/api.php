@@ -175,6 +175,15 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     Route::get('/transactions', [TransactionController::class, 'index']);
     Route::get('/transactions/{transaction}', [TransactionController::class, 'show']);
+    Route::get('/transactions/{transaction}/receipt', [\App\Http\Controllers\Api\ReceiptController::class, 'link']);
+
+    // Messagerie entre utilisateurs (texte, photos, vidéos courtes)
+    Route::get('/chats', [\App\Http\Controllers\Api\ChatController::class, 'index']);
+    Route::post('/chats', [\App\Http\Controllers\Api\ChatController::class, 'open'])->middleware('throttle:30,1');
+    Route::get('/chats/{conversation}/messages', [\App\Http\Controllers\Api\ChatController::class, 'messages'])->whereNumber('conversation');
+    Route::post('/chats/{conversation}/messages', [\App\Http\Controllers\Api\ChatController::class, 'send'])->whereNumber('conversation')->middleware('throttle:60,1');
+    Route::get('/chats/messages/{message}/file', [\App\Http\Controllers\Api\ChatController::class, 'file'])->whereNumber('message');
+    Route::get('/chats/messages/{message}/link', [\App\Http\Controllers\Api\ChatController::class, 'link'])->whereNumber('message');
 
     // --- Client ---
     Route::middleware('role:client')->group(function () {
