@@ -35,6 +35,27 @@ class PeexFlowService
         return ($route['rail'] ?? null) === 'wallet' ? 'wallet' : 'peex';
     }
 
+    /** Rail de COLLECTE : partenaire choisi pour le pays (PEEX ou WacePay). */
+    public function collectRailFor(array $route): string
+    {
+        $rail = $this->railFor($route);
+        if ($rail !== 'peex' || empty($route['country'])) {
+            return $rail;
+        }
+        try {
+            $partner = $this->corridors->country((string) $route['country'])['collect_partner'] ?? 'peex';
+        } catch (\Throwable) {
+            return $rail;
+        }
+        if ($partner !== 'digitwace') {
+            return 'peex';
+        }
+        if (! config('flashpay.rails.digitwace.enabled', false) || ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled()) {
+            throw new PeexException('Collecte depuis ce pays confiée à WacePay, mais WacePay n\'est pas encore configuré. Contactez le support FlashPay.');
+        }
+        return 'digitwace';
+    }
+
     /** Rail de VERSEMENT : WacePay (Digitwace) pour les pays configurés, sinon PEEX. */
     public function payoutRailFor(array $route): string
     {
@@ -196,7 +217,8 @@ class PeexFlowService
         // Revérification à l'instant du débit, sans cache : service de collecte
         // actif et solde PEEX de versement suffisant (montants engagés déduits).
         $guard = app(PeexGuard::class);
-        if ($src['type'] === 'mobile' && ($p = $guard->checkCollect(fresh: true))) {
+        $collectRail = $src['type'] === 'mobile' ? $this->collectRailFor($src) : null;
+        if ($src['type'] === 'mobile' && $collectRail === 'peex' && ($p = $guard->checkCollect(fresh: true))) {
             throw new PeexException($p);
         }
         $payoutRail = $dst['type'] === 'wallet' ? 'wallet' : $this->payoutRailFor($dst);
@@ -207,7 +229,7 @@ class PeexFlowService
         $payload = [
             'type' => $type,
             'scope' => $q['scope'],
-            'source_rail' => match ($src['type']) { 'wallet' => 'wallet', 'card' => 'card', default => $this->railFor($src) },
+            'source_rail' => match ($src['type']) { 'wallet' => 'wallet', 'card' => 'card', default => $collectRail },
             'source_account' => $src['type'] === 'mobile' ? $src['phone'] : null,
             'source_wallet_id' => $src['wallet_id'] ?? null,
             'destination_rail' => $payoutRail,

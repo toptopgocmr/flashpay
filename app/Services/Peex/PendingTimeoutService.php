@@ -59,6 +59,14 @@ class PendingTimeoutService
                 Log::info('PEEX : dernière vérification impossible avant expiration', ['reference' => $tx->reference, 'error' => $e->getMessage()]);
             }
         }
+        // Collecte WacePay
+        foreach (\App\Models\DigitwaceRequest::where('transaction_id', $tx->id)->where('operation', 'payin')->whereNull('finalized_at')->get() as $req) {
+            try {
+                app(\App\Services\Digitwace\DigitwaceStatusHandler::class)->refresh($req);
+            } catch (\Throwable $e) {
+                Log::info('WacePay : dernière vérification impossible avant expiration', ['reference' => $tx->reference, 'error' => $e->getMessage()]);
+            }
+        }
         $tx->refresh();
         if ($tx->status !== 'processing' || $tx->stage !== 'awaiting_source') {
             return false; // confirmée (ou refusée) entre-temps

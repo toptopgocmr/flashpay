@@ -27,9 +27,36 @@ class DigitwaceConnector implements PaymentRailConnector
         return 'digitwace';
     }
 
+    /** Collecte (PAYIN) WacePay : le client valide sur son téléphone, statut asynchrone. */
     public function collect(string $msisdnOrAccount, int $amountMinor, string $currency, string $reference): array
     {
-        return ['status' => 'failed', 'external_ref' => $reference, 'raw' => ['error' => 'Collecte via Digitwace non activée (collecte = PEEX).']];
+        $tx = Transaction::where('reference', $reference)->first();
+        $meta = $tx?->meta ?? [];
+        $route = $this->corridors->resolve($msisdnOrAccount, $meta['source_country'] ?? null);
+        $ref = $reference . '-C';
+
+        $req = DigitwaceRequest::firstOrCreate(['reference' => $ref], [
+            'transaction_id' => $tx?->id, 'operation' => 'payin', 'status' => 'new',
+        ]);
+
+        try {
+            $payer = $this->client->payerCodeFor($route['country'], $meta['source_operator'] ?? $route['operator'] ?? null, 'payin');
+            if (! $payer) {
+                throw new DigitwaceException("Collecte WacePay non disponible pour {$route['country']} (aucun payeur PAYIN — synchronisez la couverture).", '1001');
+            }
+            $r = $this->client->payin($ref, $payer, $amountMinor, $currency, $route['phone'],
+                $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $tx?->initiator?->full_name ?? 'Client FlashPay', $route['country']);
+            $req->update(['wace_id' => $r['wace_id'], 'status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'last_response' => $r['raw'], 'last_checked_at' => now()]);
+
+            return ['status' => $r['status'] === 'successful' ? 'successful' : ($r['status'] === 'failed' ? 'failed' : 'pending'), 'external_ref' => $r['wace_id'] ?: $ref, 'raw' => $r['raw']];
+        } catch (DigitwaceException $e) {
+            $definitive = $e->isDefinitive();
+            $req->update(['status' => $definitive ? 'failed' : 'pending', 'message' => mb_substr($e->getMessage(), 0, 250), 'last_response' => $e->response, 'last_checked_at' => now()]);
+            return ['status' => $definitive ? 'failed' : 'pending', 'external_ref' => $ref, 'raw' => ['error' => $e->getMessage()]];
+        } catch (\Throwable $e) {
+            $req->update(['status' => 'pending', 'message' => mb_substr($e->getMessage(), 0, 250), 'last_checked_at' => now()]);
+            return ['status' => 'pending', 'external_ref' => $ref, 'raw' => ['error' => $e->getMessage()]];
+        }
     }
 
     public function disburse(string $msisdnOrAccount, int $amountMinor, string $currency, string $reference): array

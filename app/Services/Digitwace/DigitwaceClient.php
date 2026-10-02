@@ -84,13 +84,24 @@ class DigitwaceClient
      * forcée dans la config (DIGITWACE_PAYER_CODES=CG:MTN=XXXX,…), sinon recherche
      * dans la liste WacePay par pays + nom d'opérateur.
      */
-    public function payerCodeFor(string $country, ?string $operator): ?string
+    public function payerCodeFor(string $country, ?string $operator, string $service = 'payout'): ?string
     {
         $map = (array) $this->cfg('payer_map', []);
         foreach ([strtoupper($country) . ':' . strtoupper((string) $operator), strtoupper($country)] as $k) {
             if (! empty($map[$k])) {
                 return $map[$k];
             }
+        }
+        // Couverture synchronisée (console › Pays & change › Synchroniser WacePay)
+        try {
+            $rows = \App\Models\WacepayCoverage::where('country', strtoupper($country))->where($service, true)->get();
+            $pick = $rows->first(fn ($r) => $operator && str_contains(strtoupper((string) $r->payer_name), strtoupper($operator)))
+                ?? $rows->firstWhere('method', 'wallet') ?? $rows->first();
+            if ($pick) {
+                return $pick->payer_code;
+            }
+        } catch (\Throwable) {
+            // table absente : recherche directe ci-dessous
         }
         foreach ($this->payerCodes($country) as $p) {
             if (! is_array($p)) {
@@ -183,6 +194,33 @@ class DigitwaceClient
                 'raw' => ['wallet' => $created, 'confirm' => $confirmed],
             ];
         });
+    }
+
+    /**
+     * Collecte (PAYIN) : demande de paiement envoyée au wallet mobile money du
+     * client, qui valide avec son code secret. Asynchrone : statut par webhook / status().
+     *
+     * @return array{status:string, wace_id:?string, raw:array}
+     */
+    public function payin(string $reference, string $payerCode, int $amount, string $currency, string $phone, string $name, ?string $country = null): array
+    {
+        $f = $this->cfg('fields.transaction');
+        $json = $this->call('post', 'payin', array_filter([
+            $f['reference'] => $reference,
+            $f['payer_code'] => $payerCode,
+            $f['amount'] => $amount,
+            $f['currency'] => $currency,
+            $f['wallet_number'] => preg_replace('/\D/', '', $phone),
+            'customerName' => $name,
+            $this->cfg('fields.country') => $country,
+            $f['callback_url'] => $this->callbackUrl(),
+        ], fn ($v) => $v !== null && $v !== ''));
+
+        return [
+            'status' => self::normalize(data_get($json, 'data.status') ?? data_get($json, 'status') ?? 'pending'),
+            'wace_id' => (string) (data_get($json, 'data.transactionCode') ?? data_get($json, 'transactionCode') ?? data_get($json, 'data.id') ?? $reference),
+            'raw' => $json,
+        ];
     }
 
     /** @return array{status:string, raw_status:?string, message:?string, raw:array} */

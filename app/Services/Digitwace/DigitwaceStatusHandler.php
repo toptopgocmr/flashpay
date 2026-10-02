@@ -77,7 +77,16 @@ class DigitwaceStatusHandler
     {
         $req->update(['status' => $status, 'finalized_at' => now()]);
         $tx = $req->transaction;
-        if ($tx) {
+        if ($tx && $req->operation === 'payin') {
+            // Collecte : validation du client sur son téléphone
+            if ($status === 'successful') {
+                $tx->status === 'failed'
+                    ? app(\App\Services\Peex\PendingTimeoutService::class)->reopenAfterLateSuccess($tx)
+                    : $this->switch->onSourceConfirmed($tx);
+            } else {
+                $this->switch->onSourceFailed($tx, 'WacePay : ' . $reason);
+            }
+        } elseif ($tx) {
             $status === 'successful'
                 ? $this->switch->onDestinationConfirmed($tx)
                 : $this->switch->onDestinationFailed($tx, 'WacePay : ' . $reason);

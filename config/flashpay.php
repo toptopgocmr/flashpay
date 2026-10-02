@@ -71,6 +71,8 @@ return [
             'confirm' => env('DIGITWACE_PATH_CONFIRM', 'transaction/confirm'),
             'status' => env('DIGITWACE_PATH_STATUS', 'transaction/status'),
             'balance' => env('DIGITWACE_PATH_BALANCE', 'account/balance'),
+            // Collecte (PAYIN) : débit du wallet mobile money du client
+            'payin' => env('DIGITWACE_PATH_PAYIN', 'payin/mobile'),
         ],
 
         // Noms des champs envoyés

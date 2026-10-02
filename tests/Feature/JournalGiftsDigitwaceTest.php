@@ -253,7 +253,7 @@ class JournalGiftsDigitwaceTest extends TestCase
 
         $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/SN', ['payout_partner' => 'digitwace'])->assertOk()
             ->assertJsonPath('message', fn ($m) => str_contains($m, 'WacePay'));
-        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/SN', ['collect_partner' => 'digitwace'])->assertStatus(422);
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/SN', ['collect_partner' => 'mtn'])->assertStatus(422);
 
         $flows = app(\App\Services\Peex\PeexFlowService::class);
         // WacePay choisi mais non configuré : refus explicite (pas de bascule silencieuse)
@@ -267,5 +267,70 @@ class JournalGiftsDigitwaceTest extends TestCase
         $this->assertSame('digitwace', $flows->payoutRailFor(['rail' => 'peex', 'country' => 'SN']));
         $this->assertSame('peex', $flows->payoutRailFor(['rail' => 'peex', 'country' => 'CG']));
         $this->assertSame('wallet', $flows->payoutRailFor(['rail' => 'wallet', 'country' => 'CG']));
+    }
+
+    public function test_wacepay_coverage_sync_adds_corridors_and_collects(): void
+    {
+        config([
+            'flashpay.rails.digitwace.enabled' => true, 'flashpay.digitwace.enabled' => true,
+            'flashpay.digitwace.public_key' => 'p', 'flashpay.digitwace.private_key' => 'k',
+            'flashpay.digitwace.base_url' => 'https://wace.test/api/',
+        ]);
+        $payinCalls = 0;
+        Http::fake(function ($req) use (&$payinCalls) {
+            $u = $req->url();
+            if (str_contains($u, 'auth/login')) return Http::response(['code' => 2000, 'token' => 't']);
+            if (str_contains($u, 'payer/codes')) return Http::response(['code' => 2000, 'data' => [
+                ['countryCode' => 'SEN', 'currency' => 'XOF', 'payerCode' => 'SN-OM', 'payerName' => 'Orange Money', 'type' => 'MOBILE_MONEY', 'services' => ['PAYOUT']],
+                ['countryCode' => 'NGA', 'currency' => 'NGN', 'payerCode' => 'NG-OPAY', 'payerName' => 'OPay', 'type' => 'MOBILE_MONEY', 'services' => ['PAYIN', 'PAYOUT']],
+                ['countryCode' => 'KEN', 'currency' => 'KES', 'payerCode' => 'KE-MPESA', 'payerName' => 'M-Pesa', 'type' => 'WALLET', 'payin' => true, 'payout' => true],
+                ['countryCode' => 'NGA', 'currency' => 'NGN', 'payerCode' => 'NG-BANK', 'payerName' => 'Banques', 'type' => 'BANK', 'services' => ['PAYOUT']],
+                ['countryCode' => 'XXX', 'payerCode' => 'ZZ'],
+            ]]);
+            if (str_contains($u, 'payin/mobile')) { $payinCalls++; return Http::response(['code' => 2000, 'data' => ['transactionCode' => 'PI-1', 'status' => 'PENDING']]); }
+            if (str_contains($u, 'transaction/status')) return Http::response(['code' => 2000, 'data' => ['status' => 'SUCCESS']]);
+            return Http::response(['code' => 1001], 404);
+        });
+
+        $admin = User::create(['full_name' => 'Super', 'phone' => '242069990019', 'password' => bcrypt('x'), 'status' => 'active']);
+        $admin->assignRole('super_admin');
+        $r = $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors-sync/wacepay')->assertOk()->json();
+        $this->assertEqualsCanonicalizing(['NG', 'KE'], $r['added']);
+        $this->assertSame(3, $r['countries']);
+
+        $d = $this->actingAs($admin, 'sanctum')->getJson('/api/admin/corridors')->assertOk()->json();
+        $ng = collect($d['corridors'])->firstWhere('country', 'NG');
+        $this->assertSame('INTERNATIONAL', $ng['zone']);
+        $this->assertTrue($ng['collect']);
+        $this->assertTrue($ng['payout']);
+        $this->assertSame('digitwace', $ng['payout_partner']);
+        $this->assertSame('digitwace', $ng['collect_partner']);
+        $this->assertTrue($ng['wacepay']['payin']);
+        $sn = collect($d['corridors'])->firstWhere('country', 'SN');
+        $this->assertSame('peex', $sn['payout_partner']); // pays PEEX existant : inchangé
+        $this->assertTrue($sn['wacepay']['payout']);
+        $this->assertFalse($sn['wacepay']['payin']);
+        $this->assertArrayHasKey('INTERNATIONAL', $d['zones']);
+
+        // Le numéro nigérian est reconnu et la collecte passe par WacePay
+        $flows = app(\App\Services\Peex\PeexFlowService::class);
+        $route = app(\App\Services\Peex\PeexCorridors::class)->resolve('+2348031234567');
+        $this->assertSame('NG', $route['country']);
+        $this->assertSame('digitwace', $flows->collectRailFor($route));
+        $this->assertSame('digitwace', $flows->payoutRailFor($route));
+        $this->assertSame('NG-OPAY', app(\App\Services\Digitwace\DigitwaceClient::class)->payerCodeFor('NG', null, 'payin'));
+
+        $u = $this->client('242069990020', 'OLA', 0);
+        $tx = $this->tx(['type' => 'cash_in', 'source_rail' => 'digitwace', 'destination_rail' => 'wallet', 'source_account' => '+2348031234567',
+            'destination_wallet_id' => $u->wallet->id, 'initiated_by' => $u->id, 'status' => 'processing', 'amount' => 500,
+            'meta' => ['source_country' => 'NG']]);
+        $c = app(\App\Services\Digitwace\DigitwaceConnector::class)->collect('+2348031234567', 500, 'NGN', $tx->reference);
+        $this->assertSame('pending', $c['status']);
+        $this->assertSame(1, $payinCalls);
+        $tx->update(['stage' => 'awaiting_source']);
+        $req = \App\Models\DigitwaceRequest::where('operation', 'payin')->firstOrFail();
+        app(\App\Services\Digitwace\DigitwaceStatusHandler::class)->refresh($req);
+        $this->assertSame('successful', $tx->fresh()->status);
+        $this->assertSame(500, (int) $u->wallet->fresh()->balance);
     }
 }

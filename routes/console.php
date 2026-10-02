@@ -13,6 +13,8 @@ Schedule::command('peex:sync')->everyMinute()->withoutOverlapping()->appendOutpu
 
 // Statuts des versements Digitwace / WacePay en attente (complément du webhook).
 Schedule::command('digitwace:sync')->everyMinute()->withoutOverlapping()->appendOutputTo($scheduleOut);
+// Couverture WacePay (pays / opérateurs / collecte / versement), chaque nuit.
+Schedule::command('digitwace:sync coverage')->dailyAt('03:10')->withoutOverlapping()->appendOutputTo($scheduleOut);
 
 // Remboursement des bons de retrait expirés (cash pickup / GAB).
 Schedule::command('vouchers:expire')->everyTenMinutes()->withoutOverlapping()->appendOutputTo($scheduleOut);

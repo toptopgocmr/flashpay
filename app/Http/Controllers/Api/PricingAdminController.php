@@ -81,7 +81,8 @@ class PricingAdminController extends Controller
                 return $acc;
             }, []);
 
-        $list = collect($this->corridors->catalog())->map(function ($c) use ($defaults, $overrides, $usage) {
+        $coverage = app(\App\Services\Digitwace\CoverageService::class)->byCountry();
+        $list = collect($this->corridors->catalog())->map(function ($c) use ($defaults, $overrides, $usage, $coverage) {
             $d = $defaults[$c['country']] ?? [];
             $o = $overrides[$c['country']] ?? null;
             return $c + [
@@ -89,6 +90,8 @@ class PricingAdminController extends Controller
                 'default_payout' => (bool) ($d['payout'] ?? false),
                 'default_payout_api' => $d['payout_api'] ?? null,
                 'collect_partner_name' => PeexCorridors::partnerName($c['collect_partner']),
+                // Services proposés par WacePay dans ce pays (synchro getPayerCode)
+                'wacepay' => $coverage[$c['country']] ?? null,
                 'payout_partner_name' => PeexCorridors::partnerName($c['payout_partner']),
                 'overridden' => (bool) $o,
                 'note' => $o?->note,
@@ -110,11 +113,15 @@ class PricingAdminController extends Controller
                 'webhook' => url('/api/webhooks/peex/{service}'),
             ],
             [
-                'key' => 'digitwace', 'name' => 'WacePay (Digitwace)', 'flows' => ['payout'],
+                'key' => 'digitwace', 'name' => 'WacePay (Digitwace)', 'flows' => ['collect', 'payout'],
                 'ready' => $wace->enabled() && (bool) config('flashpay.rails.digitwace.enabled'),
                 'mode' => $wace->enabled() ? 'Clés saisies' : 'clés API à saisir',
-                'collect_countries' => 0,
+                'collect_countries' => $list->where('collect', true)->where('collect_partner', 'digitwace')->count(),
                 'payout_countries' => $list->where('payout', true)->where('payout_partner', 'digitwace')->count(),
+                'coverage_countries' => count($coverage),
+                'coverage_payin' => collect($coverage)->where('payin', true)->count(),
+                'coverage_payout' => collect($coverage)->where('payout', true)->count(),
+                'coverage_synced_at' => cache('wacepay:coverage:synced_at'),
                 'webhook' => $wace->callbackUrl(),
             ],
         ];
@@ -123,7 +130,8 @@ class PricingAdminController extends Controller
             'sandbox' => (bool) config('flashpay.peex.sandbox'),
             'partners' => $partners,
             'corridors' => $list,
-            'zones' => ['CEMAC' => 'XAF', 'UEMOA' => 'XOF', 'RDC' => 'CDF', 'GUINEE' => 'GNF'],
+            'zones' => ['CEMAC' => 'XAF', 'UEMOA' => 'XOF', 'RDC' => 'CDF', 'GUINEE' => 'GNF']
+                + ($list->where('zone', 'INTERNATIONAL')->count() ? ['INTERNATIONAL' => 'multi-devises'] : []),
             'kpi' => [
                 'countries' => $list->count(),
                 'collect' => $list->where('collect', true)->count(),
@@ -145,7 +153,7 @@ class PricingAdminController extends Controller
             'payout' => 'sometimes|boolean',
             'payout_api' => 'sometimes|nullable|in:disbursement,remittance',
             // Partenaire qui gère les flux : collecte = PEEX (seul partenaire de collecte), versement = PEEX ou WacePay
-            'collect_partner' => 'sometimes|nullable|in:peex',
+            'collect_partner' => 'sometimes|nullable|in:peex,digitwace',
             'payout_partner' => 'sometimes|nullable|in:peex,digitwace',
             'note' => 'sometimes|nullable|string|max:190',
         ]);
@@ -154,12 +162,37 @@ class PricingAdminController extends Controller
         PeexCorridors::flushOverrides();
         \App\Support\Audit::log('corridor.update', null, ['country' => $iso] + $v, $request->user()->id);
 
-        $message = isset($v['payout_partner'])
-            ? 'Versements vers ' . $iso . ' gérés par ' . PeexCorridors::partnerName($v['payout_partner']) . '.'
-              . ($v['payout_partner'] === 'digitwace' && ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled() ? ' Attention : WacePay n\'est pas encore configuré, les envois vers ce pays seront refusés.' : '')
-            : 'Corridor mis à jour.';
+        $waceOff = ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled();
+        $message = match (true) {
+            isset($v['payout_partner']) => 'Versements vers ' . $iso . ' gérés par ' . PeexCorridors::partnerName($v['payout_partner']) . '.'
+                . ($v['payout_partner'] === 'digitwace' && $waceOff ? ' Attention : WacePay n\'est pas encore configuré, les envois vers ce pays seront refusés.' : ''),
+            isset($v['collect_partner']) => 'Collecte depuis ' . $iso . ' gérée par ' . PeexCorridors::partnerName($v['collect_partner']) . '.'
+                . ($v['collect_partner'] === 'digitwace' && $waceOff ? ' Attention : WacePay n\'est pas encore configuré, les recharges / paiements depuis ce pays seront refusés.' : ''),
+            default => 'Corridor mis à jour.',
+        };
 
         return response()->json(['message' => $message, 'corridor' => collect($this->corridors->catalog())->firstWhere('country', $iso)]);
+    }
+
+    /** Synchronise la couverture WacePay (pays, opérateurs, collecte / versement) depuis l'API. */
+    public function syncWacepay(Request $request)
+    {
+        $client = app(\App\Services\Digitwace\DigitwaceClient::class);
+        if (! $client->enabled()) {
+            return response()->json(['message' => 'WacePay n\'est pas configuré (DIGITWACE_ENABLED, clés API). Renseignez les variables Railway puis réessayez.'], 422);
+        }
+        try {
+            \Illuminate\Support\Facades\Cache::forget('digitwace:payers:all');
+            $r = app(\App\Services\Digitwace\CoverageService::class)->sync();
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Synchronisation WacePay impossible : ' . $e->getMessage()], 502);
+        }
+        \App\Support\Audit::log('wacepay.coverage_sync', null, $r, $request->user()->id);
+
+        return response()->json($r + ['message' => sprintf('Couverture WacePay : %d payeur(s) dans %d pays. %s%s',
+            $r['payers'], $r['countries'],
+            $r['added'] ? count($r['added']) . ' pays ajouté(s) : ' . implode(', ', $r['added']) . '. ' : 'Aucun nouveau pays. ',
+            $r['skipped'] ? 'À compléter (indicatif inconnu) : ' . implode(', ', $r['skipped']) . '.' : '')]);
     }
 
     /** Revient aux valeurs de config/corridors.php. */

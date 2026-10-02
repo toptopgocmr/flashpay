@@ -31,7 +31,7 @@ class PeexCorridors
 
     public function all(): array
     {
-        $all = config('flashpay.corridors', []);
+        $all = config('flashpay.corridors', []) + $this->extraCountries();
         // Partenaire par défaut : PEEX, sauf versements listés dans DIGITWACE_PAYOUT_COUNTRIES
         $wace = (array) config('flashpay.digitwace.payout_countries', []);
         $home = strtoupper((string) config('flashpay.peex.default_country', 'CG'));
@@ -53,10 +53,25 @@ class PeexCorridors
         return $all;
     }
 
+    /** Pays ajoutés par la synchro WacePay / la console (table corridor_countries). */
+    public function extraCountries(): array
+    {
+        try {
+            return Cache::remember('flashpay:corridor_countries', 300, fn () => \App\Models\CorridorCountry::all()->mapWithKeys(fn ($c) => [$c->country => [
+                'name' => $c->name, 'zone' => $c->zone, 'dial' => $c->dial, 'local_length' => (int) $c->local_length,
+                'currency' => $c->currency, 'flag' => $c->flag ?? '', 'collect' => false, 'payout' => false,
+                'payout_api' => 'remittance', 'operators' => $c->operators ?: [],
+                'collect_partner' => 'digitwace', 'payout_partner' => 'digitwace', 'source' => $c->source,
+            ]])->all());
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
     /** Valeurs de config/corridors.php (+ .env), sans les surcharges de la console. */
     public function defaults(): array
     {
-        return config('flashpay.corridors', []);
+        return config('flashpay.corridors', []) + $this->extraCountries();
     }
 
     /** Surcharges enregistrées depuis la console (table corridor_settings). */
@@ -75,6 +90,7 @@ class PeexCorridors
     public static function flushOverrides(): void
     {
         Cache::forget('flashpay:corridor_settings');
+        Cache::forget('flashpay:corridor_countries');
     }
 
     public function country(string $iso): array
@@ -225,6 +241,7 @@ class PeexCorridors
                 'collect' => (bool) $c['collect'],
                 'payout' => (bool) $c['payout'],
                 'payout_api' => $c['payout_api'],
+                'source' => $c['source'] ?? 'config',
                 'collect_partner' => $c['collect_partner'] ?? 'peex',
                 'payout_partner' => $c['payout_partner'] ?? 'peex',
                 'operators' => collect($c['operators'])->map(fn ($op, $key) => [

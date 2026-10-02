@@ -11,10 +11,11 @@ use Illuminate\Console\Command;
  *   php artisan digitwace:sync         statuts des versements WacePay en attente (planifié chaque minute)
  *   php artisan digitwace:sync test    test de connexion : login, URL du webhook
  *   php artisan digitwace:sync test --payers=CG   liste des payerCode d'un pays
+ *   php artisan digitwace:sync coverage   synchronise pays / opérateurs / collecte / versement (planifié chaque jour)
  */
 class DigitwaceCommand extends Command
 {
-    protected $signature = 'digitwace:sync {action=sync : sync | test} {--payers= : pays (ISO2) dont lister les payerCode} {--limit=30}';
+    protected $signature = 'digitwace:sync {action=sync : sync | test | coverage} {--payers= : pays (ISO2) dont lister les payerCode} {--limit=30}';
 
     protected $description = 'Digitwace / WacePay : synchronisation des versements et test de connexion';
 
@@ -22,6 +23,14 @@ class DigitwaceCommand extends Command
     {
         if (! $client->enabled()) {
             $this->warn('Digitwace désactivé : renseignez DIGITWACE_ENABLED=true, DIGITWACE_PUBLIC_KEY et DIGITWACE_PRIVATE_KEY.');
+            return self::SUCCESS;
+        }
+
+        if ($this->argument('action') === 'coverage') {
+            $r = app(\App\Services\Digitwace\CoverageService::class)->sync();
+            $this->info("Couverture WacePay : {$r['payers']} payeur(s), {$r['countries']} pays.");
+            $r['added'] && $this->info('Pays ajoutés : ' . implode(', ', $r['added']));
+            $r['skipped'] && $this->warn('À compléter dans la console (indicatif inconnu) : ' . implode(', ', $r['skipped']));
             return self::SUCCESS;
         }
 

@@ -22,6 +22,11 @@
           <div><span>Collecte</span><b>{{ p.flows.includes('collect') ? n(p.collect_countries) + ' pays' : 'Non proposée' }}</b></div>
           <div><span>Versement</span><b>{{ n(p.payout_countries) }} pays</b></div>
         </div>
+        <div v-if="p.key === 'digitwace'" class="coverage">
+          <span v-if="p.coverage_countries">Couverture WacePay : <b>{{ p.coverage_countries }} pays</b> · collecte {{ p.coverage_payin }} · versement {{ p.coverage_payout }}<br /><small>Synchronisée {{ dt(p.coverage_synced_at) || '—' }}</small></span>
+          <span v-else class="t-warn">Couverture pas encore synchronisée</span>
+          <button class="btn-normal" :disabled="syncing" @click="syncWacepay">{{ syncing ? 'Synchronisation…' : 'Synchroniser la couverture WacePay' }}</button>
+        </div>
         <small class="mono" :title="'URL de notification (webhook) à déclarer chez ' + p.name">Webhook : {{ p.webhook }}</small>
         <button class="btn-link" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
       </div>
@@ -67,6 +72,7 @@
             <tbody>
               <tr v-for="c in list" :key="c.country" :class="{ off: !c.collect && !c.payout }">
                 <td><Flag :iso="c.country" :size="15" /> <strong>{{ c.name }}</strong> <span class="stat-label">{{ c.country }}</span>
+                  <span v-if="c.source === 'wacepay'" class="wace-tag" title="Pays ajouté par la synchronisation WacePay">via WacePay</span>
                   <span v-if="c.overridden" class="changed" :title="'Défaut : collecte ' + (c.default_collect ? 'ouverte' : 'fermée') + ', versement ' + (c.default_payout ? 'ouvert' : 'fermé')">modifié</span></td>
                 <td class="mono" style="white-space:nowrap;">{{ c.dial }} · {{ c.local_length }} ch.</td>
                 <td><span v-for="o in c.operators" :key="o.corridor" class="op" :title="'Préfixes : ' + o.prefixes.join(', ')">{{ o.label }}</span></td>
@@ -76,16 +82,19 @@
                   <div class="pl" :class="{ dim: !c.collect }">
                     <span class="lbl">Collecte</span>
                     <select class="api" :class="'p-' + c.collect_partner" :value="c.collect_partner" @change="update(c, { collect_partner: $event.target.value })">
-                      <option value="peex">PEEX</option>
-                      <option value="digitwace" disabled>WacePay (non proposé)</option>
+                      <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
+                      <option value="digitwace">WacePay{{ c.wacepay && !c.wacepay.payin ? ' (non annoncé)' : '' }}</option>
                     </select>
                   </div>
                   <div class="pl" :class="{ dim: !c.payout }">
                     <span class="lbl">Versement</span>
                     <select class="api" :class="'p-' + c.payout_partner" :value="c.payout_partner" @change="update(c, { payout_partner: $event.target.value })">
-                      <option value="peex">PEEX</option>
-                      <option value="digitwace">WacePay</option>
+                      <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
+                      <option value="digitwace">WacePay{{ c.wacepay && !c.wacepay.payout ? ' (non annoncé)' : '' }}</option>
                     </select>
+                  </div>
+                  <div v-if="c.wacepay" class="wace-avail" :title="c.wacepay.payers.map((p) => p.name || p.code).join(', ')">
+                    WacePay ici : {{ [c.wacepay.payin && 'collecte', c.wacepay.payout && 'versement'].filter(Boolean).join(' + ') || '—' }} · {{ c.wacepay.payers.length }} opérateur(s)
                   </div>
                   <div v-if="c.payout_partner === 'peex'" class="pl" :class="{ dim: !c.payout }">
                     <span class="lbl">API PEEX</span>
@@ -93,7 +102,7 @@
                       <option value="disbursement">disbursement</option><option value="remittance">remittance</option>
                     </select>
                   </div>
-                  <div v-else-if="!partnerReady('digitwace')" class="t-warn small">⚠ WacePay non configuré : envois refusés</div>
+                  <div v-if="(c.payout_partner === 'digitwace' || c.collect_partner === 'digitwace') && !partnerReady('digitwace')" class="t-warn small">⚠ WacePay non configuré : opérations refusées</div>
                 </td>
                 <td class="num">{{ c.usage.count ? n(c.usage.count) + ' op. · ' + short(c.usage.volume) : '—' }}</td>
                 <td><IconAction v-if="c.overridden" icon="undo" label="Rétablir la configuration par défaut" @click="reset(c)" /></td>
@@ -196,7 +205,12 @@ const error = ref('')
 const msg = ref('')
 const flt = reactive({ q: '', zone: '', open: '', partner: '' })
 const conv = reactive({ amount: 10000, from: 'XAF', to: 'CDF' })
-const zoneLabel = { CEMAC: 'CEMAC — Afrique centrale', UEMOA: 'UEMOA — Afrique de l\'Ouest', RDC: 'RD Congo', GUINEE: 'Guinée' }
+const zoneLabel = { CEMAC: 'CEMAC — Afrique centrale', UEMOA: 'UEMOA — Afrique de l\'Ouest', RDC: 'RD Congo', GUINEE: 'Guinée', INTERNATIONAL: 'Autres pays (WacePay)' }
+const syncing = ref(false)
+async function syncWacepay() {
+  syncing.value = true
+  try { await run(() => api.post('/admin/corridors-sync/wacepay')) } finally { syncing.value = false }
+}
 
 const nf = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 })
 const n = (v) => nf.format(Math.floor(v || 0))
@@ -307,6 +321,11 @@ onMounted(load)
 .api.p-peex { border-color: #1e3a8a; color: #1e3a8a; font-weight: 700; }
 .api.p-digitwace { border-color: #ea7a17; color: #b45309; font-weight: 700; }
 .small { font-size: 12px; }
+.coverage { display: grid; gap: 6px; font-size: 13px; background: #fff7ed; border-radius: 8px; padding: 8px 10px; }
+.coverage small { font-size: 11.5px; color: var(--text-2); }
+.coverage .btn-normal { justify-self: start; }
+.wace-tag { font-size: 11px; font-weight: 700; color: #b45309; background: #ffedd5; border-radius: 99px; padding: 1px 7px; margin-left: 6px; }
+.wace-avail { font-size: 11.5px; color: #b45309; margin: 2px 0 0 80px; }
 .api { padding: 4px 6px; border: 1px solid var(--border-strong); border-radius: 6px; font: inherit; font-size: 12.5px; }
 tr.off td { color: var(--text-2); background: #fafafa; }
 .switch { position: relative; display: inline-block; width: 36px; height: 20px; }
