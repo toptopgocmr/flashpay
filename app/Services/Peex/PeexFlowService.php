@@ -222,6 +222,13 @@ class PeexFlowService
             throw new PeexException($p);
         }
         $payoutRail = $dst['type'] === 'wallet' ? 'wallet' : $this->payoutRailFor($dst);
+        if ($dst['type'] === 'mobile' && $payoutRail === 'digitwace' && config('flashpay.digitwace.check_balance', true)) {
+            $need = (int) $q['gross_destination_amount'];
+            $avail = app(\App\Services\Digitwace\WacepayBalanceService::class)->availableFor($q['receive_currency']);
+            if ($avail !== null && $avail < $need) {
+                throw new PeexException('Service de versement momentanément indisponible vers ce pays (solde partenaire insuffisant). Réessayez plus tard.');
+            }
+        }
         if ($dst['type'] === 'mobile' && $payoutRail === 'peex' && ($p = $guard->checkPayout($dst['country'], (int) $q['gross_destination_amount'], fresh: true))) {
             throw new PeexException($p);
         }

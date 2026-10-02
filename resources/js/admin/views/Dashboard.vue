@@ -73,6 +73,12 @@
 
           <!-- Actions propres au widget -->
           <div class="w-tools">
+            <template v-if="w.key === 'wacepay'">
+              <span class="muted" v-if="wace?.checked_at">Vérifié à {{ new Date(wace.checked_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }}</span>
+              <button class="icon-btn" @click="loadWace(true)" :disabled="waceLoading" title="Rafraîchir les soldes">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" :class="{ rot: waceLoading }"><path d="M14 8a6 6 0 1 1-2-4.5M14 2v4h-4"/></svg>
+              </button>
+            </template>
             <template v-if="w.key === 'peex'">
               <span class="muted" v-if="peex">Vérifié à {{ peexAt }}</span>
               <button class="icon-btn" @click="loadPeex(true)" :disabled="peexLoading" title="Rafraîchir les soldes">
@@ -195,6 +201,25 @@
                     <div v-else class="row2">Fonds encaissés (mobile money → PEEX)</div>
                   </template>
                   <div v-else-if="peex" class="row2" :title="acc(s.key)?.error"><StatusIcon kind="err" /> PEEX injoignable</div>
+                </router-link>
+              </li>
+            </ul>
+          </div>
+
+          <!-- ---------- Soldes WacePay ---------- -->
+          <div v-else-if="w.key === 'wacepay'">
+            <div v-if="wace && !wace.ok" class="flash err"><div>{{ wace.configured === false ? 'WacePay n’est pas encore configuré (variables Railway).' : 'Soldes WacePay indisponibles : ' + wace.error }}</div></div>
+            <router-link to="/corridors" class="peex-total">
+              <span>Total chez WacePay (XAF/XOF)</span>
+              <b :class="{ skeleton: !wace }">{{ wace?.ok ? xaf(wace.total_xaf) : '—' }}</b>
+            </router-link>
+            <ul class="peex-list">
+              <li v-for="a in wace?.accounts || []" :key="a.currency + a.label">
+                <router-link to="/corridors">
+                  <div class="row1"><span class="lbl">{{ a.label }}</span><span class="amt">{{ n(a.balance) }} {{ a.currency }}</span></div>
+                  <div class="meter"><span :class="a.low ? 'warn' : 'ok'" :style="{ width: (a.balance ? Math.max(0, Math.min(100, Math.round((a.available ?? 0) * 100 / a.balance))) : 0) + '%' }"></span></div>
+                  <div class="row2">Disponible <b>{{ n(a.available) }} {{ a.currency }}</b> · Engagé {{ n(a.reserved) }}
+                    <span v-if="a.low" class="t-warn"> · <StatusIcon kind="warn" /> Solde bas</span></div>
                 </router-link>
               </li>
             </ul>
@@ -413,6 +438,7 @@ const W = {
   todo: { title: 'À traiter', about: 'Validations, échecs et alertes nécessitant une action.', size: 1, foot: { to: '/notifications', l: 'Voir les notifications' } },
   quick: { title: 'Récemment visités', about: 'Vos derniers écrans et les accès rapides.', size: 1 },
   peex: { title: 'Soldes PEEX', desc: 'Disponible = solde − montants engagés', about: 'Soldes des comptes FlashPay chez PEEX.', size: 2, foot: { to: '/peex', l: 'Passerelle PEEX' } },
+  wacepay: { title: 'Soldes WacePay', desc: 'Disponible = solde − versements en cours', about: 'Soldes du compte FlashPay chez WacePay (Digitwace), par devise.', size: 2, foot: { to: '/corridors', l: 'Pays & partenaires' } },
   activity: { title: 'Activité', desc: 'Volume réussi et nombre de transactions par jour', about: 'Graphique quotidien du volume et du nombre.', size: 2 },
   network: { title: 'Réseau par rôle', about: 'Comptes des six profils de l’application mobile.', size: 2, foot: { to: '/roles', l: 'Rôles & habilitations' } },
   compare: { title: 'Période vs précédente', about: 'Comparaison des indicateurs avec la période précédente.', size: 2, flush: true },
@@ -421,7 +447,7 @@ const W = {
   agents: { title: 'Top 5 agents', about: 'Agents les plus actifs sur la période.', size: 2, flush: true, foot: { to: '/agents', l: 'Tous les agents' } },
   recent: { title: 'Transactions récentes', about: 'Les dernières opérations de la plateforme.', size: 4, flush: true, foot: { to: '/transactions', l: 'Voir toutes les transactions' } },
 }
-const DEFAULT_ORDER = ['kpi', 'status', 'health', 'todo', 'quick', 'peex', 'activity', 'ops', 'network', 'compare', 'merchants', 'agents', 'recent']
+const DEFAULT_ORDER = ['kpi', 'status', 'health', 'todo', 'quick', 'peex', 'wacepay', 'activity', 'ops', 'network', 'compare', 'merchants', 'agents', 'recent']
 const LS_KEY = 'fp_admin_dashboard_layout_v2'
 const SIZES = [{ v: 1, l: 'Petite (1/4)' }, { v: 2, l: 'Moyenne (1/2)' }, { v: 3, l: 'Grande (3/4)' }, { v: 4, l: 'Pleine largeur' }]
 
@@ -651,6 +677,7 @@ const lowPeex = computed(() => PEEX_ACCOUNTS.filter((s) => acc(s.key)?.low || (a
 const todos = computed(() => [
   { label: 'Transactions échouées', count: k.value?.failed ?? 0, kind: 'err', to: tx(null, 'failed') },
   { label: 'Soldes PEEX bas / indisponibles', count: lowPeex.value, kind: 'err', to: '/peex' },
+  { label: 'Soldes WacePay bas', count: (wace.value?.accounts || []).filter((a) => a.low).length, kind: 'err', to: '/corridors' },
   { label: 'Transactions rejetées', count: k.value?.reversed ?? 0, kind: 'warn', to: tx(null, 'reversed') },
   { label: 'Marchands à valider', count: d.value?.pending.merchants ?? 0, kind: 'warn', to: '/merchants' },
   { label: 'Agents à valider', count: d.value?.pending.agents ?? 0, kind: 'warn', to: '/agents' },
@@ -727,11 +754,22 @@ function loadPeex(refresh = false) {
     .catch((e) => { peexError.value = 'Soldes PEEX indisponibles : ' + (e.response?.data?.message || e.message) })
     .finally(() => { peexLoading.value = false })
 }
+/* ------------------------------------------------------------------ Soldes WacePay */
+const wace = ref(null)
+const waceLoading = ref(false)
+function loadWace(refresh = false) {
+  waceLoading.value = true
+  api.get('/admin/digitwace/balances', { params: refresh ? { refresh: 1 } : {} })
+    .then(({ data }) => { wace.value = data })
+    .catch((e) => { wace.value = { ok: false, error: e.response?.data?.message || e.message, accounts: [] } })
+    .finally(() => { waceLoading.value = false })
+}
 function loadNet() { api.get('/admin/roles').then(({ data }) => { net.value = data }).catch(() => {}) }
 
 async function load() {
   loadNet()
   loadPeex()
+  loadWace()
   loading.value = true
   error.value = ''
   try {

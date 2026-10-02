@@ -82,7 +82,7 @@ class TransactionNotifier
     protected function failed(Transaction $tx): void
     {
         $src = $this->owner($tx->source_wallet_id) ?? User::find($tx->initiated_by);
-        $label = $tx->status === 'reversed' ? 'annulée — montant remboursé' : 'échouée';
+        $label = $tx->status === 'reversed' ? 'annulée — montant et frais remboursés' : 'échouée — aucun frais prélevé';
         $this->notify->toUser($src, 'transaction_failed', \App\Support\TransactionPresenter::present($tx)['label'] . ' ' . $this->fmt($tx->amount, $tx->currency) . " {$label}",
             trim($this->who($tx) . ($tx->failure_reason ? ' — ' . $tx->failure_reason : '')), [
             'severity' => 'warning', 'data' => ['transaction_id' => $tx->id, 'reference' => $tx->reference, 'type' => $tx->type], 'sms' => false,

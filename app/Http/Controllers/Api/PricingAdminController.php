@@ -158,6 +158,20 @@ class PricingAdminController extends Controller
             'note' => 'sometimes|nullable|string|max:190',
         ]);
 
+        // WacePay n'est proposé que là où la couverture synchronisée l'annonce
+        foreach (['collect_partner' => 'payin', 'payout_partner' => 'payout'] as $field => $service) {
+            if (($v[$field] ?? null) === 'digitwace') {
+                $cov = app(\App\Services\Digitwace\CoverageService::class)->byCountry();
+                $label = $service === 'payin' ? 'la collecte' : 'le versement';
+                if (! $cov) {
+                    return response()->json(['message' => 'Synchronisez d\'abord la couverture WacePay (carte WacePay en haut de la page) pour savoir où WacePay est disponible.'], 422);
+                }
+                if (empty($cov[$iso][$service])) {
+                    return response()->json(['message' => "WacePay ne propose pas {$label} pour {$iso} (selon la couverture synchronisée)."], 422);
+                }
+            }
+        }
+
         CorridorSetting::updateOrCreate(['country' => $iso], $v + ['updated_by' => $request->user()->id]);
         PeexCorridors::flushOverrides();
         \App\Support\Audit::log('corridor.update', null, ['country' => $iso] + $v, $request->user()->id);
@@ -172,6 +186,12 @@ class PricingAdminController extends Controller
         };
 
         return response()->json(['message' => $message, 'corridor' => collect($this->corridors->catalog())->firstWhere('country', $iso)]);
+    }
+
+    /** Soldes du compte FlashPay chez WacePay (?refresh=1 force l'appel). */
+    public function wacepayBalances(Request $request)
+    {
+        return response()->json(app(\App\Services\Digitwace\WacepayBalanceService::class)->balances($request->boolean('refresh')));
     }
 
     /** Synchronise la couverture WacePay (pays, opérateurs, collecte / versement) depuis l'API. */

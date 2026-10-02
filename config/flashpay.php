@@ -51,6 +51,10 @@ return [
         'payer_map' => collect(explode(',', (string) env('DIGITWACE_PAYER_CODES', '')))->filter(fn ($p) => str_contains($p, '='))
             ->mapWithKeys(fn ($p) => [strtoupper(trim(explode('=', $p, 2)[0])) => trim(explode('=', $p, 2)[1])])->all(),
         'default_purpose' => env('DIGITWACE_DEFAULT_PURPOSE', 'FAMILY_SUPPORT'),
+        // Vérifier le solde WacePay avant chaque versement (bloque si connu et insuffisant)
+        'check_balance' => (bool) env('DIGITWACE_CHECK_BALANCE', true),
+        // Alerte « solde bas » (XAF / XOF disponibles)
+        'low_balance_alert' => (int) env('DIGITWACE_LOW_BALANCE_ALERT', 100000),
         'default_address' => env('DIGITWACE_DEFAULT_ADDRESS', 'Brazzaville'),
         'default_city' => env('DIGITWACE_DEFAULT_CITY', 'Brazzaville'),
 

@@ -103,10 +103,14 @@ class SwitchService
     {
         try {
             if ($tx->source_rail === 'wallet') {
-                $wallet = Wallet::findOrFail($tx->source_wallet_id);
-                $this->walletService->debit($wallet, $tx->amount + $tx->fee);
-                $this->ledgerService->recordDoubleEntry($tx, "wallet:{$wallet->id}", 'flashpay:suspense', $tx->amount);
-                $this->recordFee($tx, "wallet:{$wallet->id}");
+                // Débit montant + frais et écritures dans la même transaction SQL :
+                // si quoi que ce soit échoue, rien n'est prélevé (ni montant, ni frais).
+                DB::transaction(function () use ($tx) {
+                    $wallet = Wallet::findOrFail($tx->source_wallet_id);
+                    $this->walletService->debit($wallet, $tx->amount + $tx->fee);
+                    $this->ledgerService->recordDoubleEntry($tx, "wallet:{$wallet->id}", 'flashpay:suspense', $tx->amount);
+                    $this->recordFee($tx, "wallet:{$wallet->id}");
+                });
             } else {
                 $result = $this->connectorFor($tx->source_rail)
                     ->collect($tx->source_account, $tx->amount + $tx->fee, $tx->currency, $tx->reference);
@@ -262,7 +266,32 @@ class SwitchService
             return $this->startRefund($tx, $reason);
         }
 
+        // Source carte bancaire ou collecte WacePay : montant ET frais recrédités
+        // immédiatement sur le wallet FlashPay du client (aucun frais conservé).
+        if (in_array($tx->source_rail, ['card', 'digitwace'], true) && ($wallet = $this->refundWalletOf($tx))) {
+            return DB::transaction(function () use ($tx, $wallet, $reason) {
+                $from = "{$tx->source_rail}:" . ($tx->source_account ?: 'client');
+                $this->walletService->credit($wallet, $tx->amount + $tx->fee);
+                $this->ledgerService->recordDoubleEntry($tx, 'flashpay:suspense', "wallet:{$wallet->id}", $tx->amount, null, 'Remboursement sur wallet');
+                if ($tx->fee > 0) {
+                    $this->ledgerService->recordDoubleEntry($tx, 'flashpay:fees', "wallet:{$wallet->id}", $tx->fee, null, 'Remboursement des frais');
+                }
+                $tx->update(['status' => 'reversed', 'stage' => null, 'failure_reason' => mb_substr($reason . ' — montant et frais remboursés sur votre wallet FlashPay', 0, 250),
+                    'meta' => ($tx->meta ?? []) + ['refunded_to' => "wallet:{$wallet->id}", 'refunded_from' => $from]]);
+                return $this->notified($tx->fresh());
+            });
+        }
+
         return $this->fail($tx, $reason . ' — fonds collectés en suspense, remboursement manuel requis');
+    }
+
+    /** Wallet FlashPay du client à recréditer (initiateur, ou wallet destinataire d'une recharge). */
+    protected function refundWalletOf(Transaction $tx): ?Wallet
+    {
+        if ($tx->destination_rail === 'wallet' && $tx->destination_wallet_id && in_array($tx->type, ['cash_in', 'deposit'], true)) {
+            return Wallet::find($tx->destination_wallet_id);
+        }
+        return Wallet::where('user_id', $tx->initiated_by)->orderBy('id')->first();
     }
 
     /** Lance le remboursement PEEX du payeur (montant + frais). */

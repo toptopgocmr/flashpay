@@ -251,6 +251,12 @@ class JournalGiftsDigitwaceTest extends TestCase
         $this->assertSame('peex', $sn['payout_partner']);
         $this->assertSame('PEEX', $sn['payout_partner_name']);
 
+        // Sans couverture synchronisée : WacePay refusé
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/SN', ['payout_partner' => 'digitwace'])->assertStatus(422)
+            ->assertJsonPath('message', fn ($m) => str_contains($m, 'Synchronisez'));
+        \App\Models\WacepayCoverage::create(['country' => 'SN', 'payer_code' => 'SN-OM', 'payer_name' => 'Orange Money', 'payin' => false, 'payout' => true]);
+        // Collecte non couverte au Sénégal : refusée
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/SN', ['collect_partner' => 'digitwace'])->assertStatus(422);
         $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/SN', ['payout_partner' => 'digitwace'])->assertOk()
             ->assertJsonPath('message', fn ($m) => str_contains($m, 'WacePay'));
         $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/SN', ['collect_partner' => 'mtn'])->assertStatus(422);
@@ -332,5 +338,76 @@ class JournalGiftsDigitwaceTest extends TestCase
         app(\App\Services\Digitwace\DigitwaceStatusHandler::class)->refresh($req);
         $this->assertSame('successful', $tx->fresh()->status);
         $this->assertSame(500, (int) $u->wallet->fresh()->balance);
+    }
+
+    public function test_no_fee_kept_when_operation_fails(): void
+    {
+        $sw = app(\App\Services\SwitchService::class);
+
+        // 1. Wallet → mobile : versement refusé → montant + frais recrédités
+        $a = $this->client('242069990031', 'PAUL', 1000);
+        $tx = $sw->createPending([
+            'type' => 'p2p', 'source_rail' => 'wallet', 'source_wallet_id' => $a->wallet->id,
+            'destination_rail' => 'peex', 'destination_account' => '+242057563644',
+            'amount' => 500, 'fee' => 10, 'currency' => 'XAF', 'initiated_by' => $a->id,
+        ], 'awaiting_destination');
+        $this->app->make(\App\Services\WalletService::class)->debit($a->wallet->fresh(), 510);
+        $led = app(\App\Services\LedgerService::class);
+        $led->recordDoubleEntry($tx, "wallet:{$a->wallet->id}", 'flashpay:suspense', 500);
+        $led->recordDoubleEntry($tx, "wallet:{$a->wallet->id}", 'flashpay:fees', 10);
+        $sw->onDestinationFailed($tx->fresh(), 'numéro inactif');
+        $this->assertSame('reversed', $tx->fresh()->status);
+        $this->assertSame(1000, (int) $a->wallet->fresh()->balance);
+
+        // 2. Carte → mobile : versement refusé → montant + frais recrédités sur le wallet
+        $b = $this->client('242069990032', 'LUC', 0);
+        $tx2 = $sw->createPending([
+            'type' => 'p2p', 'source_rail' => 'card', 'destination_rail' => 'peex', 'destination_account' => '+242057563644',
+            'amount' => 2000, 'fee' => 40, 'currency' => 'XAF', 'initiated_by' => $b->id,
+        ], 'awaiting_destination');
+        $led->recordDoubleEntry($tx2, 'card:client', 'flashpay:suspense', 2000);
+        $led->recordDoubleEntry($tx2, 'card:client', 'flashpay:fees', 40);
+        $sw->onDestinationFailed($tx2->fresh(), 'refusé');
+        $this->assertSame('reversed', $tx2->fresh()->status);
+        $this->assertSame(2040, (int) $b->wallet->fresh()->balance);
+        $this->assertStringContainsString('frais remboursés', $tx2->fresh()->failure_reason);
+
+        // 3. Collecte refusée : rien n'est prélevé, l'app affiche 0 de frais
+        $tx3 = $sw->createPending([
+            'type' => 'cash_in', 'source_rail' => 'peex', 'source_account' => '+242067601919', 'destination_rail' => 'wallet',
+            'destination_wallet_id' => $b->wallet->id, 'amount' => 100, 'fee' => 1, 'currency' => 'XAF', 'initiated_by' => $b->id,
+        ]);
+        $sw->onSourceFailed($tx3->fresh(), 'annulé');
+        $st = $this->actingAs($b, 'sanctum')->getJson('/api/pay/transactions/' . $tx3->id . '/status')->assertOk()->json();
+        $this->assertSame(0, $st['fee']);
+        $rows = collect($st['details'])->pluck('value', 'label');
+        $this->assertStringContainsString('non prélevés', $rows['Frais']);
+        $this->assertSame('0 XAF', $rows['Total débité']);
+
+        // Aucun frais comptabilisé en produit pour ces opérations
+        $fees = \App\Models\LedgerEntry::whereIn('transaction_id', [$tx->id, $tx2->id, $tx3->id])->get();
+        $net = $fees->where('account', 'flashpay:fees')->sum(fn ($e) => $e->type === 'credit' ? $e->amount : -$e->amount);
+        $this->assertSame(0, (int) $net);
+    }
+
+    public function test_wacepay_balances(): void
+    {
+        $svc = app(\App\Services\Digitwace\WacepayBalanceService::class);
+        $this->assertSame([['label' => 'Compte XAF', 'currency' => 'XAF', 'balance' => 150000.0]], $svc->parse(['code' => 2000, 'data' => ['balance' => 150000, 'currency' => 'XAF']]));
+        $this->assertCount(2, $svc->parse(['data' => [['currency' => 'XAF', 'balance' => 10], ['currency' => 'XOF', 'availableBalance' => 20]]]));
+        $this->assertCount(2, $svc->parse(['data' => ['XAF' => 5, 'EUR' => 1]]));
+
+        config(['flashpay.digitwace.enabled' => true, 'flashpay.digitwace.public_key' => 'p', 'flashpay.digitwace.private_key' => 'k',
+            'flashpay.digitwace.base_url' => 'https://wace.test/api/', 'flashpay.digitwace.low_balance_alert' => 100000]);
+        Http::fake(fn ($r) => str_contains($r->url(), 'auth/login')
+            ? Http::response(['code' => 2000, 'token' => 't'])
+            : Http::response(['code' => 2000, 'data' => [['currency' => 'XAF', 'balance' => 80000, 'name' => 'Compte principal']]]));
+        $admin = User::create(['full_name' => 'Super', 'phone' => '242069990041', 'password' => bcrypt('x'), 'status' => 'active']);
+        $admin->assignRole('super_admin');
+        $b = $this->actingAs($admin, 'sanctum')->getJson('/api/admin/digitwace/balances?refresh=1')->assertOk()->json();
+        $this->assertTrue($b['ok']);
+        $this->assertSame('Compte principal', $b['accounts'][0]['label']);
+        $this->assertTrue($b['accounts'][0]['low']);
+        $this->assertEquals(80000, $svc->availableFor('XAF'));
     }
 }

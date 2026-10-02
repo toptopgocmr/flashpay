@@ -82,7 +82,8 @@ class TransactionPresenter
             'counterparty_role' => $credit ? 'Expéditeur' : 'Bénéficiaire',
             'counterparty_name' => $name,
             'counterparty_phone' => $phone,
-            'signed_amount' => ($credit ? 1 : -1) * ((int) $tx->amount + ($credit ? 0 : (int) $tx->fee)),
+            'signed_amount' => in_array($tx->status, ['failed', 'reversed'], true) ? 0 : ($credit ? 1 : -1) * ((int) $tx->amount + ($credit ? 0 : (int) $tx->fee)),
+            'fee_charged' => in_array($tx->status, ['failed', 'reversed'], true) ? 0 : (int) $tx->fee,
             'partner' => self::partner($tx),                    // partenaire qui a géré les flux (PEEX, WacePay…)
         ] + self::parties($tx) + ['details' => self::details($tx, $credit, $label)];
     }
@@ -131,8 +132,17 @@ class TransactionPresenter
             ['Marchand', $m['merchant_name'] ?? null],
             ['Agent', $m['agent_name'] ?? null],
             ['Montant', $money($tx->amount)],
-            ['Frais', $money($tx->fee)],
-            ['Total débité', $money((int) $tx->amount + (int) $tx->fee)],
+            // Opération échouée ou remboursée : aucun frais n'est conservé
+            ['Frais', match (true) {
+                $tx->status === 'failed' => $money(0) . ' (non prélevés)',
+                $tx->status === 'reversed' => $money(0) . ($tx->fee > 0 ? ' (' . $money($tx->fee) . ' remboursés)' : ''),
+                default => $money($tx->fee),
+            }],
+            ['Total débité', match ($tx->status) {
+                'failed' => $money(0),
+                'reversed' => $money(0) . ' (remboursé)',
+                default => $money((int) $tx->amount + (int) $tx->fee),
+            }],
             ['Montant reçu', $money($received, $tx->destination_currency ?: $cur)],
             ['Taux de change', ! empty($m['fx']['rate']) ? '1 ' . $cur . ' = ' . $m['fx']['rate'] . ' ' . ($tx->destination_currency ?? '') : null],
             ['Motif', $m['note'] ?? $m['purpose_label'] ?? $m['description'] ?? null],
@@ -144,7 +154,8 @@ class TransactionPresenter
         ];
 
         // Vue du bénéficiaire (crédit) : les frais et le total débité concernent l'expéditeur
-        $hidden = $credit === true ? ['Frais', 'Total débité', 'Compte débité'] : [];
+        // (sauf recharge de son propre compte : c'est lui qui paie les frais)
+        $hidden = $credit === true && ! in_array($tx->type, self::RECHARGE_TYPES, true) ? ['Frais', 'Total débité', 'Compte débité'] : [];
 
         return array_values(array_map(
             fn ($r) => ['label' => $r[0], 'value' => (string) $r[1]],

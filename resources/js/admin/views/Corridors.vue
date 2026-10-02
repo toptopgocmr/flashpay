@@ -27,6 +27,17 @@
           <span v-else class="t-warn">Couverture pas encore synchronisée</span>
           <button class="btn-normal" :disabled="syncing" @click="syncWacepay">{{ syncing ? 'Synchronisation…' : 'Synchroniser la couverture WacePay' }}</button>
         </div>
+        <div v-if="p.key === 'digitwace' && p.ready" class="wbal">
+          <div class="wbal-head"><span>Soldes WacePay</span>
+            <button class="btn-link" :disabled="wBalLoading" @click="loadWaceBalances(true)">{{ wBalLoading ? '…' : 'Actualiser' }}</button></div>
+          <div v-if="wBal && !wBal.ok" class="t-warn small">Soldes indisponibles : {{ wBal.error }}</div>
+          <div v-for="a in wBal?.accounts || []" :key="a.currency + a.label" class="wbal-row">
+            <span>{{ a.label }}</span>
+            <b>{{ n(a.balance) }} {{ a.currency }}</b>
+            <small>Disponible {{ n(a.available) }} · engagé {{ n(a.reserved) }}<span v-if="a.low" class="t-warn"> · solde bas</span></small>
+          </div>
+          <div v-if="wBal?.ok && !wBal.accounts.length" class="small">Aucun solde renvoyé par WacePay.</div>
+        </div>
         <small class="mono" :title="'URL de notification (webhook) à déclarer chez ' + p.name">Webhook : {{ p.webhook }}</small>
         <button class="btn-link" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
       </div>
@@ -83,14 +94,14 @@
                     <span class="lbl">Collecte</span>
                     <select class="api" :class="'p-' + c.collect_partner" :value="c.collect_partner" @change="update(c, { collect_partner: $event.target.value })">
                       <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
-                      <option value="digitwace">WacePay{{ c.wacepay && !c.wacepay.payin ? ' (non annoncé)' : '' }}</option>
+                      <option value="digitwace" :disabled="!waceOk(c, 'payin')">WacePay{{ waceNote(c, 'payin') }}</option>
                     </select>
                   </div>
                   <div class="pl" :class="{ dim: !c.payout }">
                     <span class="lbl">Versement</span>
                     <select class="api" :class="'p-' + c.payout_partner" :value="c.payout_partner" @change="update(c, { payout_partner: $event.target.value })">
                       <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
-                      <option value="digitwace">WacePay{{ c.wacepay && !c.wacepay.payout ? ' (non annoncé)' : '' }}</option>
+                      <option value="digitwace" :disabled="!waceOk(c, 'payout')">WacePay{{ waceNote(c, 'payout') }}</option>
                     </select>
                   </div>
                   <div v-if="c.wacepay" class="wace-avail" :title="c.wacepay.payers.map((p) => p.name || p.code).join(', ')">
@@ -207,6 +218,18 @@ const flt = reactive({ q: '', zone: '', open: '', partner: '' })
 const conv = reactive({ amount: 10000, from: 'XAF', to: 'CDF' })
 const zoneLabel = { CEMAC: 'CEMAC — Afrique centrale', UEMOA: 'UEMOA — Afrique de l\'Ouest', RDC: 'RD Congo', GUINEE: 'Guinée', INTERNATIONAL: 'Autres pays (WacePay)' }
 const syncing = ref(false)
+// WacePay proposé seulement là où la couverture synchronisée l'annonce
+const waceOk = (c, svc) => !!c.wacepay?.[svc]
+const waceNote = (c, svc) => (c.wacepay ? (c.wacepay[svc] ? '' : ' — non disponible ici') : ' — couverture non synchronisée')
+const wBal = ref(null)
+const wBalLoading = ref(false)
+function loadWaceBalances(refresh = false) {
+  wBalLoading.value = true
+  api.get('/admin/digitwace/balances', { params: refresh ? { refresh: 1 } : {} })
+    .then(({ data }) => { wBal.value = data })
+    .catch((e) => { wBal.value = { ok: false, error: e.response?.data?.message || e.message, accounts: [] } })
+    .finally(() => { wBalLoading.value = false })
+}
 async function syncWacepay() {
   syncing.value = true
   try { await run(() => api.post('/admin/corridors-sync/wacepay')) } finally { syncing.value = false }
@@ -247,6 +270,7 @@ async function load() {
     kpi.value = c.data.kpi
     sandbox.value = c.data.sandbox
     partners.value = c.data.partners || []
+    if (partnerReady('digitwace') && !wBal.value) loadWaceBalances()
     rates.value = r.data
   } catch (e) {
     error.value = e.response?.data?.message || e.message
@@ -324,6 +348,10 @@ onMounted(load)
 .coverage { display: grid; gap: 6px; font-size: 13px; background: #fff7ed; border-radius: 8px; padding: 8px 10px; }
 .coverage small { font-size: 11.5px; color: var(--text-2); }
 .coverage .btn-normal { justify-self: start; }
+.wbal { display: grid; gap: 6px; background: #fff7ed; border-radius: 8px; padding: 8px 10px; }
+.wbal-head { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; }
+.wbal-row { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; font-size: 13px; }
+.wbal-row small { grid-column: 1 / -1; color: var(--text-2); font-size: 11.5px; }
 .wace-tag { font-size: 11px; font-weight: 700; color: #b45309; background: #ffedd5; border-radius: 99px; padding: 1px 7px; margin-left: 6px; }
 .wace-avail { font-size: 11.5px; color: #b45309; margin: 2px 0 0 80px; }
 .api { padding: 4px 6px; border: 1px solid var(--border-strong); border-radius: 6px; font: inherit; font-size: 12.5px; }

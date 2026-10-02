@@ -251,7 +251,9 @@ class PaymentController extends Controller
             'status' => $tx->status,
             'stage' => $tx->stage,
             'amount' => $tx->amount,
-            'fee' => $tx->fee,
+            // Frais réellement prélevés : 0 si l'opération a échoué ou a été remboursée
+            'fee' => in_array($tx->status, ['failed', 'reversed'], true) ? 0 : $tx->fee,
+            'fee_quoted' => $tx->fee,
             'currency' => $tx->currency,
             'destination_amount' => $tx->destination_amount ?? $tx->amount,
             'destination_currency' => $tx->destination_currency ?? $tx->currency,
