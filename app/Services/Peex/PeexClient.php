@@ -250,6 +250,12 @@ class PeexClient
         return $this->call('POST', 'clients/request_payment', $payload);
     }
 
+    /** Virement bancaire (Remittance › Bank Payment Request). */
+    public function bankPayment(array $payload): array
+    {
+        return $this->call('POST', 'clients/request_bank_payment', $payload);
+    }
+
     public function remittanceStatus(string $trackId): array
     {
         return $this->call('GET', 'clients/all_requests', ['track_id' => $trackId]);

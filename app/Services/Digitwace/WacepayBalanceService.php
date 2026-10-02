@@ -16,6 +16,18 @@ class WacepayBalanceService
     {
     }
 
+    /** IP sortante actuelle du serveur (celle que WacePay / PEEX voient). */
+    public static function serverIp(): ?string
+    {
+        return Cache::remember('server:egress_ip', now()->addMinutes(10), function () {
+            try {
+                return trim(\Illuminate\Support\Facades\Http::timeout(5)->get('https://api.ipify.org')->body()) ?: null;
+            } catch (\Throwable) {
+                return null;
+            }
+        });
+    }
+
     public function balances(bool $fresh = false): array
     {
         $low = (int) config('flashpay.digitwace.low_balance_alert', 100000);
@@ -28,7 +40,11 @@ class WacepayBalanceService
         try {
             $json = Cache::remember('digitwace:balance', 30, fn () => $this->client->call('get', 'balance'));
         } catch (\Throwable $e) {
-            return ['ok' => false, 'configured' => true, 'error' => $e->getMessage(), 'accounts' => [], 'low_balance_alert' => $low, 'checked_at' => now()->toIso8601String()];
+            return ['ok' => false, 'configured' => true, 'error' => $e->getMessage(), 'accounts' => [], 'low_balance_alert' => $low, 'checked_at' => now()->toIso8601String(),
+                'sandbox' => (bool) config('flashpay.digitwace.sandbox', true),
+                'base_url' => (string) config('flashpay.digitwace.base_url'),
+                'server_ip' => self::serverIp(),
+            ];
         }
 
         $reserved = $this->reservedByCurrency();

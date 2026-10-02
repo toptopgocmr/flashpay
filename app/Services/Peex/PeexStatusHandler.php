@@ -102,6 +102,11 @@ class PeexStatusHandler
         }
 
         $req->update(['finalized_at' => now()]);
+        if ($leg === 'M') {
+            // Remboursement manuel (console) : n'altère pas la transaction d'origine
+            app(\App\Services\Peex\ManualRefundService::class)->finalized($req, $ok);
+            return $req->fresh();
+        }
         $tx = $req->transaction;
         if (! $tx) {
             return $req;

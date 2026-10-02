@@ -183,12 +183,14 @@ class AdminDashboardController extends Controller
         }
 
         $page = $q->select('transactions.*')->selectRaw("{$expr} as channel")
-            ->with(['sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone'])
+            ->with(['sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone', 'peexRequests:id,transaction_id,track_id,status,amount'])
             ->paginate(25)->withQueryString();
         $page->getCollection()->transform(function ($t) {
             $t->channel_label = TransactionChannels::LABELS[$t->channel] ?? $t->channel;
             // Journal : libellé (Recharge compte FlashPay, Transfert entrant/sortant…), sens crédit/débit, canal
             $t->journal = \App\Support\TransactionPresenter::present($t);
+            $t->gateway = \App\Support\TransactionPresenter::gateway($t);
+            $t->refundable = \App\Services\Peex\ManualRefundService::refundableOf($t);
             return $this->withParties($t);
         });
 

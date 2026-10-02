@@ -275,6 +275,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::middleware('role:super_admin')->prefix('admin')->group(function () {
         Route::get('/dashboard', AdminDashboardController::class);
         Route::get('/transactions', [AdminDashboardController::class, 'transactions']);
+        Route::get('/transactions/{transaction}/refunds', [\App\Http\Controllers\Api\AdminRefundController::class, 'index']);
+        Route::post('/transactions/{transaction}/refunds', [\App\Http\Controllers\Api\AdminRefundController::class, 'store'])->middleware('throttle:20,1');
+        Route::post('/transactions/{transaction}/refunds/{peexRequest}/refresh', [\App\Http\Controllers\Api\AdminRefundController::class, 'refresh']);
         Route::get('/users', [AdminController::class, 'users']);
         Route::post('/users', [AdminController::class, 'createInternalUser']);
 

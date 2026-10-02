@@ -2,7 +2,8 @@
   <div v-if="t">
     <div class="page-header">
       <div><h1 class="mono" style="font-size:22px;">{{ t.reference }}</h1><p>Détail de la transaction, écritures comptables et suivi support.</p></div>
-      <div class="actions"><router-link class="btn-normal" to="/transactions">‹ Transactions</router-link></div>
+      <div class="actions"><button class="btn-normal" @click="showRefund = true">Rembourser via PEEX</button><router-link class="btn-normal" to="/transactions">‹ Transactions</router-link></div>
+      <PeexRefund v-if="showRefund" :transaction-id="Number(route.params.id)" @close="showRefund = false" />
     </div>
     <div class="grid grid-4 mb">
       <div class="card" v-go="'#tx-ledger'" title="Voir les écritures"><div class="stat-value">{{ formatXaf(t.amount) }}</div><div class="stat-label">Montant</div></div>
@@ -55,6 +56,8 @@ import { computed as _computed } from 'vue'
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
+import PeexRefund from '../components/PeexRefund.vue'
+const showRefund = ref(false)
 
 const route = useRoute()
 const t = ref(null)

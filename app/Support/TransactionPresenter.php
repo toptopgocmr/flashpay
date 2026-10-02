@@ -179,6 +179,58 @@ class TransactionPresenter
         return $names ? implode(' → ', $names) : null;
     }
 
+    /**
+     * Opérateurs et passerelle qui ont traité l'opération (console) :
+     * entrée (compte débité) et sortie (compte crédité), partenaire, track_id.
+     */
+    public static function gateway(Transaction $tx): array
+    {
+        $corr = app(\App\Services\Peex\PeexCorridors::class);
+        $leg = function (?string $rail, ?string $account, ?string $hint) use ($corr) {
+            $rail = $rail ?: 'wallet';
+            $out = ['rail' => $rail, 'partner' => null, 'operator' => null, 'account' => $account];
+            switch ($rail) {
+                case 'peex':
+                case 'digitwace':
+                    $out['partner'] = \App\Services\Peex\PeexCorridors::partnerName($rail);
+                    if ($account) {
+                        try {
+                            $r = $corr->resolve($account, $hint, false);
+                            $out['operator'] = $r['operator'] ?: 'Mobile money ' . ($r['country'] ?? '');
+                            $out['country'] = $r['country'] ?? null;
+                        } catch (\Throwable) {
+                            $out['operator'] = 'Mobile money';
+                        }
+                    }
+                    break;
+                case 'card':
+                    $out['operator'] = 'Carte Visa / Mastercard';
+                    $out['partner'] = 'Carte (3-D Secure)';
+                    break;
+                case 'bank':
+                    $out['operator'] = 'Virement bancaire';
+                    break;
+                case 'cash':
+                    $out['operator'] = 'Espèces (agent)';
+                    break;
+                default:
+                    $out['operator'] = 'Wallet FlashPay';
+            }
+            return $out;
+        };
+        $meta = $tx->meta ?? [];
+        $tracks = $tx->relationLoaded('peexRequests')
+            ? $tx->peexRequests->pluck('track_id')->all()
+            : [];
+
+        return [
+            'in' => $leg($tx->source_rail, $tx->source_account, $meta['source_country'] ?? null),
+            'out' => $leg($tx->destination_rail, $tx->destination_account, $meta['destination_country'] ?? null),
+            'partner' => self::partner($tx),
+            'track_ids' => $tracks,
+        ];
+    }
+
     public static function phone(?string $p): ?string
     {
         if (! $p) {

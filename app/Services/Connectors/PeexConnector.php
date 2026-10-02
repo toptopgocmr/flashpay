@@ -101,6 +101,46 @@ class PeexConnector implements PaymentRailConnector
         ]);
     }
 
+    /** Remboursement manuel (console) vers un numéro mobile money : track_id …-M1. */
+    public function manualMobileRefund(Transaction $tx, string $msisdn, int $amount, string $currency, array $o): array
+    {
+        return $this->payout($tx, $tx->reference, 'M', $msisdn, $amount, $currency, $o);
+    }
+
+    /** Remboursement manuel (console) par virement bancaire PEEX : track_id …-M1. */
+    public function manualBankRefund(Transaction $tx, array $b, int $amount, string $currency): array
+    {
+        [$senderFirst, $senderLast] = $this->splitName($b['sender_name'] ?? 'FlashPay Remboursement');
+        $payload = array_filter([
+            'track_id' => $this->trackId($tx->reference, 'M'),
+            'amount' => $amount,
+            'aml_cft' => 1,
+            'fxrate' => 1,
+            'from_currency' => $currency,
+            'to_currency' => $b['to_currency'] ?? $currency,
+            'to_country' => strtoupper($b['to_country']),
+            'transaction_type' => 'bank',
+            'bank_name' => $b['bank_name'] ?? null,
+            'bank_address' => $b['bank_address'],
+            'bank_iban' => preg_replace('/\s+/', '', $b['bank_iban']),
+            'bank_swift' => strtoupper(preg_replace('/\s+/', '', $b['bank_swift'])),
+            'first_name' => $this->splitName($b['beneficiary_name'])[0],
+            'last_name' => $this->splitName($b['beneficiary_name'])[1],
+            'sender_first_name' => $senderFirst,
+            'sender_last_name' => $senderLast,
+            'sender_mobile_phone' => $b['sender_phone'] ?? config('flashpay.peex.sender_phone') ?? '+242060000000',
+            'sender_country' => $b['sender_country'] ?? config('flashpay.peex.sender_country', 'CG'),
+            'sender_email' => $b['sender_email'] ?? null,
+            'mobile_phone' => $b['mobile_phone'] ?? null,
+            'email' => $b['email'] ?? null,
+            'purpose' => $b['purpose'] ?? 'Refund',
+            'fund_origin' => $b['fund_origin'] ?? 'Refund',
+        ], fn ($v) => $v !== null && $v !== '');
+        $route = ['country' => $payload['to_country'], 'corridor' => 'bank', 'phone' => $payload['mobile_phone'] ?? $payload['bank_iban']];
+
+        return $this->send('remittance', $payload, $route, $tx, fn () => $this->client->bankPayment($payload));
+    }
+
     /**
      * $externalRef = track_id PEEX. Interroge PEEX et met à jour peex_requests.
      * Une demande « unknown » (appel interrompu) introuvable chez PEEX après le
@@ -257,7 +297,7 @@ class PeexConnector implements PaymentRailConnector
     /** Étape d'une demande d'après son track_id : C (collecte), D (versement), R (remboursement). */
     public static function legOf(string $trackId): string
     {
-        return preg_match('/-([CDR])\d+$/', $trackId, $m) ? $m[1] : 'D';
+        return preg_match('/-([CDRM])\d+$/', $trackId, $m) ? $m[1] : 'D';
     }
 
     protected function splitName(string $full): array

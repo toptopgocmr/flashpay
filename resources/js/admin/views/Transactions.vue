@@ -54,7 +54,7 @@
       <div class="container-body flush" style="overflow-x: auto;">
         <table>
           <thead>
-            <tr><th>Référence</th><th>Opération</th><th>Canal</th><th>Expéditeur</th><th>Bénéficiaire</th><th class="num">Montant</th><th class="num">Frais</th><th>Statut</th><th>Date</th></tr>
+            <tr><th>Référence</th><th>Opération</th><th>Canal</th><th>Opérateurs / passerelle</th><th>Expéditeur</th><th>Bénéficiaire</th><th class="num">Montant</th><th class="num">Frais</th><th>Statut</th><th>Date</th><th></th></tr>
           </thead>
           <tbody>
             <tr v-for="t in transactions" :key="t.id" style="cursor:pointer" @click="$router.push('/transactions/' + t.id)">
@@ -66,14 +66,20 @@
                 <small v-if="t.journal?.partner" style="display:block;color:var(--text-2)">via <strong>{{ t.journal.partner }}</strong></small>
               </td>
               <td>{{ t.channel_label }}</td>
+              <td class="gw">
+                <div><span class="gw-k">Débité</span> {{ t.gateway?.in.operator || '—' }}<em v-if="t.gateway?.in.partner" :class="'p-' + t.gateway.in.rail">{{ t.gateway.in.partner }}</em></div>
+                <div><span class="gw-k">Crédité</span> {{ t.gateway?.out.operator || '—' }}<em v-if="t.gateway?.out.partner" :class="'p-' + t.gateway.out.rail">{{ t.gateway.out.partner }}</em></div>
+                <small v-if="t.gateway?.track_ids?.length" class="mono" :title="t.gateway.track_ids.join(', ')">{{ t.gateway.track_ids[t.gateway.track_ids.length - 1] }}</small>
+              </td>
               <td><strong>{{ t.sender?.name || '—' }}</strong><br /><small class="mono" style="color:var(--text-2)">{{ t.sender?.account || t.source_rail }}</small></td>
               <td><strong>{{ t.beneficiary?.name || '—' }}</strong><br /><small class="mono" style="color:var(--text-2)">{{ t.beneficiary?.account || t.destination_rail }}</small></td>
               <td class="num">{{ money(t.amount, t.currency) }}</td>
               <td class="num">{{ money(t.fee, t.currency) }}</td>
               <td><span class="status" :class="statusClass(t.status)">{{ STATUS[t.status] || t.status }}</span></td>
               <td>{{ new Date(t.created_at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) }}</td>
+              <td @click.stop><button v-if="t.refundable > 0" class="btn-normal btn-sm" title="Rembourser le client par PEEX (mobile money ou compte bancaire)" @click="refundTx = t.id">Rembourser</button></td>
             </tr>
-            <tr v-if="!loading && !transactions.length"><td colspan="9" class="stat-label">Aucune transaction pour ces filtres.</td></tr>
+            <tr v-if="!loading && !transactions.length"><td colspan="11" class="stat-label">Aucune transaction pour ces filtres.</td></tr>
           </tbody>
         </table>
       </div>
@@ -83,10 +89,12 @@
         <button class="btn-normal" :disabled="!meta.next_page_url" @click="load(meta.current_page + 1)">Suivant</button>
       </div>
     </section>
+    <PeexRefund v-if="refundTx" :transaction-id="refundTx" @close="refundTx = null" @done="load(meta?.current_page || 1)" />
   </div>
 </template>
 
 <script setup>
+import PeexRefund from '../components/PeexRefund.vue'
 import ExportButton from '../components/ExportButton.vue'
 import { fetchAllPages, fmtDate, fmtPhone } from '../utils/export'
 import { computed, reactive, ref, watch } from 'vue'
@@ -113,6 +121,7 @@ const router = useRouter()
 const transactions = ref([])
 const meta = ref(null)
 const loading = ref(false)
+const refundTx = ref(null)
 const f = reactive({ channel: '', status: '', days: '', from: '', to: '', q: '', user: '' })
 const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const frDate = (s) => new Date(s + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -173,6 +182,9 @@ const EXP_COLS = [
   { label: 'Sens', value: (t) => t.journal?.direction_label },
   { label: 'Type', value: (t) => t.journal?.channel },
   { label: 'Partenaire', value: (t) => t.journal?.partner || 'Interne FlashPay' },
+  { label: 'Opérateur débité', value: (t) => t.gateway?.in.operator },
+  { label: 'Opérateur crédité', value: (t) => t.gateway?.out.operator },
+  { label: 'Track ID PEEX', value: (t) => (t.gateway?.track_ids || []).join(' ') },
   { label: 'Canal', value: (t) => t.channel_label },
   { label: 'Type', value: (t) => t.type },
   { label: 'Expéditeur', value: (t) => t.sender?.name },
@@ -194,6 +206,13 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 </script>
 
 <style scoped>
+.gw { font-size: 12.5px; min-width: 190px; }
+.gw div { white-space: nowrap; }
+.gw-k { display: inline-block; width: 52px; color: var(--text-2); font-size: 11px; }
+.gw em { font-style: normal; font-size: 10.5px; font-weight: 700; margin-left: 6px; padding: 1px 6px; border-radius: 5px; background: #e0e7ff; color: #1e3a8a; }
+.gw em.p-digitwace { background: #ffedd5; color: #c2410c; }
+.gw small { color: var(--text-2); font-size: 11px; }
+.btn-sm { padding: 4px 10px; font-size: 12.5px; }
 .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .filters select, .filters input { padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 8px; font: inherit; }
 .filters input[type=search] { min-width: 220px; }

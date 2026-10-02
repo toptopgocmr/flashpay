@@ -32,7 +32,14 @@
         <div v-if="p.key === 'digitwace' && p.ready" class="wbal">
           <div class="wbal-head"><span>Soldes WacePay</span>
             <button class="btn-link" :disabled="wBalLoading" @click="loadWaceBalances(true)">{{ wBalLoading ? '…' : 'Actualiser' }}</button></div>
-          <div v-if="wBal && !wBal.ok" class="t-warn small">Soldes indisponibles : {{ wBal.error }}</div>
+          <div v-if="wBal && !wBal.ok" class="wbal-err">
+            <b>Impossible de lire les soldes : WacePay ne répond pas à FlashPay.</b>
+            <div class="why">{{ wBal.error }}</div>
+            <ul v-if="wBal.configured !== false">
+              <li>Environnement : <b>{{ wBal.sandbox ? 'Sandbox' : 'Production' }}</b> — adresse appelée : <code>{{ wBal.base_url || '—' }}</code><br /><small>Elle doit correspondre aux clés saisies (clés sandbox ↔ URL sandbox).</small></li>
+              <li>IP sortante actuelle du serveur : <code>{{ wBal.server_ip || 'inconnue' }}</code><br /><small>Elle doit figurer dans WacePay › Developers › IP Whitelist avec le statut « Active » (pas « Blocked »).</small></li>
+            </ul>
+          </div>
           <div v-for="a in wBal?.accounts || []" :key="a.currency + a.label" class="wbal-row">
             <span>{{ a.label }}</span>
             <b>{{ n(a.balance) }} {{ a.currency }}</b>
@@ -406,4 +413,8 @@ tr.add td { background: var(--surface-2); }
 .fp-toast { position: fixed; top: 16px; right: 16px; z-index: 1000; max-width: 460px; padding: 12px 16px; border-radius: 10px; color: #fff; font-size: 13.5px; line-height: 1.35; box-shadow: 0 8px 24px rgba(0,0,0,.18); cursor: pointer; background: #15803d; }
 .fp-toast.err { background: #b91c1c; }
 .row-err { margin-top: 4px; font-size: 11.5px; color: #b91c1c; line-height: 1.3; max-width: 260px; }
+.wbal-err { background: #fef2f2; border: 1px solid #fecaca; color: #7f1d1d; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; line-height: 1.4; }
+.wbal-err .why { margin: 4px 0 6px; color: #991b1b; }
+.wbal-err ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.wbal-err code { background: #fff; padding: 0 4px; border-radius: 4px; word-break: break-all; }
 </style>

@@ -60,6 +60,7 @@ class DigitwaceClient
             $json = $res->json() ?? [];
             $token = data_get($json, 'token') ?? data_get($json, 'access_token') ?? data_get($json, 'data.token') ?? data_get($json, 'data.access_token');
             if (! $res->successful() || ! $token) {
+                Log::warning('WacePay connexion refusée', ['http' => $res->status(), 'url' => $this->cfg('base_url') . $this->path('login'), 'body' => mb_substr((string) $res->body(), 0, 300)]);
                 throw new DigitwaceException('Connexion WacePay refusée : ' . $this->errorText($json, $res->status()), $this->codeOf($json));
             }
             Cache::put($key, $token, now()->addMinutes((int) $this->cfg('token_ttl_minutes', 55)));
@@ -314,12 +315,18 @@ class DigitwaceClient
         $code = $this->codeOf($json);
         $msg = data_get($json, 'message') ?? data_get($json, 'error') ?? data_get($json, 'errors');
         $msg = is_array($msg) ? json_encode($msg, JSON_UNESCAPED_UNICODE) : (string) $msg;
+        $msg = mb_substr(strip_tags($msg), 0, 200);
         $hint = match (true) {
             $code === '4001' => 'accès refusé — vérifiez que l\'IP du serveur est autorisée (IP Whitelist)',
             $code === '3002' => 'compte ou solde WacePay inactif',
             in_array($code, ['3015', '3016'], true) => 'référence invalide ou déjà utilisée',
             in_array($code, ['2001', '3001'], true) => 'erreur système WacePay',
             $code !== null && $code >= '1001' && $code <= '1017' => 'données refusées',
+            $http === 401 => 'clés API refusées : vérifiez DIGITWACE_PUBLIC_KEY / DIGITWACE_PRIVATE_KEY (sandbox ou production selon le compte)',
+            $http === 403 => 'IP du serveur non autorisée : ajoutez l\'IP sortante du serveur dans WacePay › Developers › IP Whitelist (statut « Active », pas « Blocked »)',
+            $http === 404 => 'adresse de l\'API introuvable : vérifiez DIGITWACE_BASE_URL (URL sandbox ou production) et les chemins DIGITWACE_PATH_*',
+            in_array($http, [502, 503, 504], true) => 'serveur WacePay injoignable ou URL incorrecte : vérifiez DIGITWACE_BASE_URL (URL sandbox fournie par WacePay) ; si l\'URL est bonne, WacePay bloque l\'IP du serveur ou est en panne',
+            $http !== null && $http >= 500 => 'erreur côté WacePay, réessayez plus tard',
             default => null,
         };
         return trim(($code ? "[{$code}] " : '') . ($msg ?: ($http ? "HTTP {$http}" : 'erreur')) . ($hint ? " ({$hint})" : ''));
