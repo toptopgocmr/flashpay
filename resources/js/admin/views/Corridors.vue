@@ -3,13 +3,29 @@
     <div class="page-header">
       <div>
         <h1>Pays &amp; change</h1>
-        <p>Pays et opérateurs joignables via PEEX, ouverture des corridors et taux de change appliqués aux envois entre devises.</p>
+        <p>Pays et opérateurs couverts, partenaire de paiement qui gère chaque flux (PEEX, WacePay), ouverture des corridors et taux de change.</p>
       </div>
       <div class="actions"><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>
 
     <div v-if="error" class="flash err"><div>{{ error }}</div></div>
     <div v-if="msg" class="flash info"><div>{{ msg }}</div></div>
+
+    <!-- Partenaires de paiement : qui gère quels flux -->
+    <div class="partners mb">
+      <div v-for="p in partners" :key="p.key" class="partner-card" :class="'p-' + p.key">
+        <div class="pc-head">
+          <span class="pbadge" :class="'p-' + p.key">{{ p.name }}</span>
+          <span class="status" :class="p.ready ? 'ok' : 'warn'">{{ p.ready ? 'Connecté' : 'Non configuré' }} · {{ p.mode }}</span>
+        </div>
+        <div class="pc-flows">
+          <div><span>Collecte</span><b>{{ p.flows.includes('collect') ? n(p.collect_countries) + ' pays' : 'Non proposée' }}</b></div>
+          <div><span>Versement</span><b>{{ n(p.payout_countries) }} pays</b></div>
+        </div>
+        <small class="mono" :title="'URL de notification (webhook) à déclarer chez ' + p.name">Webhook : {{ p.webhook }}</small>
+        <button class="btn-link" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
+      </div>
+    </div>
 
     <div class="kpis mb">
       <button class="kpi" :class="{ on: tab === 'corridors' }" @click="tab = 'corridors'"><span>Pays couverts</span><b>{{ n(kpi.countries) }}</b><small>{{ n(kpi.operators) }} opérateurs</small></button>
@@ -26,7 +42,7 @@
     <!-- ================= Corridors ================= -->
     <template v-if="tab === 'corridors'">
       <div class="flash info">
-        <div>Ouvrez ou fermez la <strong>collecte</strong> et le <strong>versement</strong> par pays directement ici. Un corridor n'est réellement actif que s'il est aussi ouvert sur votre compte PEEX{{ sandbox ? ' (mode sandbox)' : '' }}.</div>
+        <div>Ouvrez ou fermez la <strong>collecte</strong> et le <strong>versement</strong> par pays, et choisissez le <strong>partenaire</strong> qui gère chaque flux : la collecte (mobile money → FlashPay) passe par <strong>PEEX</strong> ; le versement (FlashPay → mobile money) par <strong>PEEX</strong> ou <strong>WacePay</strong>. Un corridor n'est réellement actif que s'il est aussi ouvert chez le partenaire{{ sandbox ? ' (PEEX en mode sandbox)' : '' }}.</div>
       </div>
       <div class="toolbar mb">
         <div class="search">
@@ -37,6 +53,7 @@
           <button :class="{ on: !flt.zone }" @click="flt.zone = ''">Toutes les zones</button>
           <button v-for="(cur, z) in zones" :key="z" :class="{ on: flt.zone === z }" @click="flt.zone = z">{{ zoneLabel[z] || z }} · {{ cur }}</button>
         </div>
+        <select v-model="flt.partner"><option value="">Tous les partenaires</option><option v-for="p in partners" :key="p.key" :value="p.key">{{ p.name }}</option></select>
         <select v-model="flt.open"><option value="">Tous les statuts</option><option value="collect">Collecte ouverte</option><option value="payout">Versement ouvert</option><option value="closed">Fermés</option><option value="changed">Modifiés dans la console</option></select>
       </div>
 
@@ -46,7 +63,7 @@
         </div>
         <div class="container-body flush" style="overflow-x:auto;">
           <table>
-            <thead><tr><th>Pays</th><th>Indicatif</th><th>Opérateurs</th><th class="c">Collecte</th><th class="c">Versement</th><th>API versement</th><th class="num">Activité 30 j</th><th></th></tr></thead>
+            <thead><tr><th>Pays</th><th>Indicatif</th><th>Opérateurs</th><th class="c">Collecte</th><th class="c">Versement</th><th>Partenaire des flux</th><th class="num">Activité 30 j</th><th></th></tr></thead>
             <tbody>
               <tr v-for="c in list" :key="c.country" :class="{ off: !c.collect && !c.payout }">
                 <td><Flag :iso="c.country" :size="15" /> <strong>{{ c.name }}</strong> <span class="stat-label">{{ c.country }}</span>
@@ -55,10 +72,28 @@
                 <td><span v-for="o in c.operators" :key="o.corridor" class="op" :title="'Préfixes : ' + o.prefixes.join(', ')">{{ o.label }}</span></td>
                 <td class="c"><label class="switch"><input type="checkbox" :checked="c.collect" @change="update(c, { collect: $event.target.checked })" /><span></span></label></td>
                 <td class="c"><label class="switch"><input type="checkbox" :checked="c.payout" @change="update(c, { payout: $event.target.checked })" /><span></span></label></td>
-                <td>
-                  <select class="api" :value="c.payout_api" @change="update(c, { payout_api: $event.target.value })">
-                    <option value="disbursement">disbursement</option><option value="remittance">remittance</option>
-                  </select>
+                <td class="partner-cell">
+                  <div class="pl" :class="{ dim: !c.collect }">
+                    <span class="lbl">Collecte</span>
+                    <select class="api" :class="'p-' + c.collect_partner" :value="c.collect_partner" @change="update(c, { collect_partner: $event.target.value })">
+                      <option value="peex">PEEX</option>
+                      <option value="digitwace" disabled>WacePay (non proposé)</option>
+                    </select>
+                  </div>
+                  <div class="pl" :class="{ dim: !c.payout }">
+                    <span class="lbl">Versement</span>
+                    <select class="api" :class="'p-' + c.payout_partner" :value="c.payout_partner" @change="update(c, { payout_partner: $event.target.value })">
+                      <option value="peex">PEEX</option>
+                      <option value="digitwace">WacePay</option>
+                    </select>
+                  </div>
+                  <div v-if="c.payout_partner === 'peex'" class="pl" :class="{ dim: !c.payout }">
+                    <span class="lbl">API PEEX</span>
+                    <select class="api" :value="c.payout_api" @change="update(c, { payout_api: $event.target.value })">
+                      <option value="disbursement">disbursement</option><option value="remittance">remittance</option>
+                    </select>
+                  </div>
+                  <div v-else-if="!partnerReady('digitwace')" class="t-warn small">⚠ WacePay non configuré : envois refusés</div>
                 </td>
                 <td class="num">{{ c.usage.count ? n(c.usage.count) + ' op. · ' + short(c.usage.volume) : '—' }}</td>
                 <td><IconAction v-if="c.overridden" icon="undo" label="Rétablir la configuration par défaut" @click="reset(c)" /></td>
@@ -150,13 +185,16 @@ const corridors = ref([])
 const zones = ref({})
 const kpi = ref({})
 const sandbox = ref(false)
+const partners = ref([])
+const partnerReady = (k) => !!partners.value.find((p) => p.key === k)?.ready
+const partnerName = (k) => partners.value.find((p) => p.key === k)?.name || k
 const rates = ref([])
 const editing = ref(null)
 const draft = reactive({})
 const add = reactive({ base: 'XAF', quote: '', rate: null, margin_percent: 1.5 })
 const error = ref('')
 const msg = ref('')
-const flt = reactive({ q: '', zone: '', open: '' })
+const flt = reactive({ q: '', zone: '', open: '', partner: '' })
 const conv = reactive({ amount: 10000, from: 'XAF', to: 'CDF' })
 const zoneLabel = { CEMAC: 'CEMAC — Afrique centrale', UEMOA: 'UEMOA — Afrique de l\'Ouest', RDC: 'RD Congo', GUINEE: 'Guinée' }
 
@@ -171,6 +209,7 @@ const stale = (r) => (r.source || '').includes('indicatif') || Date.now() - new 
 const byZone = computed(() => {
   const q = flt.q.toLowerCase().trim()
   return corridors.value.filter((c) => (!flt.zone || c.zone === flt.zone)
+    && (!flt.partner || c.payout_partner === flt.partner || c.collect_partner === flt.partner)
     && (!q || [c.name, c.country, c.dial, ...c.operators.map((o) => o.label)].join(' ').toLowerCase().includes(q))
     && (!flt.open || (flt.open === 'collect' && c.collect) || (flt.open === 'payout' && c.payout) || (flt.open === 'closed' && !c.collect && !c.payout) || (flt.open === 'changed' && c.overridden)))
     .reduce((acc, c) => ((acc[c.zone] ||= []).push(c), acc), {})
@@ -193,6 +232,7 @@ async function load() {
     zones.value = c.data.zones
     kpi.value = c.data.kpi
     sandbox.value = c.data.sandbox
+    partners.value = c.data.partners || []
     rates.value = r.data
   } catch (e) {
     error.value = e.response?.data?.message || e.message
@@ -205,6 +245,8 @@ async function run(fn) {
 function update(c, patch) {
   if (patch.payout === false && !confirm(`Fermer les versements vers ${c.name} ? Les envois vers ce pays seront refusés.`)) return load()
   if (patch.collect === false && !confirm(`Fermer la collecte depuis ${c.name} ?`)) return load()
+  if (patch.payout_partner && patch.payout_partner !== c.payout_partner
+    && !confirm(`Confier les versements vers ${c.name} à ${partnerName(patch.payout_partner)} (au lieu de ${partnerName(c.payout_partner)}) ?\n\nLes nouveaux envois vers ce pays passeront par ce partenaire ; les opérations en cours restent chez l'ancien.`)) return load()
   run(() => api.post(`/admin/corridors/${c.country}`, patch))
 }
 const reset = (c) => run(() => api.delete(`/admin/corridors/${c.country}`))
@@ -246,6 +288,25 @@ onMounted(load)
 .c { text-align: center; }
 .op { display: inline-block; border: 1px solid var(--border-strong); border-radius: 12px; padding: 0 8px; margin: 2px 4px 2px 0; font-size: 12px; white-space: nowrap; }
 .changed { font-size: 11px; font-weight: 600; color: var(--warn); background: var(--warn-bg); border-radius: 99px; padding: 1px 7px; margin-left: 6px; }
+.partners { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.partner-card { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid #1e3a8a; border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); display: grid; gap: 8px; }
+.partner-card.p-digitwace { border-left-color: #ea7a17; }
+.pc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pc-flows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pc-flows div { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; display: grid; }
+.pc-flows span { font-size: 12px; color: var(--text-2); }
+.partner-card small { font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.partner-card .btn-link { justify-self: start; padding: 0; }
+.pbadge { font-weight: 800; font-size: 13px; border-radius: 99px; padding: 3px 10px; color: #fff; background: #1e3a8a; }
+.pbadge.p-digitwace { background: #ea7a17; }
+.partner-cell { min-width: 230px; }
+.partner-cell .api { width: 140px; }
+.pl { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+.pl.dim { opacity: .5; }
+.pl .lbl { width: 72px; font-size: 12px; color: var(--text-2); }
+.api.p-peex { border-color: #1e3a8a; color: #1e3a8a; font-weight: 700; }
+.api.p-digitwace { border-color: #ea7a17; color: #b45309; font-weight: 700; }
+.small { font-size: 12px; }
 .api { padding: 4px 6px; border: 1px solid var(--border-strong); border-radius: 6px; font: inherit; font-size: 12.5px; }
 tr.off td { color: var(--text-2); background: #fafafa; }
 .switch { position: relative; display: inline-block; width: 36px; height: 20px; }

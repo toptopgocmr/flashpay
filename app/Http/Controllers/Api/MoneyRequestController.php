@@ -25,8 +25,10 @@ class MoneyRequestController extends Controller
             'phone' => 'required|string|max:25',
             'amount' => 'required|integer|min:100|max:5000000',
             'note' => 'nullable|string|max:140',
+            'channel' => 'nullable|in:app,sms,whatsapp,link',
         ]);
-        return response()->json($this->service->create($request->user(), $v), 201);
+        $req = $this->service->create($request->user(), $v);
+        return response()->json($this->service->present($req, $request->user()), 201);
     }
 
     public function show(Request $request, MoneyRequest $moneyRequest)
@@ -34,7 +36,7 @@ class MoneyRequestController extends Controller
         $u = $request->user();
         $phones = array_map(fn ($p) => ltrim($p, '+'), \App\Support\Phone::candidates($u->phone));
         abort_unless($moneyRequest->requester_id === $u->id || $moneyRequest->payer_id === $u->id || in_array($moneyRequest->payer_phone, $phones, true), 404);
-        return response()->json($moneyRequest->load('requester:id,full_name,phone', 'payer:id,full_name,phone'));
+        return response()->json($this->service->present($moneyRequest, $u));
     }
 
     public function pay(Request $request, MoneyRequest $moneyRequest)

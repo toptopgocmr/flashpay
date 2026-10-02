@@ -222,30 +222,7 @@ class GiftService
     {
         $n = 0;
         GiftEnvelope::where('status', 'active')->where('expires_at', '<', now())->each(function (GiftEnvelope $env) use (&$n) {
-            DB::transaction(function () use ($env, &$n) {
-                $e = GiftEnvelope::whereKey($env->id)->lockForUpdate()->first();
-                if ($e->status !== 'active') {
-                    return;
-                }
-                if ($e->remaining_amount > 0) {
-                    $wallet = Wallet::findOrFail($e->wallet_id);
-                    $tx = Transaction::create([
-                        'reference' => 'FP-' . Str::upper(Str::random(12)),
-                        'type' => 'gift_refund', 'scope' => 'national',
-                        'source_rail' => 'wallet', 'destination_rail' => 'wallet',
-                        'destination_wallet_id' => $wallet->id,
-                        'amount' => $e->remaining_amount, 'currency' => $e->currency,
-                        'status' => 'successful', 'completed_at' => now(),
-                        'initiated_by' => $e->sender_id,
-                        'meta' => ['channel' => 'gift', 'gift_code' => $e->code],
-                    ]);
-                    $this->wallets->credit($wallet, $e->remaining_amount);
-                    $this->ledger->recordDoubleEntry($tx, self::ACCOUNT, "wallet:{$wallet->id}", $e->remaining_amount, null, 'Cadeau non réclamé — recrédit');
-                    $this->notify->toUser($e->sender, 'gift_expired', 'Cadeau expiré : ' . number_format($e->remaining_amount, 0, ',', ' ') . " {$e->currency} recrédités", null, ['sms' => false]);
-                }
-                $e->update(['status' => $e->remaining_amount > 0 ? 'refunded' : 'completed', 'remaining_amount' => 0]);
-                $n++;
-            });
+            $n += $this->closeEnvelope($env, 'expired') ? 1 : 0;
         });
 
         // Rappel 2 h avant expiration aux destinataires qui n'ont pas récupéré (§11.1)
@@ -257,5 +234,124 @@ class GiftService
         });
 
         return $n;
+    }
+
+    /** L'expéditeur annule son cadeau : les parts non récupérées lui sont recréditées tout de suite. */
+    public function cancel(User $sender, string $code): GiftEnvelope
+    {
+        $env = GiftEnvelope::where('code', strtoupper($code))->where('sender_id', $sender->id)->first();
+        if (! $env || $env->status !== 'active') {
+            throw new BusinessException('Ce cadeau n\'est plus actif.', 'gift_closed');
+        }
+        $this->closeEnvelope($env, 'cancelled');
+
+        return $env->fresh('claims');
+    }
+
+    /** Clôture une enveloppe (expirée ou annulée) et recrédite le reste à l'expéditeur. */
+    protected function closeEnvelope(GiftEnvelope $env, string $why): bool
+    {
+        return DB::transaction(function () use ($env, $why) {
+                $e = GiftEnvelope::whereKey($env->id)->lockForUpdate()->first();
+                if ($e->status !== 'active') {
+                    return false;
+                }
+                if ($e->remaining_amount > 0) {
+                    $wallet = Wallet::findOrFail($e->wallet_id);
+                    $tx = Transaction::create([
+                        'reference' => 'FP-' . Str::upper(Str::random(12)),
+                        'type' => 'gift_refund', 'scope' => 'national',
+                        'source_rail' => 'wallet', 'destination_rail' => 'wallet',
+                        'destination_wallet_id' => $wallet->id,
+                        'amount' => $e->remaining_amount, 'currency' => $e->currency,
+                        'status' => 'successful', 'completed_at' => now(),
+                        'initiated_by' => $e->sender_id,
+                        'meta' => ['channel' => 'gift', 'gift_code' => $e->code, 'sender_name' => 'FlashPay', 'note' => $why === 'cancelled' ? 'Cadeau annulé' : 'Cadeau non réclamé'],
+                    ]);
+                    $this->wallets->credit($wallet, $e->remaining_amount);
+                    $this->ledger->recordDoubleEntry($tx, self::ACCOUNT, "wallet:{$wallet->id}", $e->remaining_amount, null, $why === 'cancelled' ? 'Cadeau annulé — recrédit' : 'Cadeau non réclamé — recrédit');
+                    $this->notify->toUser($e->sender, 'gift_expired', ($why === 'cancelled' ? 'Cadeau annulé : ' : 'Cadeau expiré : ') . number_format($e->remaining_amount, 0, ',', ' ') . " {$e->currency} recrédités", null, ['sms' => false]);
+                }
+                $status = $e->remaining_amount > 0 ? ($why === 'cancelled' ? 'cancelled' : 'refunded') : 'completed';
+                $e->update(['status' => $status, 'refunded_amount' => $e->remaining_amount, 'remaining_amount' => 0]);
+                return true;
+        });
+    }
+
+    // ------------------------------------------------------------ Présentation
+
+    public const OCCASIONS = ['anniversaire' => '🎂 Anniversaire', 'fete' => '🎉 Fête', 'felicitations' => '👏 Félicitations',
+        'mariage' => '💍 Mariage', 'naissance' => '👶 Naissance', 'autre' => '🎁 Autre'];
+
+    public const STATUS_LABELS = ['active' => 'En cours', 'completed' => 'Tout récupéré', 'refunded' => 'Expiré — reste recrédité',
+        'cancelled' => 'Annulé — reste recrédité', 'expired' => 'Expiré'];
+
+    /** Enveloppe envoyée : chiffres, destinataires et état de chaque part, lien et message de partage. */
+    public function presentSent(GiftEnvelope $e): array
+    {
+        $e->loadMissing('claims.recipient:id,full_name,phone', 'sender:id,full_name');
+        $claimed = $e->claims->whereNotNull('claimed_at');
+        $link = url('/g/' . $e->code);
+
+        return [
+            'code' => $e->code,
+            'mode' => $e->mode,
+            'mode_label' => $e->mode === 'random' ? 'Cagnotte surprise' : 'Cadeau à des contacts',
+            'occasion' => $e->occasion,
+            'occasion_label' => self::OCCASIONS[$e->occasion] ?? '🎁 Cadeau',
+            'message' => $e->message,
+            'currency' => $e->currency,
+            'total_amount' => (int) $e->total_amount,
+            'claimed_amount' => (int) $claimed->sum('amount'),
+            'remaining_amount' => (int) $e->remaining_amount,
+            'refunded_amount' => (int) ($e->refunded_amount ?? 0),
+            'shares' => (int) $e->shares,
+            'claimed_count' => $claimed->count(),
+            'status' => $e->status,
+            'status_label' => self::STATUS_LABELS[$e->status] ?? $e->status,
+            'created_at' => $e->created_at?->toIso8601String(),
+            'expires_at' => $e->expires_at?->toIso8601String(),
+            'can_cancel' => $e->status === 'active',
+            'share_link' => $link,
+            'share_text' => $this->shareText($e, $link),
+            'claims' => $e->claims->map(fn ($c) => [
+                'name' => $c->recipient?->full_name,
+                'phone' => $c->recipient_phone ? '+' . ltrim($c->recipient_phone, '+') : null,
+                'amount' => (int) $c->amount,
+                'claimed' => (bool) $c->claimed_at,
+                'claimed_at' => $c->claimed_at?->toIso8601String(),
+            ])->values(),
+        ];
+    }
+
+    /** Cadeau reçu (ou à ouvrir). */
+    public function presentReceived(GiftClaim $c): array
+    {
+        $e = $c->envelope;
+        return [
+            'code' => $e?->code,
+            'sender' => $e?->sender?->full_name,
+            'mode' => $e?->mode,
+            'occasion_label' => self::OCCASIONS[$e?->occasion] ?? '🎁 Cadeau',
+            'message' => $e?->message,
+            'currency' => $e?->currency ?? 'XAF',
+            'amount' => $c->claimed_at ? (int) $c->amount : null, // montant révélé à l'ouverture
+            'claimed' => (bool) $c->claimed_at,
+            'claimed_at' => $c->claimed_at?->toIso8601String(),
+            'can_open' => ! $c->claimed_at && $e?->status === 'active' && $e->expires_at?->isFuture(),
+            'expires_at' => $e?->expires_at?->toIso8601String(),
+            'status' => $c->claimed_at ? 'claimed' : ($e?->status === 'active' ? 'to_open' : 'expired'),
+        ];
+    }
+
+    public function shareText(GiftEnvelope $e, string $link): string
+    {
+        $occasion = trim(preg_replace('/^\S+\s/u', '', self::OCCASIONS[$e->occasion] ?? '') ?: '');
+        $intro = $e->mode === 'random'
+            ? "🧧 {$e->sender->full_name} partage une cagnotte surprise FlashPay" . ($occasion ? " ({$occasion})" : '') . ' : ' . $e->shares . ' parts à gagner !'
+            : "🧧 {$e->sender->full_name} vous offre un cadeau FlashPay" . ($occasion ? " ({$occasion})" : '') . '.';
+        return $intro
+            . ($e->message ? "\n« {$e->message} »" : '')
+            . "\n\nOuvrez-le ici : {$link}\nCode : {$e->code} — valable jusqu'au " . $e->expires_at->format('d/m/Y à H:i') . '.';
     }
 }

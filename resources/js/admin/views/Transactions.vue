@@ -54,11 +54,17 @@
       <div class="container-body flush" style="overflow-x: auto;">
         <table>
           <thead>
-            <tr><th>Référence</th><th>Canal</th><th>Expéditeur</th><th>Bénéficiaire</th><th class="num">Montant</th><th class="num">Frais</th><th>Statut</th><th>Date</th></tr>
+            <tr><th>Référence</th><th>Opération</th><th>Canal</th><th>Expéditeur</th><th>Bénéficiaire</th><th class="num">Montant</th><th class="num">Frais</th><th>Statut</th><th>Date</th></tr>
           </thead>
           <tbody>
             <tr v-for="t in transactions" :key="t.id" style="cursor:pointer" @click="$router.push('/transactions/' + t.id)">
               <td class="mono">{{ t.reference }}</td>
+              <td>
+                <span :style="{ color: t.journal?.flow === 'in' ? 'var(--success, #15803d)' : 'var(--danger, #dc2626)', fontWeight: 800 }">{{ t.journal?.arrow }}</span>
+                <strong> {{ t.journal?.label }}</strong><br />
+                <small style="color:var(--text-2)">{{ t.journal?.direction_label }} · {{ t.journal?.channel }}</small>
+                <small v-if="t.journal?.partner" style="display:block;color:var(--text-2)">via <strong>{{ t.journal.partner }}</strong></small>
+              </td>
               <td>{{ t.channel_label }}</td>
               <td><strong>{{ t.sender?.name || '—' }}</strong><br /><small class="mono" style="color:var(--text-2)">{{ t.sender?.account || t.source_rail }}</small></td>
               <td><strong>{{ t.beneficiary?.name || '—' }}</strong><br /><small class="mono" style="color:var(--text-2)">{{ t.beneficiary?.account || t.destination_rail }}</small></td>
@@ -67,7 +73,7 @@
               <td><span class="status" :class="statusClass(t.status)">{{ STATUS[t.status] || t.status }}</span></td>
               <td>{{ new Date(t.created_at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) }}</td>
             </tr>
-            <tr v-if="!loading && !transactions.length"><td colspan="8" class="stat-label">Aucune transaction pour ces filtres.</td></tr>
+            <tr v-if="!loading && !transactions.length"><td colspan="9" class="stat-label">Aucune transaction pour ces filtres.</td></tr>
           </tbody>
         </table>
       </div>
@@ -163,6 +169,10 @@ watch(() => route.query, () => { syncFromRoute(); load() }, { immediate: true })
 // --- Export de la liste (tous les résultats filtrés)
 const EXP_COLS = [
   { label: 'Référence', value: (t) => t.reference },
+  { label: 'Opération', value: (t) => t.journal?.label },
+  { label: 'Sens', value: (t) => t.journal?.direction_label },
+  { label: 'Type', value: (t) => t.journal?.channel },
+  { label: 'Partenaire', value: (t) => t.journal?.partner || 'Interne FlashPay' },
   { label: 'Canal', value: (t) => t.channel_label },
   { label: 'Type', value: (t) => t.type },
   { label: 'Expéditeur', value: (t) => t.sender?.name },

@@ -142,14 +142,32 @@ class ClientFeaturesController extends Controller
 
     // ------------------------------------------------ Cadeaux d'argent
 
-    public function gifts(Request $request)
+    public function gifts(Request $request, GiftService $gifts)
     {
         $u = $request->user();
+        $phones = array_unique(array_merge([$u->phone], array_map(fn ($p) => ltrim($p, '+'), \App\Support\Phone::candidates((string) $u->phone))));
+        $sent = GiftEnvelope::with('claims.recipient:id,full_name,phone', 'sender:id,full_name')->where('sender_id', $u->id)->latest()->limit(30)->get()
+            ->map(fn ($e) => $gifts->presentSent($e));
+        $received = \App\Models\GiftClaim::with('envelope.sender:id,full_name')
+            ->where(fn ($q) => $q->where('recipient_id', $u->id)->orWhereIn('recipient_phone', $phones))->latest()->limit(30)->get()
+            ->map(fn ($c) => $gifts->presentReceived($c));
+
         return response()->json([
-            'sent' => GiftEnvelope::withCount(['claims as claimed_count' => fn ($q) => $q->whereNotNull('claimed_at')])->where('sender_id', $u->id)->latest()->limit(30)->get(),
-            'received' => \App\Models\GiftClaim::with('envelope:id,code,sender_id,message,occasion,currency,status,expires_at,mode', 'envelope.sender:id,full_name')
-                ->where(fn ($q) => $q->where('recipient_id', $u->id)->orWhere('recipient_phone', $u->phone))->latest()->limit(30)->get(),
+            'summary' => [
+                'to_open' => $received->where('can_open', true)->count(),
+                'received_total' => (int) $received->where('claimed', true)->sum('amount'),
+                'sent_total' => (int) $sent->sum('claimed_amount'),
+                'active_sent' => $sent->where('status', 'active')->count(),
+            ],
+            'occasions' => GiftService::OCCASIONS,
+            'received' => $received->values(),
+            'sent' => $sent->values(),
         ]);
+    }
+
+    public function cancelGift(Request $request, GiftService $gifts, string $code)
+    {
+        return response()->json($gifts->presentSent($gifts->cancel($request->user(), $code)));
     }
 
     public function sendGift(Request $request, GiftService $gifts)
@@ -188,7 +206,7 @@ class ClientFeaturesController extends Controller
         }
 
         $env = $gifts->create($request->user(), $v);
-        return response()->json($env->toArray() + ['share_link' => url("/g/{$env->code}"), 'share_code' => $env->code], 201);
+        return response()->json($gifts->presentSent($env) + ['share_code' => $env->code], 201);
     }
 
     public function showGift(string $code)

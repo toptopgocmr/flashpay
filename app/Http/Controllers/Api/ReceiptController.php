@@ -38,6 +38,7 @@ class ReceiptController extends Controller
         $src = $tx->sourceWallet?->user;
         $dst = $tx->destinationWallet?->user;
         $operatorRef = null;
+        $p = \App\Support\TransactionPresenter::parties($tx);
         foreach ($tx->peexRequests as $p) {
             $j = json_decode((string) $p->payment_proof, true);
             $operatorRef = $operatorRef ?: ($j['financialTransactionId'] ?? null);
@@ -56,10 +57,10 @@ class ReceiptController extends Controller
             'currency' => $tx->currency ?: 'XAF',
             'received' => (int) ($tx->destination_amount ?: $tx->amount),
             'received_currency' => $tx->destination_currency ?: ($tx->currency ?: 'XAF'),
-            'sender' => $src?->full_name ?? ($m['sender_name'] ?? $m['payer_name'] ?? null),
-            'sender_account' => $tx->source_account ?: $src?->phone,
-            'beneficiary' => $m['merchant_name'] ?? $dst?->full_name ?? ($m['beneficiary_name'] ?? null),
-            'beneficiary_account' => $tx->destination_account ?: $dst?->phone,
+            'sender' => $src?->full_name ?? ($m['sender_name'] ?? $m['payer_name'] ?? $p['sender_name']),
+            'sender_account' => $tx->source_account ?: ($src?->phone ?: $p['sender_phone']),
+            'beneficiary' => $m['merchant_name'] ?? $dst?->full_name ?? ($m['beneficiary_name'] ?? $p['beneficiary_name']),
+            'beneficiary_account' => $tx->destination_account ?: ($dst?->phone ?: $p['beneficiary_phone']),
             'note' => $m['note'] ?? null,
             'operator_ref' => $operatorRef,
             'failure' => $tx->status === 'failed' ? $tx->failure_reason : null,

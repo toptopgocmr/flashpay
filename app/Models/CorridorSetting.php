@@ -10,7 +10,7 @@ class CorridorSetting extends Model
     protected $primaryKey = 'country';
     public $incrementing = false;
     protected $keyType = 'string';
-    protected $fillable = ['country', 'collect', 'payout', 'payout_api', 'note', 'updated_by'];
+    protected $fillable = ['country', 'collect', 'payout', 'payout_api', 'collect_partner', 'payout_partner', 'note', 'updated_by'];
 
     protected function casts(): array
     {

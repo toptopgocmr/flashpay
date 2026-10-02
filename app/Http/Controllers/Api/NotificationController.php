@@ -15,7 +15,32 @@ class NotificationController extends Controller
         if ($request->boolean('unread')) {
             $q->whereNull('read_at');
         }
+        // Surveillance par l'app (son + pop-up) : seulement les notifications plus récentes que after_id
+        if ($after = (int) $request->query('after_id')) {
+            $q->where('id', '>', $after);
+        }
         return response()->json($q->paginate(30) ->toArray() + ['unread' => AppNotification::where('user_id', $request->user()->id)->whereNull('read_at')->count()]);
+    }
+
+    /** Détail d'une notification (marquée lue) + récapitulatif complet de l'opération liée. */
+    public function show(Request $request, AppNotification $notification)
+    {
+        $user = $request->user();
+        abort_unless($notification->user_id === $user->id, 404);
+        if (! $notification->read_at) {
+            $notification->update(['read_at' => now()]);
+        }
+
+        $payload = $notification->toArray();
+        $txId = (int) (($notification->data ?? [])['transaction_id'] ?? 0);
+        $tx = $txId ? \App\Models\Transaction::with('sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone', 'initiator:id,full_name,phone')->find($txId) : null;
+        if ($tx && $tx->concerns($user)) {
+            $j = \App\Support\TransactionPresenter::present($tx, \App\Support\TransactionPresenter::walletIdsOf($user), (int) $user->id);
+            $payload['transaction'] = $tx->only(['id', 'reference', 'type', 'status', 'amount', 'fee', 'currency', 'destination_amount', 'destination_currency', 'created_at', 'completed_at'])
+                + $j + ['status_label' => $tx->statusLabel()];
+        }
+
+        return response()->json($payload);
     }
 
     public function markRead(Request $request, AppNotification $notification)

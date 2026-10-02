@@ -18,15 +18,34 @@ class PeexCorridors
     {
     }
 
+    /** Partenaires de paiement gérant les flux (collecte / versement). */
+    public const PARTNERS = [
+        'peex' => ['name' => 'PEEX', 'flows' => ['collect', 'payout']],
+        'digitwace' => ['name' => 'WacePay (Digitwace)', 'flows' => ['payout']],
+    ];
+
+    public static function partnerName(?string $key): ?string
+    {
+        return $key ? (self::PARTNERS[$key]['name'] ?? ucfirst($key)) : null;
+    }
+
     public function all(): array
     {
         $all = config('flashpay.corridors', []);
+        // Partenaire par défaut : PEEX, sauf versements listés dans DIGITWACE_PAYOUT_COUNTRIES
+        $wace = (array) config('flashpay.digitwace.payout_countries', []);
+        $home = strtoupper((string) config('flashpay.peex.default_country', 'CG'));
+        foreach ($all as $iso => &$c) {
+            $c['collect_partner'] ??= 'peex';
+            $c['payout_partner'] ??= (in_array($iso, $wace, true) || (in_array('*', $wace, true) && $iso !== $home)) ? 'digitwace' : 'peex';
+        }
+        unset($c);
         foreach ($this->overrides() as $iso => $o) {
             if (! isset($all[$iso])) {
                 continue;
             }
-            foreach (['collect', 'payout', 'payout_api'] as $k) {
-                if ($o[$k] !== null) {
+            foreach (['collect', 'payout', 'payout_api', 'collect_partner', 'payout_partner'] as $k) {
+                if (($o[$k] ?? null) !== null) {
                     $all[$iso][$k] = $o[$k];
                 }
             }
@@ -45,7 +64,8 @@ class PeexCorridors
     {
         try {
             return Cache::remember('flashpay:corridor_settings', 300, fn () => \App\Models\CorridorSetting::all()
-                ->mapWithKeys(fn ($o) => [$o->country => ['collect' => $o->collect, 'payout' => $o->payout, 'payout_api' => $o->payout_api]])
+                ->mapWithKeys(fn ($o) => [$o->country => ['collect' => $o->collect, 'payout' => $o->payout, 'payout_api' => $o->payout_api,
+                    'collect_partner' => $o->collect_partner, 'payout_partner' => $o->payout_partner]])
                 ->all());
         } catch (\Throwable) {
             return []; // table absente (migration non lancée)
@@ -205,6 +225,8 @@ class PeexCorridors
                 'collect' => (bool) $c['collect'],
                 'payout' => (bool) $c['payout'],
                 'payout_api' => $c['payout_api'],
+                'collect_partner' => $c['collect_partner'] ?? 'peex',
+                'payout_partner' => $c['payout_partner'] ?? 'peex',
                 'operators' => collect($c['operators'])->map(fn ($op, $key) => [
                     'corridor' => $key, 'label' => $op['label'], 'rail' => $op['rail'], 'prefixes' => $op['prefixes'],
                 ])->values()->all(),

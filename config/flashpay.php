@@ -16,6 +16,74 @@ return [
             'driver' => \App\Services\Connectors\PeexConnector::class,
             'enabled' => true,
         ],
+        // Digitwace / WacePay : versements (payout) vers les wallets mobile money,
+        // activé pour les pays listés dans DIGITWACE_PAYOUT_COUNTRIES.
+        'digitwace' => [
+            'driver' => \App\Services\Digitwace\DigitwaceConnector::class,
+            'enabled' => (bool) env('DIGITWACE_ENABLED', false),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Digitwace / WacePay (remittance, 120+ pays)
+    |--------------------------------------------------------------------------
+    | Clés : tableau de bord WacePay › Developers › API Credentials.
+    | La clé privée n'est affichée qu'UNE fois : la mettre uniquement dans les
+    | variables d'environnement du serveur (Railway), jamais dans l'app mobile.
+    | IP Whitelist : ajouter l'IP publique SORTANTE du serveur (Railway : activer
+    | les « Static Outbound IPs »), sinon WacePay répond 4001.
+    | Chemins et noms de champs : à aligner sur « Read the docs » du tableau de bord.
+    */
+    'digitwace' => [
+        'enabled' => (bool) env('DIGITWACE_ENABLED', false),
+        'base_url' => env('DIGITWACE_BASE_URL', 'https://api.wacepay.com/api/v1/'),
+        'public_key' => env('DIGITWACE_PUBLIC_KEY', ''),
+        'private_key' => env('DIGITWACE_PRIVATE_KEY', ''),
+        'send_api_key_header' => (bool) env('DIGITWACE_SEND_API_KEY_HEADER', false),
+        'timeout' => (int) env('DIGITWACE_TIMEOUT', 30),
+        'token_ttl_minutes' => (int) env('DIGITWACE_TOKEN_TTL_MINUTES', 55),   // jeton régénéré ~1 fois / heure
+        'payer_cache_hours' => (int) env('DIGITWACE_PAYER_CACHE_HOURS', 24),   // getPayerCode 1 fois / jour
+        'queue_wait_seconds' => (int) env('DIGITWACE_QUEUE_WAIT_SECONDS', 45), // file unique séquentielle
+        // Pays dont les versements passent par WacePay (ISO2, séparés par des virgules ; « * » = tous hors CG)
+        'payout_countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('DIGITWACE_PAYOUT_COUNTRIES', ''))))),
+        // payerCode forcés : « CG:MTN=XXXX,CG:AIRTEL=YYYY,SN=ZZZZ » (sinon recherche automatique via getPayerCode)
+        'payer_map' => collect(explode(',', (string) env('DIGITWACE_PAYER_CODES', '')))->filter(fn ($p) => str_contains($p, '='))
+            ->mapWithKeys(fn ($p) => [strtoupper(trim(explode('=', $p, 2)[0])) => trim(explode('=', $p, 2)[1])])->all(),
+        'default_purpose' => env('DIGITWACE_DEFAULT_PURPOSE', 'FAMILY_SUPPORT'),
+        'default_address' => env('DIGITWACE_DEFAULT_ADDRESS', 'Brazzaville'),
+        'default_city' => env('DIGITWACE_DEFAULT_CITY', 'Brazzaville'),
+
+        // Webhook entrant : {APP_URL}/api/webhooks/digitwace
+        'callback_url' => env('DIGITWACE_CALLBACK_URL'),
+        'webhook_secret' => env('DIGITWACE_WEBHOOK_SECRET', ''),
+        'signature_header' => env('DIGITWACE_SIGNATURE_HEADER', 'X-Wace-Signature'),
+        'webhook_token' => env('DIGITWACE_WEBHOOK_TOKEN', ''),
+        'webhook_ips' => env('DIGITWACE_WEBHOOK_IPS', ''),
+
+        // Chemins d'API (relatifs à base_url)
+        'paths' => [
+            'login' => env('DIGITWACE_PATH_LOGIN', 'auth/login'),
+            'create_sender' => env('DIGITWACE_PATH_SENDER', 'sender/create'),
+            'create_beneficiary' => env('DIGITWACE_PATH_BENEFICIARY', 'beneficiary/create'),
+            'payer_codes' => env('DIGITWACE_PATH_PAYERS', 'payer/codes'),
+            'wallet' => env('DIGITWACE_PATH_WALLET', 'transaction/wallet'),
+            'confirm' => env('DIGITWACE_PATH_CONFIRM', 'transaction/confirm'),
+            'status' => env('DIGITWACE_PATH_STATUS', 'transaction/status'),
+            'balance' => env('DIGITWACE_PATH_BALANCE', 'account/balance'),
+        ],
+
+        // Noms des champs envoyés
+        'fields' => [
+            'country' => 'countryCode',
+            'login' => ['public_key' => env('DIGITWACE_FIELD_PUBLIC_KEY', 'apiKey'), 'private_key' => env('DIGITWACE_FIELD_PRIVATE_KEY', 'secretKey')],
+            'party' => ['first_name' => 'firstName', 'last_name' => 'lastName', 'phone' => 'phoneNumber', 'country' => 'countryCode', 'address' => 'address', 'city' => 'city'],
+            'transaction' => [
+                'reference' => 'externalReference', 'sender_code' => 'senderCode', 'beneficiary_code' => 'beneficiaryCode',
+                'payer_code' => 'payerCode', 'amount' => 'amount', 'currency' => 'currency', 'wallet_number' => 'walletNumber',
+                'purpose' => 'purpose', 'callback_url' => 'callbackUrl', 'transaction_code' => 'transactionCode',
+            ],
+        ],
     ],
 
     /*
@@ -62,6 +130,10 @@ return [
         // Délai après lequel une demande « unknown » introuvable chez PEEX est
         // considérée comme jamais reçue (échec certain -> remboursement).
         'unknown_grace_minutes' => (int) env('PEEX_UNKNOWN_GRACE_MINUTES', 10),
+        // Délai max pour valider un paiement mobile money sur le téléphone (code secret).
+        // Au-delà : opération « échouée — délai dépassé » (rien n'a été débité) ;
+        // une validation tardive confirmée par PEEX rouvre et termine l'opération.
+        'validation_timeout_seconds' => (int) env('PEEX_VALIDATION_TIMEOUT_SECONDS', 180),
         // Alerte « solde bas » sur le tableau de bord (XAF disponibles par compte de versement)
         'low_balance_alert' => (int) env('PEEX_LOW_BALANCE_ALERT', 100000),
     ],

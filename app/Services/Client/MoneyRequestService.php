@@ -57,25 +57,79 @@ class MoneyRequestService
             'payer_phone' => ltrim($phone, '+'),
             'amount' => (int) $d['amount'],
             'currency' => $wallet->currency,
-            'note' => $d['note'] ?? null,
+            'note' => isset($d['note']) ? trim(preg_replace('/\s+/u', ' ', (string) $d['note'])) ?: null : null,
             'status' => 'pending',
+            'channel' => $d['channel'] ?? 'app',
             'expires_at' => now()->addDays(self::TTL_DAYS),
         ]);
-        $this->ask($req, $requester);
+        // « app » : notification FlashPay (SMS si l'ami n'a pas encore l'app).
+        // « sms » : SMS en plus de la notification. « whatsapp » / « link » : partagé par
+        // le demandeur depuis son téléphone (share_text) — notification in-app quand même.
+        $this->ask($req, $requester, false, ($d['channel'] ?? 'app') === 'sms');
         Audit::log('money_request.create', $req, ['amount' => $req->amount, 'payer_phone' => $req->payer_phone], $requester->id);
 
         return $req->load('payer:id,full_name,phone');
     }
 
-    protected function ask(MoneyRequest $req, User $requester, bool $reminder = false): void
+    protected function ask(MoneyRequest $req, User $requester, bool $reminder = false, bool $forceSms = false): void
     {
-        $amount = number_format($req->amount, 0, ',', ' ') . " {$req->currency}";
+        $amount = self::money($req->amount, $req->currency);
         if ($req->payer) {
             $this->notify->toUser($req->payer, 'money_request', ($reminder ? 'Rappel : ' : '') . "{$requester->full_name} vous demande {$amount}",
-                $req->note ?: 'Ouvrez FlashPay pour payer ou refuser.', ['data' => ['money_request_id' => $req->id]]);
-        } else {
-            $this->notify->sms('+' . $req->payer_phone, "FlashPay: {$requester->full_name} vous demande {$amount}. Installez FlashPay pour payer en toute securite.");
+                ($req->note ? "Motif : {$req->note}. " : '') . 'Ouvrez FlashPay pour payer ou refuser.',
+                ['data' => ['money_request_id' => $req->id]] + ($forceSms ? ['sms' => $this->smsText($req, $requester, $reminder)] : []));
         }
+        if (! $req->payer) {
+            $this->notify->sms('+' . $req->payer_phone, 'FlashPay: ' . $this->smsText($req, $requester, $reminder));
+        }
+    }
+
+    public static function money(int $amount, string $currency): string
+    {
+        return number_format($amount, 0, ',', ' ') . ' ' . $currency;
+    }
+
+    public function link(MoneyRequest $req): string
+    {
+        return url('/d/' . $req->reference);
+    }
+
+    /** SMS court, sans accents ni emoji (compatibilité GSM). */
+    protected function smsText(MoneyRequest $req, User $requester, bool $reminder = false): string
+    {
+        $t = ($reminder ? 'Rappel - ' : '') . "{$requester->full_name} vous demande " . number_format($req->amount, 0, ',', ' ') . " {$req->currency}"
+            . ($req->note ? " ({$req->note})" : '') . '. Payer: ' . $this->link($req) . ' Ref ' . $req->reference;
+        return \Illuminate\Support\Str::ascii($t);
+    }
+
+    /** Message à partager (WhatsApp, SMS du téléphone, copier) — propre et complet. */
+    public function shareText(MoneyRequest $req): string
+    {
+        $req->loadMissing('requester:id,full_name', 'payer:id,full_name');
+        $hello = $req->payer?->full_name ? 'Bonjour ' . explode(' ', trim($req->payer->full_name))[0] . ',' : 'Bonjour,';
+        return $hello . "\n\n"
+            . "Je vous envoie une demande de paiement FlashPay :\n"
+            . '💰 Montant : ' . self::money($req->amount, $req->currency) . "\n"
+            . ($req->note ? "📝 Motif : {$req->note}\n" : '')
+            . "👤 Demandé par : {$req->requester->full_name}\n"
+            . '📅 Valable jusqu\'au : ' . $req->expires_at?->format('d/m/Y') . "\n\n"
+            . 'Payez en un geste : ' . $this->link($req) . "\n"
+            . "Réf. {$req->reference}";
+    }
+
+    /** Demande enrichie pour l'app : libellés, lien et message de partage. */
+    public function present(MoneyRequest $req, ?User $viewer = null): array
+    {
+        $req->loadMissing('requester:id,full_name,phone', 'payer:id,full_name,phone');
+        return $req->toArray() + [
+            'amount_label' => self::money($req->amount, $req->currency),
+            'status_label' => ['pending' => 'En attente', 'paid' => 'Payée', 'declined' => 'Refusée', 'cancelled' => 'Annulée', 'expired' => 'Expirée'][$req->status] ?? $req->status,
+            'channel_label' => ['app' => 'Notification FlashPay', 'sms' => 'SMS', 'whatsapp' => 'WhatsApp', 'link' => 'Lien partagé'][$req->channel ?? 'app'] ?? 'Notification FlashPay',
+            'payer_display' => $req->payer?->full_name ?? '+' . ltrim((string) $req->payer_phone, '+'),
+            'payer_has_app' => (bool) $req->payer_id,
+            'share_link' => $this->link($req),
+            'share_text' => $viewer && $viewer->id === $req->requester_id ? $this->shareText($req) : null,
+        ];
     }
 
     protected function assertPayer(User $user, MoneyRequest $req): void
@@ -149,7 +203,7 @@ class MoneyRequestService
         if ($req->reminded_at && $req->reminded_at->gt(now()->subHour())) {
             throw new BusinessException('Relance déjà envoyée il y a moins d\'une heure.', 'too_soon');
         }
-        $this->ask($req, $user, true);
+        $this->ask($req, $user, true, $req->channel === 'sms');
         $req->update(['reminded_at' => now()]);
 
         return $req;
@@ -162,10 +216,11 @@ class MoneyRequestService
         $phones = array_map(fn ($p) => ltrim($p, '+'), \App\Support\Phone::candidates($user->phone));
 
         return [
-            'incoming' => MoneyRequest::with('requester:id,full_name,phone')
+            'incoming' => MoneyRequest::with('requester:id,full_name,phone', 'payer:id,full_name,phone')
                 ->where(fn ($q) => $q->where('payer_id', $user->id)->orWhereIn('payer_phone', $phones))
-                ->latest()->limit(50)->get(),
-            'outgoing' => MoneyRequest::with('payer:id,full_name,phone')->where('requester_id', $user->id)->latest()->limit(50)->get(),
+                ->latest()->limit(50)->get()->map(fn ($r) => $this->present($r, $user)),
+            'outgoing' => MoneyRequest::with('requester:id,full_name,phone', 'payer:id,full_name,phone')->where('requester_id', $user->id)->latest()->limit(50)->get()
+                ->map(fn ($r) => $this->present($r, $user)),
         ];
     }
 }

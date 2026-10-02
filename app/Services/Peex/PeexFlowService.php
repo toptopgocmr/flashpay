@@ -29,10 +29,34 @@ class PeexFlowService
     ) {
     }
 
-    /** Rail FlashPay : « wallet » (interne) ou « peex » (seule passerelle externe). */
+    /** Rail FlashPay : « wallet » (interne) ou « peex » (passerelle externe par défaut). */
     public function railFor(array $route): string
     {
         return ($route['rail'] ?? null) === 'wallet' ? 'wallet' : 'peex';
+    }
+
+    /** Rail de VERSEMENT : WacePay (Digitwace) pour les pays configurés, sinon PEEX. */
+    public function payoutRailFor(array $route): string
+    {
+        $rail = $this->railFor($route);
+        if ($rail !== 'peex' || empty($route['country'])) {
+            return $rail;
+        }
+        // Partenaire choisi pour ce pays dans la console (Pays & change › Partenaire)
+        try {
+            $partner = $this->corridors->country((string) $route['country'])['payout_partner'] ?? 'peex';
+        } catch (\Throwable) {
+            return $rail;
+        }
+        if ($partner !== 'digitwace') {
+            return 'peex';
+        }
+        if (! config('flashpay.rails.digitwace.enabled', false) || ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled()) {
+            // WacePay choisi mais pas configuré : on refuse plutôt que de router en silence ailleurs
+            throw new PeexException('Versements vers ce pays confiés à WacePay, mais WacePay n\'est pas encore configuré. Contactez le support FlashPay.');
+        }
+
+        return 'digitwace';
     }
 
     // ------------------------------------------------------------ Devis
@@ -175,7 +199,8 @@ class PeexFlowService
         if ($src['type'] === 'mobile' && ($p = $guard->checkCollect(fresh: true))) {
             throw new PeexException($p);
         }
-        if ($dst['type'] === 'mobile' && ($p = $guard->checkPayout($dst['country'], (int) $q['gross_destination_amount'], fresh: true))) {
+        $payoutRail = $dst['type'] === 'wallet' ? 'wallet' : $this->payoutRailFor($dst);
+        if ($dst['type'] === 'mobile' && $payoutRail === 'peex' && ($p = $guard->checkPayout($dst['country'], (int) $q['gross_destination_amount'], fresh: true))) {
             throw new PeexException($p);
         }
 
@@ -185,7 +210,7 @@ class PeexFlowService
             'source_rail' => match ($src['type']) { 'wallet' => 'wallet', 'card' => 'card', default => $this->railFor($src) },
             'source_account' => $src['type'] === 'mobile' ? $src['phone'] : null,
             'source_wallet_id' => $src['wallet_id'] ?? null,
-            'destination_rail' => $dst['type'] === 'wallet' ? 'wallet' : $this->railFor($dst),
+            'destination_rail' => $payoutRail,
             'destination_account' => $dst['type'] === 'mobile' ? $dst['phone'] : null,
             'destination_wallet_id' => $dst['wallet_id'] ?? null,
             'amount' => $q['amount'],

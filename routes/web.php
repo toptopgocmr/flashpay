@@ -22,6 +22,7 @@ Route::get('/checkout/{id}', [\App\Http\Controllers\PublicPagesController::class
 Route::post('/checkout/{id}', [\App\Http\Controllers\PublicPagesController::class, 'checkoutSubmit'])->where('id', 'pi_[a-z0-9]+')->middleware('throttle:20,1');
 Route::get('/p/{token}', [\App\Http\Controllers\PublicPagesController::class, 'paymentLink']);
 Route::get('/g/{code}', [\App\Http\Controllers\PublicPagesController::class, 'gift']);
+Route::get('/d/{reference}', [\App\Http\Controllers\PublicPagesController::class, 'moneyRequest'])->where('reference', 'DM-[A-Za-z0-9]+');
 Route::get('/docs/api-ecommerce', [\App\Http\Controllers\PublicPagesController::class, 'apiDocs']);
 
 // Reçus de transaction et médias du chat : liens temporaires signés

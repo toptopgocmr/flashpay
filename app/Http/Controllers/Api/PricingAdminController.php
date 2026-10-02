@@ -88,6 +88,8 @@ class PricingAdminController extends Controller
                 'default_collect' => (bool) ($d['collect'] ?? false),
                 'default_payout' => (bool) ($d['payout'] ?? false),
                 'default_payout_api' => $d['payout_api'] ?? null,
+                'collect_partner_name' => PeexCorridors::partnerName($c['collect_partner']),
+                'payout_partner_name' => PeexCorridors::partnerName($c['payout_partner']),
                 'overridden' => (bool) $o,
                 'note' => $o?->note,
                 'updated_at' => $o?->updated_at,
@@ -97,8 +99,29 @@ class PricingAdminController extends Controller
 
         $rates = ExchangeRate::orderBy('base')->orderBy('quote')->get();
 
+        $wace = app(\App\Services\Digitwace\DigitwaceClient::class);
+        $partners = [
+            [
+                'key' => 'peex', 'name' => 'PEEX', 'flows' => ['collect', 'payout'],
+                'ready' => (bool) config('flashpay.peex.secret_key') && (bool) config('flashpay.rails.peex.enabled'),
+                'mode' => config('flashpay.peex.sandbox') ? 'Sandbox' : 'Production',
+                'collect_countries' => $list->where('collect', true)->where('collect_partner', 'peex')->count(),
+                'payout_countries' => $list->where('payout', true)->where('payout_partner', 'peex')->count(),
+                'webhook' => url('/api/webhooks/peex/{service}'),
+            ],
+            [
+                'key' => 'digitwace', 'name' => 'WacePay (Digitwace)', 'flows' => ['payout'],
+                'ready' => $wace->enabled() && (bool) config('flashpay.rails.digitwace.enabled'),
+                'mode' => $wace->enabled() ? 'Clés saisies' : 'clés API à saisir',
+                'collect_countries' => 0,
+                'payout_countries' => $list->where('payout', true)->where('payout_partner', 'digitwace')->count(),
+                'webhook' => $wace->callbackUrl(),
+            ],
+        ];
+
         return response()->json([
             'sandbox' => (bool) config('flashpay.peex.sandbox'),
+            'partners' => $partners,
             'corridors' => $list,
             'zones' => ['CEMAC' => 'XAF', 'UEMOA' => 'XOF', 'RDC' => 'CDF', 'GUINEE' => 'GNF'],
             'kpi' => [
@@ -121,13 +144,22 @@ class PricingAdminController extends Controller
             'collect' => 'sometimes|boolean',
             'payout' => 'sometimes|boolean',
             'payout_api' => 'sometimes|nullable|in:disbursement,remittance',
+            // Partenaire qui gère les flux : collecte = PEEX (seul partenaire de collecte), versement = PEEX ou WacePay
+            'collect_partner' => 'sometimes|nullable|in:peex',
+            'payout_partner' => 'sometimes|nullable|in:peex,digitwace',
             'note' => 'sometimes|nullable|string|max:190',
         ]);
 
         CorridorSetting::updateOrCreate(['country' => $iso], $v + ['updated_by' => $request->user()->id]);
         PeexCorridors::flushOverrides();
+        \App\Support\Audit::log('corridor.update', null, ['country' => $iso] + $v, $request->user()->id);
 
-        return response()->json(['message' => 'Corridor mis à jour.', 'corridor' => collect($this->corridors->catalog())->firstWhere('country', $iso)]);
+        $message = isset($v['payout_partner'])
+            ? 'Versements vers ' . $iso . ' gérés par ' . PeexCorridors::partnerName($v['payout_partner']) . '.'
+              . ($v['payout_partner'] === 'digitwace' && ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled() ? ' Attention : WacePay n\'est pas encore configuré, les envois vers ce pays seront refusés.' : '')
+            : 'Corridor mis à jour.';
+
+        return response()->json(['message' => $message, 'corridor' => collect($this->corridors->catalog())->firstWhere('country', $iso)]);
     }
 
     /** Revient aux valeurs de config/corridors.php. */

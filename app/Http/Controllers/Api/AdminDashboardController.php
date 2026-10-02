@@ -187,6 +187,8 @@ class AdminDashboardController extends Controller
             ->paginate(25)->withQueryString();
         $page->getCollection()->transform(function ($t) {
             $t->channel_label = TransactionChannels::LABELS[$t->channel] ?? $t->channel;
+            // Journal : libellé (Recharge compte FlashPay, Transfert entrant/sortant…), sens crédit/débit, canal
+            $t->journal = \App\Support\TransactionPresenter::present($t);
             return $this->withParties($t);
         });
 

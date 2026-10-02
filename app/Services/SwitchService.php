@@ -33,7 +33,11 @@ class SwitchService
 
     public function connectorFor(string $rail): PaymentRailConnector
     {
-        // PEEX est l'unique passerelle externe (le wallet interne n'a pas de connecteur).
+        // Digitwace / WacePay : versements vers les pays configurés
+        if ($rail === 'digitwace' && config('flashpay.rails.digitwace.enabled', false)) {
+            return app(\App\Services\Digitwace\DigitwaceConnector::class);
+        }
+        // PEEX : collecte et versements (le wallet interne n'a pas de connecteur).
         if ($rail !== 'peex' || ! config('flashpay.rails.peex.enabled', false)) {
             throw new \InvalidArgumentException("Rail de paiement non disponible : {$rail}");
         }

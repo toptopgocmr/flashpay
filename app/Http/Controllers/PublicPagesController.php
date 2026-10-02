@@ -84,6 +84,20 @@ class PublicPagesController extends Controller
             . ($e->status === 'active' ? '<a class="btn" href="flashpay://gift?c=' . e($e->code) . '">Ouvrir dans FlashPay</a><p class="muted">Code : <b>' . e($e->code) . '</b> — valable jusqu\'au ' . $e->expires_at->format('d/m/Y H:i') . '</p>' : '<p class="err">Ce cadeau n\'est plus disponible.</p>')));
     }
 
+    /** Lien de demande d'argent partagé (WhatsApp, SMS…) → ouverture dans l'app. */
+    public function moneyRequest(string $reference)
+    {
+        $r = \App\Models\MoneyRequest::with('requester:id,full_name')->where('reference', strtoupper($reference))->firstOrFail();
+        $amount = number_format($r->amount, 0, ',', ' ') . ' ' . $r->currency;
+        $state = $r->isOpen()
+            ? '<a class="btn" href="flashpay://request?r=' . e($r->reference) . '">Payer avec FlashPay</a>'
+              . '<p class="muted">Pas encore FlashPay ? Installez l\'application et inscrivez-vous avec le numéro qui a reçu cette demande : elle vous attendra dans « Demandes d\'argent ».</p>'
+              . '<p class="muted">Valable jusqu\'au ' . $r->expires_at?->format('d/m/Y') . ' · Réf. ' . e($r->reference) . '</p>'
+            : '<p class="err">Cette demande n\'est plus à régler (' . e(['paid' => 'déjà payée', 'declined' => 'refusée', 'cancelled' => 'annulée', 'expired' => 'expirée'][$r->status] ?? $r->status) . ').</p>';
+        return response($this->layout('Demande FlashPay', '<div style="font-size:44px">💸</div><h2>' . e($r->requester->full_name) . ' vous demande</h2><p class="amount">' . $amount . '</p>'
+            . ($r->note ? '<p>« ' . e($r->note) . ' »</p>' : '') . $state));
+    }
+
     public function apiDocs()
     {
         return response($this->layout('API e-commerce FlashPay', file_get_contents(resource_path('docs/api-ecommerce.html')), 760));

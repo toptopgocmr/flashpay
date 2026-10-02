@@ -110,7 +110,10 @@ class PeexStatusHandler
         $reason = trim("{$req->status} " . ($req->payment_proof ?? $req->message ?? ''));
 
         match ($leg) {
-            'C' => $ok ? $this->switch->onSourceConfirmed($tx) : $this->switch->onSourceFailed($tx, $reason),
+            // Collecte validée après expiration du délai : la transaction est rouverte et menée à terme
+            'C' => $ok
+                ? ($tx->status === 'failed' ? app(PendingTimeoutService::class)->reopenAfterLateSuccess($tx) : $this->switch->onSourceConfirmed($tx))
+                : $this->switch->onSourceFailed($tx, $reason),
             'R' => $ok ? $this->switch->onRefundConfirmed($tx) : $this->switch->onRefundFailed($tx, $reason),
             default => $ok ? $this->switch->onDestinationConfirmed($tx) : $this->switch->onDestinationFailed($tx, $reason),
         };

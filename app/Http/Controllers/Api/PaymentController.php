@@ -153,11 +153,11 @@ class PaymentController extends Controller
 
         // Sans callback PEEX ni planificateur, le statut n'avancerait jamais : l'app
         // interroge cette route toutes les 3 s, on vérifie donc auprès de PEEX
-        // (au plus une fois toutes les 10 s par demande).
+        // (au plus une fois toutes les 4 s par demande).
         if ($transaction->status === 'processing') {
             $handler = app(\App\Services\Peex\PeexStatusHandler::class);
             foreach ($transaction->peexRequests()->whereNull('finalized_at')->get() as $req) {
-                if (\Illuminate\Support\Facades\Cache::add('peex:poll:' . $req->id, 1, 10)) {
+                if (\Illuminate\Support\Facades\Cache::add('peex:poll:' . $req->id, 1, 4)) {
                     try {
                         $handler->refresh($req);
                     } catch (\Throwable $e) {
@@ -165,6 +165,9 @@ class PaymentController extends Controller
                     }
                 }
             }
+            $transaction->refresh();
+            // Délai de validation dépassé : on conclut sans attendre le planificateur
+            app(\App\Services\Peex\PendingTimeoutService::class)->expireIfStale($transaction);
             $transaction->refresh();
         }
 
@@ -231,11 +234,16 @@ class PaymentController extends Controller
 
     public function txPayload(Transaction $tx): array
     {
-        $tx->loadMissing('peexRequests');
+        $tx->loadMissing('peexRequests', 'sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone', 'initiator:id,full_name,phone');
         $pending = $tx->status === 'processing';
         $meta = $tx->meta ?? [];
+        // Récapitulatif : expéditeur, bénéficiaire et détails de l'opération (vue de l'utilisateur connecté)
+        $viewer = auth()->user();
+        $journal = $viewer
+            ? \App\Support\TransactionPresenter::present($tx, \App\Support\TransactionPresenter::walletIdsOf($viewer), (int) $viewer->id)
+            : \App\Support\TransactionPresenter::present($tx);
 
-        return [
+        return \Illuminate\Support\Arr::only($journal, ['label', 'direction', 'flow', 'channel', 'sender_name', 'sender_phone', 'beneficiary_name', 'beneficiary_phone', 'details']) + [
             'id' => $tx->id,
             'reference' => $tx->reference,
             'type' => $tx->type,
@@ -265,8 +273,13 @@ class PaymentController extends Controller
                 $pending => 'Paiement reçu, versement en cours chez l\'opérateur du bénéficiaire.',
                 $tx->status === 'reversed' && $tx->source_rail === 'peex' => 'Échec du versement : vous avez été remboursé sur le ' . $tx->source_account . '.',
                 $tx->status === 'reversed' => 'Échec du versement : votre wallet a été remboursé.',
+                ! empty($meta['validation_timeout']) && $tx->status === 'failed' => 'Délai dépassé : le paiement n\'a pas été validé sur le téléphone. Aucun montant n\'a été débité. Vous pouvez recommencer.',
                 default => $tx->failure_reason ?: 'Opération échouée.',
             },
+            // Compte à rebours « Validez sur le téléphone » (secondes restantes)
+            'validation_expires_at' => ($d = \App\Services\Peex\PendingTimeoutService::deadline($tx))?->toIso8601String(),
+            'validation_seconds_left' => $d ? (int) max(0, now()->diffInSeconds($d, false)) : null,
+            'validation_timeout_seconds' => \App\Services\Peex\PendingTimeoutService::timeoutSeconds(),
             'created_at' => $tx->created_at,
             'completed_at' => $tx->completed_at,
         ];

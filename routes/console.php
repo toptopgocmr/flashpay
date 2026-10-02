@@ -11,6 +11,9 @@ $scheduleOut = is_writable('/proc/1/fd/1') ? '/proc/1/fd/1' : storage_path('logs
 // En local : lancer `php artisan schedule:work` dans un terminal.
 Schedule::command('peex:sync')->everyMinute()->withoutOverlapping()->appendOutputTo($scheduleOut);
 
+// Statuts des versements Digitwace / WacePay en attente (complément du webhook).
+Schedule::command('digitwace:sync')->everyMinute()->withoutOverlapping()->appendOutputTo($scheduleOut);
+
 // Remboursement des bons de retrait expirés (cash pickup / GAB).
 Schedule::command('vouchers:expire')->everyTenMinutes()->withoutOverlapping()->appendOutputTo($scheduleOut);
 

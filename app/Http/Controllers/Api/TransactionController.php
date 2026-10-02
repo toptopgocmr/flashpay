@@ -7,6 +7,7 @@ use App\Models\Merchant;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\SwitchService;
+use App\Support\TransactionPresenter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -21,13 +22,19 @@ class TransactionController extends Controller
      */
     public function index(Request $request)
     {
-        $walletId = $request->user()->wallet?->id;
+        $user = $request->user();
+        $walletIds = TransactionPresenter::walletIdsOf($user);
 
-        $transactions = Transaction::where('source_wallet_id', $walletId)
-            ->orWhere('destination_wallet_id', $walletId)
-            ->orWhere('initiated_by', $request->user()->id)
+        $q = Transaction::query()
+            ->where(fn ($w) => $w->whereIn('source_wallet_id', $walletIds ?: [0])
+                ->orWhereIn('destination_wallet_id', $walletIds ?: [0])
+                ->orWhere('initiated_by', $user->id));
+
+        $transactions = $q->with(['sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone', 'initiator:id,full_name,phone'])
             ->latest()
             ->paginate(20);
+
+        $transactions->getCollection()->transform(fn (Transaction $t) => $this->journalLine($t, $walletIds, $user->id));
 
         return response()->json($transactions);
     }
@@ -36,11 +43,24 @@ class TransactionController extends Controller
     {
         // Un client ne voit que ses propres opérations.
         abort_unless($transaction->concerns($request->user()), 404);
-        $transaction->load('ledgerEntries', 'notes.author', 'initiator');
-        return response()->json($transaction->toArray() + [
-            'type_label' => $transaction->typeLabel(),
+        $transaction->load('ledgerEntries', 'notes.author', 'initiator', 'sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone');
+        $journal = TransactionPresenter::present($transaction, TransactionPresenter::walletIdsOf($request->user()), $request->user()->id);
+
+        return response()->json($transaction->toArray() + $journal + [
+            'type_label' => $journal['label'],
             'status_label' => $transaction->statusLabel(),
         ]);
+    }
+
+    /** Ligne du journal : transaction + sens (crédit/débit), libellé, canal, contrepartie. */
+    protected function journalLine(Transaction $t, array $walletIds, int $userId): array
+    {
+        $line = $t->only(['id', 'reference', 'type', 'source_rail', 'destination_rail', 'amount', 'fee', 'currency',
+            'status', 'stage', 'failure_reason', 'created_at', 'completed_at', 'destination_amount', 'destination_currency']);
+        $line['created_at'] = $t->created_at?->toIso8601String();
+        $line['completed_at'] = $t->completed_at?->toIso8601String();
+
+        return $line + TransactionPresenter::present($t, $walletIds, $userId) + ['status_label' => $t->statusLabel()];
     }
 
     /**

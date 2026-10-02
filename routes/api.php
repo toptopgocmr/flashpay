@@ -58,6 +58,9 @@ Route::prefix('v1')->middleware('merchant.api')->group(function () {
     Route::get('/refunds/{id}', [PaymentIntentApiController::class, 'showRefund']);
 });
 // Callbacks PEEX (Basic Auth) — une URL par service, + URL générique
+// Webhook Digitwace / WacePay (statut des versements) — vérifié par signature puis revalidé via l'API
+Route::post('/webhooks/digitwace', \App\Http\Controllers\Api\DigitwaceWebhookController::class)->middleware('throttle:120,1')->name('webhooks.digitwace');
+
 Route::post('/webhooks/peex/{service?}', [WebhookController::class, 'peex'])
     ->where('service', 'collect|disbursement|remittance')
     ->name('webhooks.peex');
@@ -95,6 +98,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+    Route::get('/notifications/{notification}', [NotificationController::class, 'show'])->whereNumber('notification');
 
     // --- Support, litiges (§13.2, §16) ---
     Route::get('/support/tickets', [SupportCenterController::class, 'tickets']);
@@ -124,6 +128,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/gifts', [ClientFeaturesController::class, 'sendGift'])->middleware(['cap:send', 'pin', 'idempotent']);
     Route::get('/gifts/{code}', [ClientFeaturesController::class, 'showGift']);
     Route::post('/gifts/{code}/claim', [ClientFeaturesController::class, 'claimGift'])->middleware('throttle:20,1');
+    Route::post('/gifts/{code}/cancel', [ClientFeaturesController::class, 'cancelGift'])->middleware('throttle:20,1');
     Route::get('/splits', [ClientFeaturesController::class, 'splits']);
     Route::post('/splits', [ClientFeaturesController::class, 'createSplit']);
     Route::post('/splits/{split}/remind', [ClientFeaturesController::class, 'remindSplit']);
