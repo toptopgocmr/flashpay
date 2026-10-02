@@ -77,6 +77,19 @@ class DigitwaceStatusHandler
     {
         $req->update(['status' => $status, 'finalized_at' => now()]);
         $tx = $req->transaction;
+        if ($tx && $req->operation === 'checkout') {
+            // Carte / compte bancaire payé sur la page WacePay
+            $pan = collect([(array) ($req->last_response ?? []), (array) ($req->last_callback ?? [])])
+                ->crossJoin(['data.maskedPan', 'data.cardNumber', 'data.card.last4', 'data.last4', 'data.accountNumber', 'data.iban', 'maskedPan', 'cardNumber', 'last4'])
+                ->map(fn ($p) => data_get($p[0], $p[1]))->first(fn ($v) => is_scalar($v) && $v !== '');
+            $bank = $tx->source_rail === 'bank';
+            $masked = ($bank ? 'Compte bancaire' : 'Carte') . ($pan ? ' •••• ' . substr(preg_replace('/\D/', '', (string) $pan) ?: (string) $pan, -4) : '') . ' (WacePay)';
+            app(\App\Services\Payments\CardPaymentService::class)->complete(
+                (string) $tx->source_external_ref, $status === 'successful', $masked,
+                $status === 'successful' ? null : 'WacePay : ' . ($bank ? 'prélèvement bancaire' : 'paiement par carte') . ' refusé (' . $reason . ')'
+            );
+            return $req->fresh();
+        }
         if ($tx && $req->operation === 'payin') {
             // Collecte : validation du client sur son téléphone
             if ($status === 'successful') {

@@ -268,7 +268,7 @@ class SwitchService
 
         // Source carte bancaire ou collecte WacePay : montant ET frais recrédités
         // immédiatement sur le wallet FlashPay du client (aucun frais conservé).
-        if (in_array($tx->source_rail, ['card', 'digitwace'], true) && ($wallet = $this->refundWalletOf($tx))) {
+        if (in_array($tx->source_rail, ['card', 'bank', 'digitwace'], true) && ($wallet = $this->refundWalletOf($tx))) {
             return DB::transaction(function () use ($tx, $wallet, $reason) {
                 $from = "{$tx->source_rail}:" . ($tx->source_account ?: 'client');
                 $this->walletService->credit($wallet, $tx->amount + $tx->fee);

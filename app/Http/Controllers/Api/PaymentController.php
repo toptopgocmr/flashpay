@@ -58,9 +58,11 @@ class PaymentController extends Controller
 
         $q = match ($v['operation']) {
             'transfer' => $this->flows->quoteTransfer($user, $v['source'], $v['source_phone'] ?? null, $v['destination_phone'], $v['amount'], $v),
-            'deposit' => ($v['source'] ?? null) === 'card'
-                ? $this->flows->quoteCardDeposit($user, $v['amount'])
-                : $this->flows->quoteDeposit($user, $v['source_phone'] ?? $user->phone, $v['amount'], $v),
+            'deposit' => match ($v['source'] ?? null) {
+                'card' => $this->flows->quoteCardDeposit($user, $v['amount']),
+                'bank' => $this->flows->quoteBankDeposit($user, $v['amount']),
+                default => $this->flows->quoteDeposit($user, $v['source_phone'] ?? $user->phone, $v['amount'], $v),
+            },
             'withdraw' => $this->flows->quoteWithdraw($user, $v['destination_phone'] ?? $user->phone, $v['amount'], $v),
             'merchant' => $this->flows->quoteMerchant($user, $this->merchant($v['merchant_code']), $v['source'], $v['source_phone'] ?? null, $v['amount'], $v),
         };
@@ -79,14 +81,16 @@ class PaymentController extends Controller
     public function deposit(Request $request)
     {
         $v = $request->validate([
-            'method' => 'nullable|in:mobile_money,card',
+            'method' => 'nullable|in:mobile_money,card,bank',
             'phone' => 'nullable|string|max:25',
             'amount' => 'required|integer|min:10',
             'source_country' => 'nullable|string|size:2',
         ]);
-        $tx = ($v['method'] ?? 'mobile_money') === 'card'
-            ? $this->flows->cardDeposit($request->user(), $v['amount'])
-            : $this->flows->deposit($request->user(), $v['phone'] ?? $request->user()->phone, $v['amount'], $v);
+        $tx = match ($v['method'] ?? 'mobile_money') {
+            'card' => $this->flows->cardDeposit($request->user(), $v['amount']),
+            'bank' => $this->flows->bankDeposit($request->user(), $v['amount']),
+            default => $this->flows->deposit($request->user(), $v['phone'] ?? $request->user()->phone, $v['amount'], $v),
+        };
 
         return $this->respond($tx);
     }
@@ -122,7 +126,7 @@ class PaymentController extends Controller
     {
         $v = $request->validate([
             'merchant_code' => 'required|string',
-            'source' => 'required|in:wallet,mobile,card',
+            'source' => 'required|in:wallet,mobile,card,bank',
             'source_phone' => 'required_if:source,mobile|nullable|string|max:25',
             'source_country' => 'nullable|string|size:2',
             'amount' => 'required|integer|min:10',

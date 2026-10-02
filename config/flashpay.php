@@ -79,6 +79,9 @@ return [
             'balance' => env('DIGITWACE_PATH_BALANCE', 'account/balance'),
             // Collecte (PAYIN) : débit du wallet mobile money du client
             'payin' => env('DIGITWACE_PATH_PAYIN', 'payin/mobile'),
+            // Collecte par carte Visa / Mastercard et par compte bancaire : page de paiement WacePay (3-D Secure / banque)
+            'payin_card' => env('DIGITWACE_PATH_PAYIN_CARD', 'payin/card'),
+            'payin_bank' => env('DIGITWACE_PATH_PAYIN_BANK', 'payin/bank'),
         ],
 
         // Noms des champs envoyés

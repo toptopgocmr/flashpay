@@ -66,6 +66,10 @@ class QuoteService
         if ($src['type'] === 'card') {
             $fee += $this->fees->fee('card', 'national', $amount);
         }
+        // Prélèvement bancaire : frais « bank_debit » de la grille (0 si non défini)
+        if ($src['type'] === 'bank') {
+            $fee += $this->fees->fee('bank_debit', 'national', $amount);
+        }
 
         try {
             $fx = $this->fx->convert($amount, $src['currency'], $dst['currency']);
@@ -107,7 +111,7 @@ class QuoteService
             'gross_destination_amount' => $fx['amount'],
             'available' => empty($problems),
             'problems' => array_values(array_unique($problems)),
-            'async' => in_array($src['type'], ['mobile', 'card'], true) || $dst['type'] === 'mobile',
+            'async' => in_array($src['type'], ['mobile', 'card', 'bank'], true) || $dst['type'] === 'mobile',
         ];
     }
 
@@ -188,6 +192,28 @@ class QuoteService
                 'balance' => $side === 'source' ? (int) $wallet->balance : null,
                 'operator' => 'FlashPay',
                 'rail' => 'wallet',
+            ];
+        }
+
+        // Compte bancaire (prélèvement, page sécurisée de la banque / WacePay)
+        if ($type === 'bank' && $side === 'source') {
+            $wallet = $e['wallet'] ?? throw new PeexException('Wallet introuvable');
+            $country = strtoupper($wallet->country ?: $this->countryOfUser($wallet->user));
+            $c = $this->corridors->country($country);
+            if (! PaymentMethodsService::bankDebitEnabled($country)) {
+                $problems[] = 'La recharge depuis un compte bancaire n\'est pas encore disponible.';
+            }
+            return [
+                'type' => 'bank',
+                'name' => $wallet->user?->full_name,
+                'phone' => null,
+                'country' => $country,
+                'country_name' => $c['name'],
+                'flag' => $c['flag'] ?? '',
+                'zone' => $c['zone'],
+                'currency' => $wallet->currency ?: $c['currency'],
+                'operator' => 'Compte bancaire',
+                'rail' => 'bank',
             ];
         }
 

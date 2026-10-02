@@ -123,6 +123,23 @@ class PeexFlowService
         return $this->execute($user, $this->quoteCardDeposit($user, $amount), 'cash_in', $meta);
     }
 
+    /** Recharge du wallet depuis un compte bancaire (prélèvement validé sur la page de la banque / WacePay). */
+    public function quoteBankDeposit(User $user, int $amount): array
+    {
+        $wallet = $this->walletOf($user);
+        return $this->quotes->quote([
+            'operation' => 'cash_in',
+            'amount' => $amount,
+            'source' => ['type' => 'bank', 'wallet' => $wallet],
+            'destination' => ['type' => 'wallet', 'wallet' => $wallet],
+        ]);
+    }
+
+    public function bankDeposit(User $user, int $amount, array $meta = []): Transaction
+    {
+        return $this->execute($user, $this->quoteBankDeposit($user, $amount), 'cash_in', $meta);
+    }
+
     public function quoteWithdraw(User $user, string $phone, int $amount, array $opt = []): array
     {
         return $this->quotes->quote([
@@ -236,7 +253,7 @@ class PeexFlowService
         $payload = [
             'type' => $type,
             'scope' => $q['scope'],
-            'source_rail' => match ($src['type']) { 'wallet' => 'wallet', 'card' => 'card', default => $collectRail },
+            'source_rail' => match ($src['type']) { 'wallet' => 'wallet', 'card' => 'card', 'bank' => 'bank', default => $collectRail },
             'source_account' => $src['type'] === 'mobile' ? $src['phone'] : null,
             'source_wallet_id' => $src['wallet_id'] ?? null,
             'destination_rail' => $payoutRail,
@@ -268,8 +285,8 @@ class PeexFlowService
         ];
 
         // Carte : la source est confirmée par la page de paiement sécurisée (3-D Secure)
-        if ($src['type'] === 'card') {
-            $payload['source_rail'] = 'card';
+        if (in_array($src['type'], ['card', 'bank'], true)) {
+            $payload['source_rail'] = $src['type'];
             $tx = $this->switch->createPending($payload, 'awaiting_card');
             return app(\App\Services\Payments\CardPaymentService::class)->startCheckout($tx);
         }

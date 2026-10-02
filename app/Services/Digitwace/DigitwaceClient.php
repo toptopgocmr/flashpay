@@ -224,6 +224,51 @@ class DigitwaceClient
         ];
     }
 
+    /**
+     * Collecte par carte Visa / Mastercard ou par compte bancaire : WacePay crée une
+     * page de paiement sécurisée (3-D Secure / banque) et renvoie son URL. Le client
+     * y saisit sa carte ou valide le prélèvement ; le résultat arrive par webhook
+     * (revérifié via status()). FlashPay ne voit jamais le numéro de carte.
+     *
+     * @param  'card'|'bank'  $method
+     * @return array{url:?string, wace_id:string, status:string, raw:array}
+     */
+    public function checkout(string $method, string $reference, int $amount, string $currency, array $customer, string $returnUrl): array
+    {
+        $f = $this->cfg('fields.transaction');
+        [$first, $last] = $this->splitName($customer['name'] ?? 'Client FlashPay');
+        $json = $this->call('post', $method === 'bank' ? 'payin_bank' : 'payin_card', array_filter([
+            $f['reference'] => $reference,
+            $f['amount'] => $amount,
+            $f['currency'] => $currency,
+            'paymentMethod' => $method === 'bank' ? 'BANK' : 'CARD',
+            'description' => $customer['description'] ?? "FlashPay {$reference}",
+            'firstName' => $first,
+            'lastName' => $last,
+            'customerName' => $customer['name'] ?? null,
+            'customerEmail' => $customer['email'] ?? null,
+            'customerPhone' => isset($customer['phone']) ? '+' . preg_replace('/\D/', '', $customer['phone']) : null,
+            $this->cfg('fields.country') => $customer['country'] ?? null,
+            $f['callback_url'] => $this->callbackUrl(),
+            'returnUrl' => $returnUrl,
+            'successUrl' => $returnUrl,
+            'cancelUrl' => $returnUrl,
+            'failureUrl' => $returnUrl,
+        ], fn ($v) => $v !== null && $v !== ''));
+
+        $url = collect(['paymentUrl', 'payment_url', 'checkoutUrl', 'checkout_url', 'redirectUrl', 'redirect_url', 'paymentLink', 'payment_link', 'link', 'url'])
+            ->flatMap(fn ($k) => ["data.{$k}", $k, "data.payment.{$k}"])
+            ->map(fn ($k) => data_get($json, $k))
+            ->first(fn ($v) => is_string($v) && str_starts_with($v, 'http'));
+
+        return [
+            'url' => $url,
+            'wace_id' => (string) (data_get($json, 'data.transactionCode') ?? data_get($json, 'transactionCode') ?? data_get($json, 'data.id') ?? $reference),
+            'status' => self::normalize(data_get($json, 'data.status') ?? data_get($json, 'status') ?? 'pending'),
+            'raw' => $json,
+        ];
+    }
+
     /** @return array{status:string, raw_status:?string, message:?string, raw:array} */
     public function status(string $waceIdOrReference): array
     {

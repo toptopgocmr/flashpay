@@ -19,15 +19,21 @@ class CardCheckoutController extends Controller
 
     public function show(string $token)
     {
-        abort_unless($this->cards->driver() === 'sandbox', 404);
         $tx = $this->cards->pending($token);
+        $driver = $tx->meta['card_driver'] ?? $this->cards->driver($tx);
+        if ($driver === 'wacepay') {
+            // Retour de la page WacePay : on vérifie le résultat auprès de l'API
+            $tx = $this->cards->syncWacepay($tx);
+            return response($this->page($tx, $token, null, true));
+        }
+        abort_unless($driver === 'sandbox', 404);
 
         return response($this->page($tx, $token));
     }
 
     public function submit(Request $request, string $token)
     {
-        abort_unless($this->cards->driver() === 'sandbox', 404);
+        abort_unless(($this->cards->pending($token)->meta['card_driver'] ?? null) === 'sandbox', 404);
 
         if ($request->input('action') === 'cancel') {
             $tx = $this->cards->complete($token, false, null, 'Paiement par carte annulé');
@@ -75,17 +81,24 @@ class CardCheckoutController extends Controller
         return $sum % 10 === 0;
     }
 
-    protected function page($tx, string $token, ?string $error = null): string
+    protected function page($tx, string $token, ?string $error = null, bool $wacepay = false): string
     {
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
         $amount = number_format($tx->amount + $tx->fee, 0, ',', ' ') . ' ' . $tx->currency;
         $action = url("/api/card-checkout/{$token}");
 
-        if ($tx->status !== 'processing' || $tx->stage !== 'awaiting_card') {
+        if ($wacepay && $tx->status === 'processing' && $tx->stage === 'awaiting_card') {
+            $retry = $e($tx->meta['checkout_url'] ?? '');
+            $body = '<div class="icon wait">…</div><h1>Paiement en cours de vérification</h1>'
+                . '<p>' . $e($amount) . ' · Réf. ' . $e($tx->reference) . '</p>'
+                . '<p class="muted">Le résultat est confirmé par WacePay en quelques instants. Vous pouvez revenir dans l\'application FlashPay : vous serez notifié.</p>'
+                . '<form method="get"><button>Actualiser</button></form>'
+                . ($retry ? '<p><a href="' . $retry . '">Retourner sur la page de paiement</a></p>' : '');
+        } elseif ($tx->status !== 'processing' || $tx->stage !== 'awaiting_card') {
             $ok = in_array($tx->status, ['successful', 'processing'], true);
             $body = '<div class="icon ' . ($ok ? 'ok' : 'ko') . '">' . ($ok ? '✓' : '✕') . '</div>'
                 . '<h1>' . ($ok ? 'Paiement accepté' : 'Paiement non abouti') . '</h1>'
-                . '<p>' . $e($ok ? "{$amount} débités de votre carte {$tx->source_account}." : ($tx->failure_reason ?: 'Paiement refusé.')) . '</p>'
+                . '<p>' . $e($ok ? "{$amount} débités de " . ($tx->source_rail === 'bank' ? 'votre compte bancaire' : 'votre carte') . " {$tx->source_account}." : ($tx->failure_reason ?: 'Paiement refusé.')) . '</p>'
                 . '<p class="muted">Vous pouvez fermer cette page et revenir dans l\'application FlashPay.</p>';
         } else {
             $body = '<p class="muted">Montant à payer</p><div class="amount">' . $e($amount) . '</div>'
@@ -99,6 +112,8 @@ class CardCheckoutController extends Controller
                 . '<button name="action" value="cancel" class="link" formnovalidate>Annuler</button></form>'
                 . '<details><summary>Cartes de test</summary><p>4242 4242 4242 4242 (Visa acceptée) · 5555 5555 5555 4444 (Mastercard acceptée) · 4000 0000 0000 0002 (refusée) · 4000 0000 0000 9995 (fonds insuffisants). Expiration future, CVC quelconque.</p></details>';
         }
+
+        $badge = $wacepay ? '<span>WacePay</span>' : '<span>SANDBOX — aucune carte réelle débitée</span>';
 
         return <<<HTML
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -117,10 +132,10 @@ button.link{background:none;color:#6b7280;margin-top:8px;font-weight:600}
 .err{background:#fff1f1;color:#b91c1c;padding:10px;border-radius:8px;margin-top:12px;font-size:14px}
 details{margin-top:16px;font-size:12px;color:#6b7280}
 .icon{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;color:#fff;margin:0 auto 8px}
-.icon.ok{background:#16a34a}.icon.ko{background:#dc2626}h1{text-align:center;font-size:22px}
+.icon.ok{background:#16a34a}.icon.ko{background:#dc2626}.icon.wait{background:#f59e0b}h1{text-align:center;font-size:22px}
 .card>p{text-align:center}
 </style></head><body>
-<div class="bar">FlashPay · Paiement sécurisé <span>SANDBOX — aucune carte réelle débitée</span></div>
+<div class="bar">FlashPay · Paiement sécurisé {$badge}</div>
 <div class="card">{$body}</div>
 </body></html>
 HTML;

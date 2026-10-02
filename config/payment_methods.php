@@ -33,6 +33,10 @@ return [
     'card_driver' => env('FLASHPAY_CARD_DRIVER', filter_var(env('PEEX_SANDBOX', true), FILTER_VALIDATE_BOOLEAN) ? 'sandbox' : 'none'),
     'card_countries' => $list('FLASHPAY_CARD_COUNTRIES', '*'),
 
+    // Prélèvement sur compte bancaire (recharge du wallet) : wacepay | sandbox | none
+    'bank_debit_driver' => env('FLASHPAY_BANK_DEBIT_DRIVER', 'none'),
+    'bank_debit_countries' => $list('FLASHPAY_BANK_DEBIT_COUNTRIES', '*'),
+
     // Pays où les virements vers un compte bancaire sont ouverts (banque partenaire)
     'bank_countries' => $list('FLASHPAY_BANK_COUNTRIES', ''),
 
@@ -49,6 +53,7 @@ return [
         'deposit' => [
             'mobile_money' => ['label' => 'Mobile money', 'description' => 'Depuis votre compte {operators}. Validation avec votre code secret.', 'icon' => 'phone', 'needs' => 'collect'],
             'card' => ['label' => 'Carte Visa / Mastercard', 'description' => 'Carte prépayée ou bancaire. Paiement sécurisé 3-D Secure.', 'icon' => 'card', 'needs' => 'card'],
+            'bank' => ['label' => 'Depuis un compte bancaire', 'description' => 'Prélèvement sur votre compte en banque, validé sur la page sécurisée de la banque.', 'icon' => 'bank', 'needs' => 'bank_debit'],
             'agent_qr' => ['label' => 'Espèces chez un agent', 'description' => 'Montrez votre QR FlashPay à un agent et remettez-lui les espèces.', 'icon' => 'store', 'needs' => 'agents'],
         ],
         'withdraw' => [

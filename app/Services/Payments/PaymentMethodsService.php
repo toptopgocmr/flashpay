@@ -68,6 +68,13 @@ class PaymentMethodsService
             && (in_array('*', $countries, true) || in_array(strtoupper($iso), $countries, true));
     }
 
+    public static function bankDebitEnabled(string $iso): bool
+    {
+        $countries = config('payment_methods.bank_debit_countries', []);
+        return config('payment_methods.bank_debit_driver', 'none') !== 'none'
+            && (in_array('*', $countries, true) || in_array(strtoupper($iso), $countries, true));
+    }
+
     protected function availability(?string $needs, string $iso, array $c): array
     {
         return match ($needs) {
@@ -76,6 +83,7 @@ class PaymentMethodsService
             'agents' => [in_array($iso, config('payment_methods.agent_countries', []), true), 'Réseau d\'agents FlashPay bientôt disponible dans ce pays'],
             'atm' => [in_array($iso, config('payment_methods.atm_countries', []), true), 'Bientôt disponible (banque partenaire en cours)'],
             'card' => [self::cardEnabled($iso), 'Paiement par carte bientôt disponible (passerelle carte en cours)'],
+            'bank_debit' => [self::bankDebitEnabled($iso), 'Recharge depuis un compte bancaire bientôt disponible'],
             'bank' => [in_array($iso, config('payment_methods.bank_countries', []), true), 'Virement bancaire bientôt disponible (banque partenaire en cours)'],
             default => [true, null],
         };

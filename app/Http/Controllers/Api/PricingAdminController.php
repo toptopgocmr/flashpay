@@ -117,6 +117,9 @@ class PricingAdminController extends Controller
                 'ready' => $wace->enabled() && (bool) config('flashpay.rails.digitwace.enabled'),
                 'mode' => $wace->enabled() ? (config('flashpay.digitwace.sandbox', true) ? 'Sandbox' : 'Production') : 'clés API à saisir',
                 'sandbox' => (bool) config('flashpay.digitwace.sandbox', true),
+                // Collecte hors mobile money : cartes Visa / Mastercard et comptes bancaires (page WacePay)
+                'card' => config('payment_methods.card_driver') === 'wacepay',
+                'bank_debit' => config('payment_methods.bank_debit_driver') === 'wacepay',
                 'collect_countries' => $list->where('collect', true)->where('collect_partner', 'digitwace')->count(),
                 'payout_countries' => $list->where('payout', true)->where('payout_partner', 'digitwace')->count(),
                 'coverage_countries' => count($coverage),

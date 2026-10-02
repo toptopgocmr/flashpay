@@ -123,7 +123,7 @@ class TransactionPresenter
             ['Type', self::channel($tx)],
             ['Statut', $tx->statusLabel()],
             ['Expéditeur', $who($p['sender_name'], $p['sender_phone'])],
-            ['Compte débité', $tx->source_rail === 'wallet' ? 'Wallet FlashPay' : ($tx->source_rail === 'card' ? 'Carte bancaire' . (! empty($m['card_last4']) ? ' •••• ' . $m['card_last4'] : '') : ($tx->source_account ? self::phone($tx->source_account) . ($operator($m['source_operator'] ?? null, $m['source_country'] ?? null) ? ' (' . $operator($m['source_operator'] ?? null, $m['source_country'] ?? null) . ')' : '') : null))],
+            ['Compte débité', $tx->source_rail === 'wallet' ? 'Wallet FlashPay' : ($tx->source_rail === 'card' ? ($tx->source_account ?: 'Carte bancaire' . (! empty($m['card_last4']) ? ' •••• ' . $m['card_last4'] : '')) : ($tx->source_rail === 'bank' ? ($tx->source_account ?: 'Compte bancaire') : ($tx->source_account ? self::phone($tx->source_account) . ($operator($m['source_operator'] ?? null, $m['source_country'] ?? null) ? ' (' . $operator($m['source_operator'] ?? null, $m['source_country'] ?? null) . ')' : '') : null)))],
             ['Bénéficiaire', $who($p['beneficiary_name'], $p['beneficiary_phone'])],
             ['Compte crédité', $tx->destination_rail === 'wallet' ? 'Wallet FlashPay' : match ($tx->destination_rail) {
                 'cash' => 'Retrait en espèces', 'atm' => 'Retrait au GAB', 'bank' => trim('Compte bancaire ' . ($m['bank_name'] ?? '')),
@@ -173,8 +173,10 @@ class TransactionPresenter
             \App\Services\Peex\PeexCorridors::partnerName($in),
             \App\Services\Peex\PeexCorridors::partnerName($out),
         ])));
-        if ($tx->source_rail === 'card') {
-            array_unshift($names, 'Carte (3-D Secure)');
+        if (in_array($tx->source_rail, ['card', 'bank'], true)) {
+            $viaWace = ($tx->meta['card_driver'] ?? null) === 'wacepay';
+            $label = $tx->source_rail === 'bank' ? 'Prélèvement bancaire' : 'Carte (3-D Secure)';
+            array_unshift($names, $viaWace ? "WacePay ({$label})" : $label);
         }
         return $names ? implode(' → ', $names) : null;
     }
@@ -186,9 +188,10 @@ class TransactionPresenter
     public static function gateway(Transaction $tx): array
     {
         $corr = app(\App\Services\Peex\PeexCorridors::class);
-        $leg = function (?string $rail, ?string $account, ?string $hint) use ($corr) {
+        $leg = function (?string $rail, ?string $account, ?string $hint, bool $leg_in = false) use ($corr, $tx) {
             $rail = $rail ?: 'wallet';
             $out = ['rail' => $rail, 'partner' => null, 'operator' => null, 'account' => $account];
+            $hosted = $leg_in && in_array($rail, ['card', 'bank'], true) && ($tx->meta['card_driver'] ?? null) === 'wacepay';
             switch ($rail) {
                 case 'peex':
                 case 'digitwace':
@@ -204,11 +207,14 @@ class TransactionPresenter
                     }
                     break;
                 case 'card':
-                    $out['operator'] = 'Carte Visa / Mastercard';
-                    $out['partner'] = 'Carte (3-D Secure)';
+                    $out['operator'] = $account ?: 'Carte Visa / Mastercard';
+                    $out['partner'] = $hosted ? 'WacePay' : 'Carte (3-D Secure)';
+                    $out['rail'] = $hosted ? 'digitwace' : 'card';
                     break;
                 case 'bank':
-                    $out['operator'] = 'Virement bancaire';
+                    $out['operator'] = $leg_in ? ($account ?: 'Compte bancaire (prélèvement)') : 'Virement bancaire';
+                    $out['partner'] = $hosted ? 'WacePay' : null;
+                    $out['rail'] = $hosted ? 'digitwace' : 'bank';
                     break;
                 case 'cash':
                     $out['operator'] = 'Espèces (agent)';
@@ -224,7 +230,7 @@ class TransactionPresenter
             : [];
 
         return [
-            'in' => $leg($tx->source_rail, $tx->source_account, $meta['source_country'] ?? null),
+            'in' => $leg($tx->source_rail, $tx->source_account, $meta['source_country'] ?? null, true),
             'out' => $leg($tx->destination_rail, $tx->destination_account, $meta['destination_country'] ?? null),
             'partner' => self::partner($tx),
             'track_ids' => $tracks,

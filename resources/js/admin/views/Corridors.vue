@@ -24,6 +24,11 @@
           <div><span>Collecte</span><b>{{ p.flows.includes('collect') ? n(p.collect_countries) + ' pays' : 'Non proposée' }}</b></div>
           <div><span>Versement</span><b>{{ n(p.payout_countries) }} pays</b></div>
         </div>
+        <div v-if="p.key === 'digitwace'" class="wsvc">
+          <span :class="p.card ? 'on' : 'off'">{{ p.card ? '✓' : '—' }} Cartes Visa / Mastercard</span>
+          <span :class="p.bank_debit ? 'on' : 'off'">{{ p.bank_debit ? '✓' : '—' }} Comptes bancaires</span>
+          <small v-if="!p.card || !p.bank_debit">Activer : FLASHPAY_CARD_DRIVER=wacepay · FLASHPAY_BANK_DEBIT_DRIVER=wacepay</small>
+        </div>
         <div v-if="p.key === 'digitwace'" class="coverage">
           <span v-if="p.coverage_countries">Couverture WacePay : <b>{{ p.coverage_countries }} pays</b> · collecte {{ p.coverage_payin }} · versement {{ p.coverage_payout }}<br /><small>Synchronisée {{ dt(p.coverage_synced_at) || '—' }}</small></span>
           <span v-else class="t-warn">Couverture pas encore synchronisée</span>
@@ -413,6 +418,10 @@ tr.add td { background: var(--surface-2); }
 .fp-toast { position: fixed; top: 16px; right: 16px; z-index: 1000; max-width: 460px; padding: 12px 16px; border-radius: 10px; color: #fff; font-size: 13.5px; line-height: 1.35; box-shadow: 0 8px 24px rgba(0,0,0,.18); cursor: pointer; background: #15803d; }
 .fp-toast.err { background: #b91c1c; }
 .row-err { margin-top: 4px; font-size: 11.5px; color: #b91c1c; line-height: 1.3; max-width: 260px; }
+.wsvc { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12.5px; }
+.wsvc .on { color: #15803d; font-weight: 700; }
+.wsvc .off { color: var(--text-2); }
+.wsvc small { flex-basis: 100%; color: var(--text-2); font-size: 11px; }
 .wbal-err { background: #fef2f2; border: 1px solid #fecaca; color: #7f1d1d; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; line-height: 1.4; }
 .wbal-err .why { margin: 4px 0 6px; color: #991b1b; }
 .wbal-err ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
