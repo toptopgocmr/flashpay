@@ -38,6 +38,8 @@ return [
     'digitwace' => [
         'enabled' => (bool) env('DIGITWACE_ENABLED', false),
         'base_url' => env('DIGITWACE_BASE_URL', 'https://api.wacepay.com/api/v1/'),
+        // Environnement WacePay, indépendant de PEEX (PEEX_SANDBOX) : true = sandbox / test
+        'sandbox' => (bool) env('DIGITWACE_SANDBOX', true),
         'public_key' => env('DIGITWACE_PUBLIC_KEY', ''),
         'private_key' => env('DIGITWACE_PRIVATE_KEY', ''),
         'send_api_key_header' => (bool) env('DIGITWACE_SEND_API_KEY_HEADER', false),

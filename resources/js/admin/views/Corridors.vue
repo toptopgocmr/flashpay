@@ -10,6 +10,8 @@
 
     <div v-if="error" class="flash err"><div>{{ error }}</div></div>
     <div v-if="msg" class="flash info"><div>{{ msg }}</div></div>
+    <!-- Toast toujours visible, même quand la page est défilée -->
+    <div v-if="toast" class="fp-toast" :class="toast.kind" @click="toast = null">{{ toast.text }}</div>
 
     <!-- Partenaires de paiement : qui gère quels flux -->
     <div class="partners mb">
@@ -114,6 +116,10 @@
                     </select>
                   </div>
                   <div v-if="(c.payout_partner === 'digitwace' || c.collect_partner === 'digitwace') && !partnerReady('digitwace')" class="t-warn small">⚠ WacePay non configuré : opérations refusées</div>
+                  <div v-if="(c.payout_partner === 'digitwace' && !waceOk(c, 'payout')) || (c.collect_partner === 'digitwace' && !waceOk(c, 'payin'))" class="t-warn small">
+                    ⚠ WacePay n'est pas confirmé sur ce pays ({{ c.wacepay ? 'service absent' : 'couverture non synchronisée' }}) : repassez sur PEEX tant que la couverture n'est pas synchronisée.
+                  </div>
+                  <div v-if="rowErr[c.country]" class="row-err">{{ rowErr[c.country] }}</div>
                 </td>
                 <td class="num">{{ c.usage.count ? n(c.usage.count) + ' op. · ' + short(c.usage.volume) : '—' }}</td>
                 <td><IconAction v-if="c.overridden" icon="undo" label="Rétablir la configuration par défaut" @click="reset(c)" /></td>
@@ -276,16 +282,37 @@ async function load() {
     error.value = e.response?.data?.message || e.message
   }
 }
-async function run(fn) {
+const toast = ref(null)
+const rowErr = reactive({})
+let toastTimer = null
+function showToast(text, kind = 'ok') {
+  toast.value = { text, kind }
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toast.value = null }, kind === 'err' ? 9000 : 3500)
+}
+async function run(fn, country = null) {
   error.value = ''; msg.value = ''
-  try { const { data } = await fn(); msg.value = data?.message || 'Enregistré.'; await load() } catch (e) { error.value = e.response?.data?.message || e.message; await load() }
+  if (country) delete rowErr[country]
+  try {
+    const { data } = await fn()
+    msg.value = data?.message || 'Enregistré.'
+    showToast(msg.value, 'ok')
+    await load()
+  } catch (e) {
+    const errs = e.response?.data?.errors
+    const text = (errs && Object.values(errs).flat()[0]) || e.response?.data?.message || e.message
+    error.value = text
+    if (country) rowErr[country] = text
+    showToast('Non enregistré : ' + text, 'err')
+    await load()
+  }
 }
 function update(c, patch) {
   if (patch.payout === false && !confirm(`Fermer les versements vers ${c.name} ? Les envois vers ce pays seront refusés.`)) return load()
   if (patch.collect === false && !confirm(`Fermer la collecte depuis ${c.name} ?`)) return load()
   if (patch.payout_partner && patch.payout_partner !== c.payout_partner
     && !confirm(`Confier les versements vers ${c.name} à ${partnerName(patch.payout_partner)} (au lieu de ${partnerName(c.payout_partner)}) ?\n\nLes nouveaux envois vers ce pays passeront par ce partenaire ; les opérations en cours restent chez l'ancien.`)) return load()
-  run(() => api.post(`/admin/corridors/${c.country}`, patch))
+  run(() => api.post(`/admin/corridors/${c.country}`, patch), c.country)
 }
 const reset = (c) => run(() => api.delete(`/admin/corridors/${c.country}`))
 function startEdit(r) {
@@ -376,4 +403,7 @@ tr.add td { background: var(--surface-2); }
 .conv-result b { font-size: 22px; }
 .conv-result span { font-size: 12.5px; color: var(--text-2); }
 .empty { padding: 30px; text-align: center; color: var(--text-2); }
+.fp-toast { position: fixed; top: 16px; right: 16px; z-index: 1000; max-width: 460px; padding: 12px 16px; border-radius: 10px; color: #fff; font-size: 13.5px; line-height: 1.35; box-shadow: 0 8px 24px rgba(0,0,0,.18); cursor: pointer; background: #15803d; }
+.fp-toast.err { background: #b91c1c; }
+.row-err { margin-top: 4px; font-size: 11.5px; color: #b91c1c; line-height: 1.3; max-width: 260px; }
 </style>

@@ -102,7 +102,7 @@ code { font-family: "JetBrains Mono", Consolas, Menlo, monospace; font-size: 12p
 .nav-search .results a:hover, .nav-search .results a.active { background: var(--info-bg); }
 .nav-search .results small { color: var(--text-2); }
 .nav-spacer { flex: 1; }
-.env-pill { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; letter-spacing: .4px; }
+.env-pill { white-space: nowrap; margin-left: 4px; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; letter-spacing: .4px; }
 .env-pill.sandbox { background: var(--accent); color: var(--on-accent); }
 .env-pill.live { background: #10b981; color: #fff; }
 .avatar { width: 28px; height: 28px; border-radius: 50%; background: #fff; color: var(--brand); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; }

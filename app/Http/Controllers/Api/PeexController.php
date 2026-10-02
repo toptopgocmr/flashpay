@@ -23,7 +23,13 @@ class PeexController extends Controller
 
     public function corridors()
     {
-        return response()->json(['sandbox' => (bool) config('flashpay.peex.sandbox'), 'corridors' => $this->corridors->catalog()]);
+        return response()->json([
+            'sandbox' => (bool) config('flashpay.peex.sandbox'),
+            'environments' => [
+                ['key' => 'peex', 'name' => 'PEEX', 'sandbox' => (bool) config('flashpay.peex.sandbox'), 'enabled' => true],
+                ['key' => 'digitwace', 'name' => 'WacePay', 'sandbox' => (bool) config('flashpay.digitwace.sandbox', true), 'enabled' => app(\App\Services\Digitwace\DigitwaceClient::class)->enabled()],
+            ],
+            'corridors' => $this->corridors->catalog()]);
     }
 
     public function resolvePhone(Request $request)
