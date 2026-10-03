@@ -206,6 +206,21 @@ class PricingAdminController extends Controller
         return response()->json($d);
     }
 
+    /** Détection automatique de l'adresse de connexion WacePay (enregistrée si trouvée). */
+    public function discoverWacepay()
+    {
+        $r = app(\App\Services\Digitwace\DigitwaceClient::class)->discover();
+        \App\Support\Audit::log('digitwace.discover', null, ['found' => $r['found']]);
+        return response()->json($r);
+    }
+
+    /** Oublie l'adresse détectée : retour aux variables Railway (DIGITWACE_BASE_URL…). */
+    public function resetWacepayEndpoint()
+    {
+        app(\App\Services\Ops\PlatformSettings::class)->set('digitwace_endpoint', null);
+        return response()->json(['message' => 'Adresse WacePay détectée oubliée : les variables Railway s\'appliquent.']);
+    }
+
     /** Synchronise la couverture WacePay (pays, opérateurs, collecte / versement) depuis l'API. */
     public function syncWacepay(Request $request)
     {

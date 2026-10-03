@@ -37,7 +37,17 @@ return [
     */
     'digitwace' => [
         'enabled' => (bool) env('DIGITWACE_ENABLED', false),
-        'base_url' => env('DIGITWACE_BASE_URL', 'https://api.wacepay.com/api/v1/'),
+        // Doc : https://docs.digitwace.com — API PayIn : https://payinws.wacepay.com/api/v1
+        'base_url' => env('DIGITWACE_BASE_URL', 'https://payinws.wacepay.com/api/v1/'),
+        // basic = GET get-token + Authorization: Basic base64(public_key:private_key) (doc PayIn)
+        // login = POST login avec les clés dans le corps (API Business)
+        'auth_mode' => env('DIGITWACE_AUTH_MODE', 'basic'),
+        'payer_codes_method' => env('DIGITWACE_PAYER_CODES_METHOD', 'post'),
+        'payout_service' => env('DIGITWACE_PAYOUT_SERVICE', 'WALLET'),
+        'origin_fund' => env('DIGITWACE_ORIGIN_FUND', 'SALARY'),
+        'relation' => env('DIGITWACE_RELATION', 'FRIEND'),
+        // Adresses supplémentaires à essayer par la détection automatique (séparées par des virgules, *.wacepay.com)
+        'discover_bases' => env('DIGITWACE_DISCOVER_BASES', ''),
         // Environnement WacePay, indépendant de PEEX (PEEX_SANDBOX) : true = sandbox / test
         'sandbox' => (bool) env('DIGITWACE_SANDBOX', true),
         'public_key' => env('DIGITWACE_PUBLIC_KEY', ''),
@@ -69,16 +79,16 @@ return [
 
         // Chemins d'API (relatifs à base_url)
         'paths' => [
-            'login' => env('DIGITWACE_PATH_LOGIN', 'auth/login'),
+            'login' => env('DIGITWACE_PATH_LOGIN', 'get-token'),
             'create_sender' => env('DIGITWACE_PATH_SENDER', 'sender/create'),
             'create_beneficiary' => env('DIGITWACE_PATH_BENEFICIARY', 'beneficiary/create'),
-            'payer_codes' => env('DIGITWACE_PATH_PAYERS', 'payer/codes'),
-            'wallet' => env('DIGITWACE_PATH_WALLET', 'transaction/wallet'),
+            'payer_codes' => env('DIGITWACE_PATH_PAYERS', 'transaction/payercode'),
+            'wallet' => env('DIGITWACE_PATH_WALLET', 'transaction/wallet/create'),
             'confirm' => env('DIGITWACE_PATH_CONFIRM', 'transaction/confirm'),
-            'status' => env('DIGITWACE_PATH_STATUS', 'transaction/status'),
+            'status' => env('DIGITWACE_PATH_STATUS', 'transaction/status/{ref}'),
             'balance' => env('DIGITWACE_PATH_BALANCE', 'account/balance'),
             // Collecte (PAYIN) : débit du wallet mobile money du client
-            'payin' => env('DIGITWACE_PATH_PAYIN', 'payin/mobile'),
+            'payin' => env('DIGITWACE_PATH_PAYIN', 'create'),
             // Collecte par carte Visa / Mastercard et par compte bancaire : page de paiement WacePay (3-D Secure / banque)
             'payin_card' => env('DIGITWACE_PATH_PAYIN_CARD', 'payin/card'),
             'payin_bank' => env('DIGITWACE_PATH_PAYIN_BANK', 'payin/bank'),
@@ -88,7 +98,7 @@ return [
         'fields' => [
             'country' => 'countryCode',
             'login' => ['public_key' => env('DIGITWACE_FIELD_PUBLIC_KEY', 'apiKey'), 'private_key' => env('DIGITWACE_FIELD_PRIVATE_KEY', 'secretKey')],
-            'party' => ['first_name' => 'firstName', 'last_name' => 'lastName', 'phone' => 'phoneNumber', 'country' => 'countryCode', 'address' => 'address', 'city' => 'city'],
+            'party' => ['first_name' => 'firstName', 'last_name' => 'lastName', 'phone' => 'phone', 'country' => 'country', 'address' => 'address', 'city' => 'city'],
             'transaction' => [
                 'reference' => 'externalReference', 'sender_code' => 'senderCode', 'beneficiary_code' => 'beneficiaryCode',
                 'payer_code' => 'payerCode', 'amount' => 'amount', 'currency' => 'currency', 'wallet_number' => 'walletNumber',

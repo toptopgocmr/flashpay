@@ -333,6 +333,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/corridors-sync/wacepay', [PricingAdminController::class, 'syncWacepay']);
         Route::get('/digitwace/balances', [PricingAdminController::class, 'wacepayBalances']);
         Route::get('/digitwace/diagnose', [PricingAdminController::class, 'diagnoseWacepay'])->middleware('throttle:10,1');
+        Route::post('/digitwace/discover', [PricingAdminController::class, 'discoverWacepay'])->middleware('throttle:3,1');
+        Route::delete('/digitwace/discover', [PricingAdminController::class, 'resetWacepayEndpoint']);
         Route::delete('/corridors/{iso}', [PricingAdminController::class, 'resetCorridor'])->where('iso', '[A-Za-z]{2}');
         Route::post('/fx-rates/{rate}/active', [PricingAdminController::class, 'toggleRate']);
         Route::delete('/fx-rates/{rate}', [PricingAdminController::class, 'deleteRate']);

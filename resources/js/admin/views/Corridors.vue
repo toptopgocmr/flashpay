@@ -44,7 +44,17 @@
               <li>Environnement : <b>{{ wBal.sandbox ? 'Sandbox' : 'Production' }}</b> — adresse appelée : <code>{{ wBal.base_url || '—' }}</code><br /><small>Elle doit correspondre aux clés saisies (clés sandbox ↔ URL sandbox).</small></li>
               <li>IP sortante actuelle du serveur : <code>{{ wBal.server_ip || 'inconnue' }}</code><br /><small>Elle doit figurer dans WacePay › Developers › IP Whitelist avec le statut « Active » (pas « Blocked »).</small></li>
             </ul>
-            <button class="btn-normal" style="margin-top:8px" :disabled="diagBusy" @click="diagnose">{{ diagBusy ? 'Test en cours…' : 'Diagnostiquer la connexion' }}</button>
+            <div class="diag-btns">
+              <button class="btn-normal" :disabled="diagBusy" @click="diagnose">{{ diagBusy ? 'Test en cours…' : 'Diagnostiquer la connexion' }}</button>
+              <button class="btn-primary" :disabled="discBusy" @click="discover">{{ discBusy ? 'Recherche en cours (jusqu\'à 2 min)…' : 'Corriger automatiquement' }}</button>
+            </div>
+          </div>
+          <div v-if="disc" class="diag">
+            <div class="diag-h" :class="disc.found ? 'ok' : 'ko'">{{ disc.found ? '✓ ' : '✕ ' }}{{ disc.message }} <small>({{ disc.attempts.length }} essais · {{ disc.seconds }} s)</small></div>
+            <div v-if="disc.found" class="small">Pour la garder après un redéploiement, mettez aussi dans Railway : <code>DIGITWACE_BASE_URL={{ disc.found.base_url }}</code> · <code>DIGITWACE_PATH_LOGIN={{ disc.found.login_path }}</code> · <code>DIGITWACE_FIELD_PUBLIC_KEY={{ disc.found.login_fields.public_key }}</code> · <code>DIGITWACE_FIELD_PRIVATE_KEY={{ disc.found.login_fields.private_key }}</code></div>
+            <details><summary>Détail des essais</summary>
+              <table class="disc-t"><tr v-for="(a, i) in disc.attempts" :key="i" :class="{ good: a.token_ok }"><td class="mono">{{ a.url }}</td><td>{{ a.fields || '' }}</td><td>{{ a.http ?? '—' }}</td><td>{{ a.note || a.body }}</td></tr></table>
+            </details>
           </div>
           <div v-if="diag" class="diag">
             <div class="diag-h" :class="diag.token_ok ? 'ok' : 'ko'">{{ diag.token_ok ? '✓ Connexion WacePay réussie' : '✕ Connexion refusée' }} <small>({{ diag.http ? 'HTTP ' + diag.http : 'pas de réponse' }} · {{ diag.ms }} ms)</small></div>
@@ -56,6 +66,7 @@
               <dt>Champs envoyés</dt><dd><code>{{ diag.login_fields.join(' + ') }}</code></dd>
               <dt>Serveur</dt><dd>{{ diag.server || '—' }}<span v-if="diag.cf_ray"> · Cloudflare {{ diag.cf_ray }}</span></dd>
               <dt>Réponse</dt><dd>{{ diag.message }}<br /><small class="mono">{{ diag.body || '(vide)' }}</small></dd>
+              <template v-if="diag.override"><dt>Adresse détectée</dt><dd>{{ diag.override.base_url }}{{ diag.override.login_path }} <button class="btn-link" @click="resetDiscover">Oublier</button></dd></template>
             </dl>
           </div>
           <div v-for="a in wBal?.accounts || []" :key="a.currency + a.label" class="wbal-row">
@@ -310,6 +321,18 @@ async function load() {
 const toast = ref(null)
 const diag = ref(null)
 const diagBusy = ref(false)
+const disc = ref(null)
+const discBusy = ref(false)
+async function discover() {
+  discBusy.value = true; disc.value = null
+  try {
+    disc.value = (await api.post('/admin/digitwace/discover', {}, { timeout: 180000 })).data
+    if (disc.value.found) { showToast('Connexion WacePay trouvée et enregistrée.', 'ok'); loadWaceBalances(true); diagnose() }
+  } catch (e) { showToast(e.response?.data?.message || e.message, 'err') } finally { discBusy.value = false }
+}
+async function resetDiscover() {
+  try { await api.delete('/admin/digitwace/discover'); showToast('Adresse détectée oubliée.', 'ok'); diagnose() } catch (e) { showToast(e.response?.data?.message || e.message, 'err') }
+}
 async function diagnose() {
   diagBusy.value = true
   try { diag.value = (await api.get('/admin/digitwace/diagnose')).data } catch (e) { showToast(e.response?.data?.message || e.message, 'err') } finally { diagBusy.value = false }
@@ -445,6 +468,10 @@ tr.add td { background: var(--surface-2); }
 .diag-h { font-weight: 800; margin-bottom: 6px; } .diag-h.ok { color: #15803d; } .diag-h.ko { color: #b91c1c; }
 .diag dl { display: grid; grid-template-columns: 140px 1fr; gap: 4px 10px; margin: 0; }
 .diag dt { color: var(--text-2); } .diag dd { margin: 0; word-break: break-all; }
+.diag-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.disc-t { width: 100%; font-size: 11px; margin-top: 6px; border-collapse: collapse; }
+.disc-t td { border-top: 1px solid var(--border); padding: 3px 4px; vertical-align: top; word-break: break-all; }
+.disc-t tr.good td { background: #dcfce7; font-weight: 700; }
 .wbal-err { background: #fef2f2; border: 1px solid #fecaca; color: #7f1d1d; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; line-height: 1.4; }
 .wbal-err .why { margin: 4px 0 6px; color: #991b1b; }
 .wbal-err ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }

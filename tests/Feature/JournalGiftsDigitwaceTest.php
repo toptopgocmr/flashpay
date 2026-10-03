@@ -158,7 +158,7 @@ class JournalGiftsDigitwaceTest extends TestCase
             $calls++;
             $u = $req->url();
             return match (true) {
-                str_contains($u, 'auth/login') => Http::response(['code' => 2000, 'token' => 'tok']),
+                str_contains($u, 'get-token') => Http::response(['code' => 2000, 'token' => 'tok']),
                 str_contains($u, 'sender/create') => Http::response(['code' => 2000, 'data' => ['senderCode' => 'S1']]),
                 str_contains($u, 'beneficiary/create') => Http::response(['code' => 2000, 'data' => ['beneficiaryCode' => 'B1']]),
                 str_contains($u, 'transaction/wallet') => Http::response(['code' => 2000, 'data' => ['transactionCode' => 'WT-1']]),
@@ -285,15 +285,15 @@ class JournalGiftsDigitwaceTest extends TestCase
         $payinCalls = 0;
         Http::fake(function ($req) use (&$payinCalls) {
             $u = $req->url();
-            if (str_contains($u, 'auth/login')) return Http::response(['code' => 2000, 'token' => 't']);
-            if (str_contains($u, 'payer/codes')) return Http::response(['code' => 2000, 'data' => [
+            if (str_contains($u, 'get-token')) return Http::response(['code' => 2000, 'token' => 't']);
+            if (str_contains($u, 'transaction/payercode')) return Http::response(['code' => 2000, 'data' => [
                 ['countryCode' => 'SEN', 'currency' => 'XOF', 'payerCode' => 'SN-OM', 'payerName' => 'Orange Money', 'type' => 'MOBILE_MONEY', 'services' => ['PAYOUT']],
                 ['countryCode' => 'NGA', 'currency' => 'NGN', 'payerCode' => 'NG-OPAY', 'payerName' => 'OPay', 'type' => 'MOBILE_MONEY', 'services' => ['PAYIN', 'PAYOUT']],
                 ['countryCode' => 'KEN', 'currency' => 'KES', 'payerCode' => 'KE-MPESA', 'payerName' => 'M-Pesa', 'type' => 'WALLET', 'payin' => true, 'payout' => true],
                 ['countryCode' => 'NGA', 'currency' => 'NGN', 'payerCode' => 'NG-BANK', 'payerName' => 'Banques', 'type' => 'BANK', 'services' => ['PAYOUT']],
                 ['countryCode' => 'XXX', 'payerCode' => 'ZZ'],
             ]]);
-            if (str_contains($u, 'payin/mobile')) { $payinCalls++; return Http::response(['code' => 2000, 'data' => ['transactionCode' => 'PI-1', 'status' => 'PENDING']]); }
+            if (str_ends_with($u, 'api/create')) { $payinCalls++; return Http::response(['code' => 2000, 'data' => ['transactionCode' => 'PI-1', 'status' => 'PENDING']]); }
             if (str_contains($u, 'transaction/status')) return Http::response(['code' => 2000, 'data' => ['status' => 'SUCCESS']]);
             return Http::response(['code' => 1001], 404);
         });
@@ -399,7 +399,7 @@ class JournalGiftsDigitwaceTest extends TestCase
 
         config(['flashpay.digitwace.enabled' => true, 'flashpay.digitwace.public_key' => 'p', 'flashpay.digitwace.private_key' => 'k',
             'flashpay.digitwace.base_url' => 'https://wace.test/api/', 'flashpay.digitwace.low_balance_alert' => 100000]);
-        Http::fake(fn ($r) => str_contains($r->url(), 'auth/login')
+        Http::fake(fn ($r) => str_contains($r->url(), 'get-token')
             ? Http::response(['code' => 2000, 'token' => 't'])
             : Http::response(['code' => 2000, 'data' => [['currency' => 'XAF', 'balance' => 80000, 'name' => 'Compte principal']]]));
         $admin = User::create(['full_name' => 'Super', 'phone' => '242069990041', 'password' => bcrypt('x'), 'status' => 'active']);

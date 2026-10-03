@@ -52,13 +52,9 @@ class DigitwaceClient
             if (! $fresh && ($t = Cache::get($key))) {
                 return $t;
             }
-            $f = $this->cfg('fields.login');
-            $res = $this->http()->post($this->path('login'), [
-                $f['public_key'] => $this->cfg('public_key'),
-                $f['private_key'] => $this->cfg('private_key'),
-            ]);
+            $res = $this->loginRequest();
             $json = $res->json() ?? [];
-            $token = data_get($json, 'token') ?? data_get($json, 'access_token') ?? data_get($json, 'data.token') ?? data_get($json, 'data.access_token');
+            $token = self::tokenFrom($json);
             if (! $res->successful() || ! $token) {
                 Log::warning('WacePay connexion refusée', ['http' => $res->status(), 'url' => $this->cfg('base_url') . $this->path('login'), 'body' => mb_substr((string) $res->body(), 0, 300)]);
                 throw new DigitwaceException('Connexion WacePay refusée : ' . $this->errorText($json, $res->status()), $this->codeOf($json));
@@ -68,6 +64,42 @@ class DigitwaceClient
         });
     }
 
+    /**
+     * Connexion WacePay (doc docs.digitwace.com) :
+     *  - mode « basic » (défaut, API PayIn) : GET {base}/get-token avec
+     *    Authorization: Basic base64(public_key:private_key) → jeton Bearer ;
+     *  - mode « login » (API Business) : POST {base}/login avec les clés dans le corps.
+     */
+    protected function loginRequest(?string $base = null, ?string $path = null, ?string $mode = null)
+    {
+        $pub = (string) $this->cfg('public_key');
+        $priv = (string) $this->cfg('private_key');
+        $mode ??= (string) $this->cfg('auth_mode', 'basic');
+        $http = $base ? Http::baseUrl($base)->acceptJson()->timeout(20) : $this->http();
+        $path = ltrim($path ?? $this->path('login'), '/');
+        if ($mode === 'basic') {
+            return $http->withHeaders(['Authorization' => 'Basic ' . base64_encode($pub . ':' . $priv)])->get($path);
+        }
+        $f = $this->cfg('fields.login');
+        return $http->post($path, [$f['public_key'] => $pub, $f['private_key'] => $priv]);
+    }
+
+    public static function tokenFrom(mixed $json): ?string
+    {
+        if (! is_array($json)) {
+            return null;
+        }
+        foreach (['token', 'access_token', 'accessToken', 'bearer', 'bearer_token', 'BEARER_TOKEN', 'jwt'] as $k) {
+            foreach ([$k, "data.{$k}", "result.{$k}", "data.token.{$k}"] as $path) {
+                $v = data_get($json, $path);
+                if (is_string($v) && $v !== '') {
+                    return $v;
+                }
+            }
+        }
+        return null;
+    }
+
     // ------------------------------------------------------------ Référentiels
 
     /** Codes payeurs (opérateurs / réseaux de paiement par pays) — cache 24 h. */
@@ -75,7 +107,7 @@ class DigitwaceClient
     {
         $key = 'digitwace:payers:' . ($country ?: 'all');
         return Cache::remember($key, now()->addHours((int) $this->cfg('payer_cache_hours', 24)), function () use ($country) {
-            $json = $this->call('get', 'payer_codes', $country ? [$this->cfg('fields.country') => $country] : []);
+            $json = $this->call((string) $this->cfg('payer_codes_method', 'post'), 'payer_codes', $country ? [$this->cfg('fields.country') => $country] : []);
             return (array) (data_get($json, 'data') ?? data_get($json, 'payers') ?? $json);
         });
     }
@@ -149,6 +181,8 @@ class DigitwaceClient
             $f['country'] => strtoupper($p['country']),
             $f['address'] => $p['address'] ?? $this->cfg('default_address'),
             $f['city'] => $p['city'] ?? $this->cfg('default_city'),
+            'pep' => false,
+            'updateIfExist' => true,
         ], fn ($v) => $v !== null && $v !== ''));
 
         $code = data_get($json, $kind . 'Code') ?? data_get($json, 'data.' . $kind . 'Code') ?? data_get($json, 'code') ?? data_get($json, 'data.code');
@@ -167,20 +201,28 @@ class DigitwaceClient
      *
      * @return array{status:string, wace_id:?string, raw:array}
      */
-    public function payout(string $reference, string $senderCode, string $beneficiaryCode, string $payerCode, int $amount, string $currency, string $phone, ?string $purpose = null): array
+    public function payout(string $reference, string $senderCode, string $beneficiaryCode, string $payerCode, int $amount, string $currency, string $phone, ?string $purpose = null, ?string $payoutCountry = null, ?string $fromCountry = null, ?string $sendingCurrency = null): array
     {
         $f = $this->cfg('fields.transaction');
 
-        return Cache::lock('digitwace:queue', 60)->block((int) $this->cfg('queue_wait_seconds', 45), function () use ($f, $reference, $senderCode, $beneficiaryCode, $payerCode, $amount, $currency, $phone, $purpose) {
+        return Cache::lock('digitwace:queue', 60)->block((int) $this->cfg('queue_wait_seconds', 45), function () use ($f, $reference, $senderCode, $beneficiaryCode, $payerCode, $amount, $currency, $phone, $purpose, $payoutCountry, $fromCountry, $sendingCurrency) {
+            // Champs de transaction/wallet/create (doc WacePay Business)
             $created = $this->call('post', 'wallet', array_filter([
                 $f['reference'] => $reference,
-                $f['sender_code'] => $senderCode,
-                $f['beneficiary_code'] => $beneficiaryCode,
-                $f['payer_code'] => $payerCode,
-                $f['amount'] => $amount,
-                $f['currency'] => $currency,
-                $f['wallet_number'] => preg_replace('/\D/', '', $phone),
-                $f['purpose'] => $purpose ?: $this->cfg('default_purpose'),
+                'senderCode' => $senderCode,
+                'beneficiaryCode' => $beneficiaryCode,
+                'payerCode' => is_numeric($payerCode) ? (int) $payerCode : $payerCode,
+                'payoutCountry' => $payoutCountry ? strtoupper($payoutCountry) : null,
+                'payoutCity' => $this->cfg('default_city'),
+                'receiveCurrency' => $currency,
+                'sendingCurrency' => $sendingCurrency ?: $currency,
+                'amountToPaid' => $amount,
+                'service' => (string) $this->cfg('payout_service', 'WALLET'),
+                'mobileReceiveNumber' => preg_replace('/\D/', '', $phone),
+                'fromCountry' => strtoupper($fromCountry ?: (string) config('flashpay.peex.sender_country', 'CG')),
+                'originFund' => (string) $this->cfg('origin_fund', 'SALARY'),
+                'reason' => $purpose ?: (string) $this->cfg('default_purpose', 'FAMILY SUPPORT'),
+                'relation' => (string) $this->cfg('relation', 'FRIEND'),
                 $f['callback_url'] => $this->callbackUrl(),
             ], fn ($v) => $v !== null && $v !== ''));
 
@@ -272,7 +314,9 @@ class DigitwaceClient
     /** @return array{status:string, raw_status:?string, message:?string, raw:array} */
     public function status(string $waceIdOrReference): array
     {
-        $json = $this->call('get', 'status', [$this->cfg('fields.transaction.transaction_code') => $waceIdOrReference]);
+        $json = str_contains((string) $this->cfg('paths.status'), '{ref}')
+            ? $this->call('get', 'status', [], ['ref' => rawurlencode($waceIdOrReference)])
+            : $this->call('get', 'status', [$this->cfg('fields.transaction.transaction_code') => $waceIdOrReference]);
         $raw = data_get($json, 'data.status') ?? data_get($json, 'status') ?? data_get($json, 'data.0.status');
 
         return [
@@ -298,7 +342,7 @@ class DigitwaceClient
         $s = strtolower(trim((string) $s));
         return match (true) {
             in_array($s, ['success', 'successful', 'succeeded', 'paid', 'completed', 'complete', 'done', 'approved', 'delivered', 'confirmed_paid'], true) => 'successful',
-            in_array($s, ['failed', 'failure', 'rejected', 'declined', 'canceled', 'cancelled', 'error', 'refunded', 'expired', 'reversed'], true) => 'failed',
+            in_array($s, ['failed', 'failure', 'rejected', 'declined', 'cancel', 'canceled', 'cancelled', 'error', 'refunded', 'expired', 'reversed'], true) => 'failed',
             default => 'pending',
         };
     }
@@ -306,11 +350,15 @@ class DigitwaceClient
     // ------------------------------------------------------------ HTTP
 
     /** Appel authentifié ; un 401 renouvelle le jeton une fois. */
-    public function call(string $method, string $endpoint, array $data = []): array
+    public function call(string $method, string $endpoint, array $data = [], array $params = []): array
     {
+        $path = $this->path($endpoint);
+        foreach ($params as $k => $v) {
+            $path = str_replace('{' . $k . '}', (string) $v, $path);
+        }
         $do = fn (string $token) => $method === 'get'
-            ? $this->http()->withToken($token)->get($this->path($endpoint), $data)
-            : $this->http()->withToken($token)->post($this->path($endpoint), $data);
+            ? $this->http()->withToken($token)->get($path, $data)
+            : $this->http()->withToken($token)->post($path, $data);
 
         $res = $do($this->token());
         if ($res->status() === 401) {
@@ -358,19 +406,21 @@ class DigitwaceClient
             'enabled' => (bool) $this->cfg('enabled'),
             'public_key' => $pub ? substr($pub, 0, 6) . '…' . substr($pub, -4) . ' (' . strlen($pub) . ' car.)' : null,
             'private_key' => $priv ? 'présente (' . strlen($priv) . ' car.)' : null,
-            'login_fields' => array_values($this->cfg('fields.login')),
+            'auth_mode' => (string) $this->cfg('auth_mode', 'basic'),
+            'login_fields' => $this->cfg('auth_mode', 'basic') === 'basic' ? ['Authorization: Basic base64(public:private)'] : array_values($this->cfg('fields.login')),
             'api_key_header' => (bool) $this->cfg('send_api_key_header'),
+            'override' => self::endpointOverride(),
         ];
         $f = $this->cfg('fields.login');
         $t = microtime(true);
         try {
-            $res = $this->http()->timeout(20)->post($this->path('login'), [$f['public_key'] => $pub, $f['private_key'] => $priv]);
+            $res = $this->loginRequest();
             $body = (string) $res->body();
             foreach (array_filter([$pub, $priv]) as $secret) {
                 $body = str_replace($secret, '***', $body);
             }
             $json = $res->json();
-            $token = is_array($json) ? (data_get($json, 'token') ?? data_get($json, 'access_token') ?? data_get($json, 'data.token') ?? data_get($json, 'data.access_token')) : null;
+            $token = self::tokenFrom($json);
             $out += [
                 'http' => $res->status(),
                 'ms' => (int) round((microtime(true) - $t) * 1000),
@@ -435,6 +485,165 @@ class DigitwaceClient
 
     protected function cfg(string $key, mixed $default = null): mixed
     {
+        // Adresse / connexion détectées automatiquement depuis la console (prioritaires sur .env)
+        $o = self::endpointOverride();
+        $map = ['base_url' => 'base_url', 'paths.login' => 'login_path', 'fields.login' => 'login_fields', 'send_api_key_header' => 'api_key_header', 'auth_mode' => 'auth_mode'];
+        if ($o && isset($map[$key]) && array_key_exists($map[$key], $o)) {
+            return $o[$map[$key]];
+        }
         return config('flashpay.digitwace.' . $key, $default);
+    }
+
+    public static function endpointOverride(): ?array
+    {
+        try {
+            $v = app(\App\Services\Ops\PlatformSettings::class)->get('digitwace_endpoint');
+            return is_array($v) && ! empty($v['base_url']) ? $v : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Détection automatique de l'adresse de connexion WacePay (doc indisponible) :
+     * essaie les adresses et chemins plausibles, uniquement sur des domaines
+     * *.wacepay.com en HTTPS, et retient la première combinaison qui renvoie un jeton.
+     * Les clés ne sont jamais renvoyées.
+     */
+    public function discover(bool $save = true): array
+    {
+        @set_time_limit(130);
+        $started = microtime(true);
+        $pub = (string) config('flashpay.digitwace.public_key');
+        $priv = (string) config('flashpay.digitwace.private_key');
+        if (! $pub || ! $priv) {
+            return ['found' => null, 'attempts' => [], 'message' => 'Clés WacePay absentes (DIGITWACE_PUBLIC_KEY / DIGITWACE_PRIVATE_KEY).'];
+        }
+
+        $bases = array_values(array_unique(array_filter(array_map(fn ($b) => rtrim(trim($b), '/') . '/', array_merge(
+            [(string) config('flashpay.digitwace.base_url')],
+            explode(',', (string) config('flashpay.digitwace.discover_bases', '')),
+            [
+                'https://payinws.wacepay.com/api/v1/', 'https://payinws.wacepay.com/api/',
+                'https://api.wacepay.com/api/v1/', 'https://api.wacepay.com/api/', 'https://api.wacepay.com/v1/', 'https://api.wacepay.com/',
+                'https://sandbox.wacepay.com/api/v1/', 'https://sandbox-api.wacepay.com/api/v1/', 'https://api-sandbox.wacepay.com/api/v1/',
+                'https://api.sandbox.wacepay.com/api/v1/', 'https://test.wacepay.com/api/v1/', 'https://dev.wacepay.com/api/v1/',
+                'https://app.wacepay.com/api/v1/', 'https://dashboard.wacepay.com/api/v1/', 'https://wacepay.com/api/v1/', 'https://www.wacepay.com/api/v1/',
+            ]
+        )), function ($b) {
+            $h = strtolower((string) parse_url($b, PHP_URL_HOST));
+            return str_starts_with($b, 'https://') && ($h === 'wacepay.com' || str_ends_with($h, '.wacepay.com'));
+        })));
+        $paths = array_values(array_unique(array_filter([
+            (string) config('flashpay.digitwace.paths.login'),
+            'auth/login', 'login', 'auth/token', 'token', 'oauth/token', 'auth', 'authenticate', 'auth/authenticate',
+            'merchant/login', 'partner/login', 'api-key/login', 'developer/login', 'access-token', 'auth/access-token',
+        ])));
+        $fieldSets = [
+            ['apiKey', 'secretKey'], ['publicKey', 'privateKey'], ['public_key', 'private_key'], ['api_key', 'secret_key'],
+            ['apiKey', 'privateKey'], ['key', 'secret'], ['client_id', 'client_secret'],
+        ];
+
+        $attempts = [];
+        $found = null;
+        $hint = null;
+        foreach ($bases as $base) {
+            $host = (string) parse_url($base, PHP_URL_HOST);
+            if (config('flashpay.digitwace.discover_dns_check', true) && gethostbyname($host) === $host) {
+                $attempts[] = ['url' => $base, 'http' => null, 'note' => 'domaine inexistant'];
+                continue;
+            }
+            // Méthode documentée (docs.digitwace.com) : GET get-token + Authorization Basic
+            $rb = $this->probeBasic($base, 'get-token', $pub, $priv);
+            $attempts[] = $rb;
+            if ($rb['token_ok']) {
+                $found = ['base_url' => $base, 'login_path' => 'get-token', 'auth_mode' => 'basic'];
+                break;
+            }
+            if ($rb['http'] === null) {
+                continue; // hôte injoignable
+            }
+            foreach ($paths as $path) {
+                if (microtime(true) - $started > 100) {
+                    break 2;
+                }
+                $r = $this->probe($base, $path, $fieldSets[0], $pub, $priv);
+                $attempts[] = $r;
+                if ($r['token_ok']) {
+                    $found = ['base_url' => $base, 'login_path' => $path, 'auth_mode' => 'login', 'login_fields' => ['public_key' => $fieldSets[0][0], 'private_key' => $fieldSets[0][1]], 'api_key_header' => false];
+                    break 2;
+                }
+                if ($r['http'] === null) {
+                    break; // hôte injoignable : on passe à l'adresse suivante
+                }
+                // Le chemin existe (refus des données / des clés) : on essaie les autres noms de champs
+                if (in_array($r['http'], [400, 401, 403, 422], true) && $r['json']) {
+                    $hint ??= $r;
+                    foreach (array_slice($fieldSets, 1) as $fs) {
+                        foreach ([false, true] as $header) {
+                            $r2 = $this->probe($base, $path, $fs, $pub, $priv, $header);
+                            $attempts[] = $r2;
+                            if ($r2['token_ok']) {
+                                $found = ['base_url' => $base, 'login_path' => $path, 'auth_mode' => 'login', 'login_fields' => ['public_key' => $fs[0], 'private_key' => $fs[1]], 'api_key_header' => $header];
+                                break 4;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($found && $save) {
+            app(\App\Services\Ops\PlatformSettings::class)->set('digitwace_endpoint', $found + ['found_at' => now()->toIso8601String()]);
+            Cache::forget('digitwace:token:' . md5($pub));
+            Log::info('WacePay : adresse de connexion détectée', $found);
+        }
+
+        return [
+            'found' => $found,
+            'hint' => $hint ? ['url' => $hint['url'], 'http' => $hint['http'], 'body' => $hint['body']] : null,
+            'attempts' => array_map(fn ($a) => array_diff_key($a, ['json' => 1]), $attempts),
+            'seconds' => (int) round(microtime(true) - $started),
+            'message' => $found
+                ? 'Connexion WacePay trouvée : ' . $found['base_url'] . $found['login_path'] . ' — enregistrée et utilisée immédiatement.'
+                : ($hint
+                    ? 'Le chemin ' . $hint['url'] . ' existe (HTTP ' . $hint['http'] . ') mais refuse les clés : vérifiez les clés (sandbox / production) ou demandez à WacePay le format exact de connexion.'
+                    : 'Aucune adresse WacePay n\'a répondu correctement : WacePay doit vous fournir l\'adresse exacte de son API (et débloquer l\'IP du serveur).'),
+        ];
+    }
+
+    protected function probeBasic(string $base, string $path, string $pub, string $priv): array
+    {
+        $url = $base . ltrim($path, '/');
+        try {
+            $res = Http::acceptJson()->connectTimeout(4)->timeout(8)
+                ->withHeaders(['Authorization' => 'Basic ' . base64_encode($pub . ':' . $priv)])->get($url);
+            $json = $res->json();
+            $body = str_replace([$pub, $priv, base64_encode($pub . ':' . $priv)], '***', mb_substr(trim(preg_replace('/\s+/', ' ', strip_tags((string) $res->body()))), 0, 160));
+            $tok = self::tokenFrom($json);
+            if ($tok) {
+                $body = str_replace($tok, mb_substr($tok, 0, 6) . '…', $body);
+            }
+            return ['url' => $url, 'fields' => 'GET + Basic', 'http' => $res->status(), 'json' => is_array($json), 'token_ok' => (bool) $tok, 'body' => $body];
+        } catch (\Throwable $e) {
+            return ['url' => $url, 'fields' => 'GET + Basic', 'http' => null, 'json' => false, 'token_ok' => false, 'body' => mb_substr($e->getMessage(), 0, 120)];
+        }
+    }
+
+    protected function probe(string $base, string $path, array $fields, string $pub, string $priv, bool $header = false): array
+    {
+        $url = $base . ltrim($path, '/');
+        try {
+            $res = Http::acceptJson()->asJson()->connectTimeout(4)->timeout(7)
+                ->withHeaders($header ? ['X-API-KEY' => $pub] : [])
+                ->post($url, [$fields[0] => $pub, $fields[1] => $priv]);
+            $json = $res->json();
+            $token = self::tokenFrom($json);
+            $body = str_replace([$pub, $priv], '***', mb_substr(trim(preg_replace('/\s+/', ' ', strip_tags((string) $res->body()))), 0, 160));
+
+            return ['url' => $url, 'fields' => implode('+', $fields) . ($header ? ' +X-API-KEY' : ''), 'http' => $res->status(), 'json' => is_array($json), 'token_ok' => is_string($token) && $token !== '', 'body' => $body];
+        } catch (\Throwable $e) {
+            return ['url' => $url, 'fields' => implode('+', $fields), 'http' => null, 'json' => false, 'token_ok' => false, 'body' => mb_substr($e->getMessage(), 0, 120)];
+        }
     }
 }

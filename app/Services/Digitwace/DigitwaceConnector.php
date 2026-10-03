@@ -85,7 +85,8 @@ class DigitwaceConnector implements PaymentRailConnector
                 'country' => $route['country'],
             ]);
 
-            $r = $this->client->payout($reference, $sender, $beneficiary, $payer, $amountMinor, $currency, $route['phone'], $meta['purpose'] ?? null);
+            $r = $this->client->payout($reference, $sender, $beneficiary, $payer, $amountMinor, $currency, $route['phone'], $meta['purpose'] ?? null,
+                $route['country'], $meta['source_country'] ?? config('flashpay.peex.sender_country', 'CG'), $tx?->currency);
             $req->update(['wace_id' => $r['wace_id'], 'status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'last_response' => $r['raw'], 'last_checked_at' => now()]);
 
             return ['status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'external_ref' => $r['wace_id'] ?: $reference, 'raw' => $r['raw']];

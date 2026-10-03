@@ -37,7 +37,7 @@ class WacepayCardBankTest extends TestCase
         Http::fake(function ($req) use (&$status, &$sent) {
             $sent[] = [$req->url(), $req->data()];
             return match (true) {
-                str_contains($req->url(), 'auth/login') => Http::response(['token' => 't'], 200),
+                str_contains($req->url(), 'get-token') => $req->method() === 'GET' && $req->header('Authorization')[0] === 'Basic ' . base64_encode('pub:priv') ? Http::response(['data' => ['token' => 'tok-123']], 200) : Http::response(['message' => 'bad auth'], 401),
                 str_contains($req->url(), 'payin/card'), str_contains($req->url(), 'payin/bank') => Http::response(['data' => ['transactionCode' => 'WC-' . count($sent), 'status' => 'PENDING', 'paymentUrl' => 'https://pay.wace.test/c/' . count($sent)]], 200),
                 str_contains($req->url(), 'transaction/status') => Http::response(['data' => ['status' => $status, 'maskedPan' => '424242******4242']], 200),
                 default => Http::response([], 404),
@@ -97,5 +97,35 @@ class WacepayCardBankTest extends TestCase
         $this->assertSame('cloudflare', $d['server']);
         $this->assertStringNotContainsString('priv', $d['body']);
         $this->assertStringContainsString('injoignable', $d['message']);
+    }
+
+    public function test_discovery_finds_and_saves_login_endpoint(): void
+    {
+        config(['flashpay.digitwace.discover_dns_check' => false, 'flashpay.digitwace.private_key' => 'SECRET-XYZ-123']);
+        Http::fake(function ($req) {
+            $u = $req->url();
+            if ($u === 'https://api.wacepay.com/api/v1/auth/login') {
+                return Http::response('<html>502 Bad Gateway</html>', 502);
+            }
+            if ($u === 'https://api.wacepay.com/api/v1/login') {
+                return isset($req->data()['publicKey'])
+                    ? Http::response(['data' => ['accessToken' => 'tok']], 200)
+                    : Http::response(['message' => 'publicKey is required'], 422);
+            }
+            if (str_contains($u, 'balance')) {
+                return Http::response(['data' => [['currency' => 'XAF', 'balance' => 1000]]], 200);
+            }
+            return Http::response('not found', 404);
+        });
+        $admin = User::create(['full_name' => 'Super', 'phone' => '242069990001', 'password' => bcrypt('x'), 'status' => 'active']);
+        $admin->assignRole('super_admin');
+        $r = $this->actingAs($admin, 'sanctum')->postJson('/api/admin/digitwace/discover')->assertOk()->json();
+        $this->assertSame('login', $r['found']['login_path']);
+        $this->assertSame('publicKey', $r['found']['login_fields']['public_key']);
+        $this->assertStringNotContainsString('SECRET-XYZ', json_encode($r));
+        // L'adresse détectée est utilisée par le client
+        $this->assertSame('tok', app(\App\Services\Digitwace\DigitwaceClient::class)->token(true));
+        $this->actingAs($admin, 'sanctum')->deleteJson('/api/admin/digitwace/discover')->assertOk();
+        $this->assertNull(\App\Services\Digitwace\DigitwaceClient::endpointOverride());
     }
 }
