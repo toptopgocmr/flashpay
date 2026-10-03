@@ -44,6 +44,19 @@
               <li>Environnement : <b>{{ wBal.sandbox ? 'Sandbox' : 'Production' }}</b> — adresse appelée : <code>{{ wBal.base_url || '—' }}</code><br /><small>Elle doit correspondre aux clés saisies (clés sandbox ↔ URL sandbox).</small></li>
               <li>IP sortante actuelle du serveur : <code>{{ wBal.server_ip || 'inconnue' }}</code><br /><small>Elle doit figurer dans WacePay › Developers › IP Whitelist avec le statut « Active » (pas « Blocked »).</small></li>
             </ul>
+            <button class="btn-normal" style="margin-top:8px" :disabled="diagBusy" @click="diagnose">{{ diagBusy ? 'Test en cours…' : 'Diagnostiquer la connexion' }}</button>
+          </div>
+          <div v-if="diag" class="diag">
+            <div class="diag-h" :class="diag.token_ok ? 'ok' : 'ko'">{{ diag.token_ok ? '✓ Connexion WacePay réussie' : '✕ Connexion refusée' }} <small>({{ diag.http ? 'HTTP ' + diag.http : 'pas de réponse' }} · {{ diag.ms }} ms)</small></div>
+            <dl>
+              <dt>Adresse appelée</dt><dd><code>{{ diag.login_url }}</code> <small>(IP {{ diag.host_ip || '?' }})</small></dd>
+              <dt>IP du serveur FlashPay</dt><dd><code>{{ diag.server_ip || '?' }}</code></dd>
+              <dt>Clé publique</dt><dd>{{ diag.public_key || '⚠ absente' }}</dd>
+              <dt>Clé privée</dt><dd>{{ diag.private_key || '⚠ absente' }}</dd>
+              <dt>Champs envoyés</dt><dd><code>{{ diag.login_fields.join(' + ') }}</code></dd>
+              <dt>Serveur</dt><dd>{{ diag.server || '—' }}<span v-if="diag.cf_ray"> · Cloudflare {{ diag.cf_ray }}</span></dd>
+              <dt>Réponse</dt><dd>{{ diag.message }}<br /><small class="mono">{{ diag.body || '(vide)' }}</small></dd>
+            </dl>
           </div>
           <div v-for="a in wBal?.accounts || []" :key="a.currency + a.label" class="wbal-row">
             <span>{{ a.label }}</span>
@@ -295,6 +308,12 @@ async function load() {
   }
 }
 const toast = ref(null)
+const diag = ref(null)
+const diagBusy = ref(false)
+async function diagnose() {
+  diagBusy.value = true
+  try { diag.value = (await api.get('/admin/digitwace/diagnose')).data } catch (e) { showToast(e.response?.data?.message || e.message, 'err') } finally { diagBusy.value = false }
+}
 const rowErr = reactive({})
 let toastTimer = null
 function showToast(text, kind = 'ok') {
@@ -422,6 +441,10 @@ tr.add td { background: var(--surface-2); }
 .wsvc .on { color: #15803d; font-weight: 700; }
 .wsvc .off { color: var(--text-2); }
 .wsvc small { flex-basis: 100%; color: var(--text-2); font-size: 11px; }
+.diag { margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; background: #fff; }
+.diag-h { font-weight: 800; margin-bottom: 6px; } .diag-h.ok { color: #15803d; } .diag-h.ko { color: #b91c1c; }
+.diag dl { display: grid; grid-template-columns: 140px 1fr; gap: 4px 10px; margin: 0; }
+.diag dt { color: var(--text-2); } .diag dd { margin: 0; word-break: break-all; }
 .wbal-err { background: #fef2f2; border: 1px solid #fecaca; color: #7f1d1d; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; line-height: 1.4; }
 .wbal-err .why { margin: 4px 0 6px; color: #991b1b; }
 .wbal-err ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }

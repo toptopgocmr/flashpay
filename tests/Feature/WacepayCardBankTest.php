@@ -85,4 +85,17 @@ class WacepayCardBankTest extends TestCase
         $this->assertSame('failed', $bankReq->transaction->fresh()->status);
         $this->assertSame(5000, (int) $u->wallet->fresh()->balance);
     }
+
+    public function test_connection_diagnostic_hides_keys(): void
+    {
+        Http::fake(['*' => Http::response('<html><body>502 Bad Gateway priv</body></html>', 502, ['Server' => 'cloudflare'])]);
+        $admin = User::create(['full_name' => 'Super', 'phone' => '242069990001', 'password' => bcrypt('x'), 'status' => 'active']);
+        $admin->assignRole('super_admin');
+        $d = $this->actingAs($admin, 'sanctum')->getJson('/api/admin/digitwace/diagnose')->assertOk()->json();
+        $this->assertSame(502, $d['http']);
+        $this->assertFalse($d['token_ok']);
+        $this->assertSame('cloudflare', $d['server']);
+        $this->assertStringNotContainsString('priv', $d['body']);
+        $this->assertStringContainsString('injoignable', $d['message']);
+    }
 }

@@ -198,6 +198,14 @@ class PricingAdminController extends Controller
         return response()->json(app(\App\Services\Digitwace\WacepayBalanceService::class)->balances($request->boolean('refresh')));
     }
 
+    /** Diagnostic de la connexion WacePay (code HTTP réel, IP sortante, clés présentes). */
+    public function diagnoseWacepay()
+    {
+        $d = app(\App\Services\Digitwace\DigitwaceClient::class)->diagnose();
+        $d['server_ip'] = \App\Services\Digitwace\WacepayBalanceService::serverIp();
+        return response()->json($d);
+    }
+
     /** Synchronise la couverture WacePay (pays, opérateurs, collecte / versement) depuis l'API. */
     public function syncWacepay(Request $request)
     {

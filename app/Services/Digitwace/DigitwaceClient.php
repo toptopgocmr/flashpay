@@ -339,6 +339,55 @@ class DigitwaceClient
             ->withHeaders(array_filter(['X-API-KEY' => $this->cfg('send_api_key_header') ? $this->cfg('public_key') : null]));
     }
 
+    /**
+     * Diagnostic de connexion (console) : appelle la connexion WacePay et renvoie
+     * ce que le serveur répond réellement (code HTTP, en-têtes, extrait du corps),
+     * sans jamais exposer les clés.
+     */
+    public function diagnose(): array
+    {
+        $base = rtrim((string) $this->cfg('base_url'), '/') . '/';
+        $host = parse_url($base, PHP_URL_HOST) ?: '';
+        $pub = (string) $this->cfg('public_key');
+        $priv = (string) $this->cfg('private_key');
+        $out = [
+            'base_url' => $base,
+            'login_url' => $base . $this->path('login'),
+            'host_ip' => $host ? (gethostbyname($host) ?: null) : null,
+            'sandbox' => (bool) $this->cfg('sandbox', true),
+            'enabled' => (bool) $this->cfg('enabled'),
+            'public_key' => $pub ? substr($pub, 0, 6) . '…' . substr($pub, -4) . ' (' . strlen($pub) . ' car.)' : null,
+            'private_key' => $priv ? 'présente (' . strlen($priv) . ' car.)' : null,
+            'login_fields' => array_values($this->cfg('fields.login')),
+            'api_key_header' => (bool) $this->cfg('send_api_key_header'),
+        ];
+        $f = $this->cfg('fields.login');
+        $t = microtime(true);
+        try {
+            $res = $this->http()->timeout(20)->post($this->path('login'), [$f['public_key'] => $pub, $f['private_key'] => $priv]);
+            $body = (string) $res->body();
+            foreach (array_filter([$pub, $priv]) as $secret) {
+                $body = str_replace($secret, '***', $body);
+            }
+            $json = $res->json();
+            $token = is_array($json) ? (data_get($json, 'token') ?? data_get($json, 'access_token') ?? data_get($json, 'data.token') ?? data_get($json, 'data.access_token')) : null;
+            $out += [
+                'http' => $res->status(),
+                'ms' => (int) round((microtime(true) - $t) * 1000),
+                'server' => $res->header('Server') ?: null,
+                'content_type' => $res->header('Content-Type') ?: null,
+                'cf_ray' => $res->header('CF-Ray') ?: null,
+                'body' => mb_substr(trim(preg_replace('/\s+/', ' ', strip_tags($body))), 0, 400),
+                'token_ok' => (bool) $token,
+                'message' => is_array($json) ? $this->errorText($json, $res->status()) : $this->errorText([], $res->status()),
+            ];
+        } catch (\Throwable $e) {
+            $out += ['http' => null, 'ms' => (int) round((microtime(true) - $t) * 1000), 'token_ok' => false,
+                'message' => 'Connexion impossible : ' . mb_substr($e->getMessage(), 0, 300)];
+        }
+        return $out;
+    }
+
     protected function path(string $endpoint): string
     {
         return ltrim((string) $this->cfg('paths.' . $endpoint), '/');
