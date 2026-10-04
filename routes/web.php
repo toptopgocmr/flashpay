@@ -26,5 +26,6 @@ Route::get('/d/{reference}', [\App\Http\Controllers\PublicPagesController::class
 Route::get('/docs/api-ecommerce', [\App\Http\Controllers\PublicPagesController::class, 'apiDocs']);
 
 // Reçus de transaction et médias du chat : liens temporaires signés
+Route::get('/cagnotte/{split}', [\App\Http\Controllers\Api\ClientFeaturesController::class, 'splitReceiptPage'])->name('split.receipt')->middleware('signed')->whereNumber('split');
 Route::get('/r/{transaction}', [\App\Http\Controllers\Api\ReceiptController::class, 'show'])->name('receipt.show')->middleware('signed');
 Route::get('/chat-media/{message}', [\App\Http\Controllers\Api\ChatController::class, 'signedFile'])->name('chat.media')->middleware('signed')->whereNumber('message');

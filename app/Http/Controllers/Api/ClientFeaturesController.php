@@ -221,35 +221,65 @@ class ClientFeaturesController extends Controller
         return response()->json(['amount' => $claim->amount, 'currency' => $claim->envelope->currency, 'message' => $claim->envelope->message, 'sender' => $claim->envelope->sender->full_name]);
     }
 
-    // ------------------------------------------------ Partage de note
+    // ------------------------------------------------ Cagnottes (facture partagée / cadeau commun)
 
     public function splits(Request $request, SplitBillService $splits)
     {
         $u = $request->user();
+        $mine = fn ($q) => $q->where('user_id', $u->id)->orWhere('phone', $u->phone);
         return response()->json([
-            'created' => BillSplit::with('shares')->where('creator_id', $u->id)->latest()->limit(30)->get()->map(fn ($s) => $splits->summary($s)),
-            'to_pay' => BillSplitShare::with('split.creator:id,full_name')->where(fn ($q) => $q->where('user_id', $u->id)->orWhere('phone', $u->phone))
-                ->where('status', '<>', 'self')->latest()->limit(30)->get(),
+            'created' => BillSplit::with('shares')->where('creator_id', $u->id)->latest()->limit(30)->get()->map(fn ($s) => $splits->summary($s, $u)),
+            // Contributions qu'on me demande (et historique)
+            'to_pay' => BillSplitShare::with('split.creator:id,full_name,phone', 'split.shares')->where($mine)
+                ->where('status', '<>', 'self')->whereHas('split', fn ($q) => $q->where('creator_id', '!=', $u->id))
+                ->latest()->limit(30)->get()
+                ->map(fn ($sh) => $sh->toArray() + ['split' => $splits->summary($sh->split, $u)]),
+            // Cagnottes dont je suis le bénéficiaire (cadeau commun : visible une fois terminé)
+            'for_me' => BillSplit::with('shares')->where('beneficiary_user_id', $u->id)->where('creator_id', '!=', $u->id)
+                ->where(fn ($q) => $q->where('purpose', '!=', 'gift')->orWhereIn('status', ['settled', 'closed']))
+                ->latest()->limit(20)->get()->map(fn ($s) => $splits->summary($s, $u)),
         ]);
+    }
+
+    public function showSplit(Request $request, SplitBillService $splits, BillSplit $split)
+    {
+        $this->assertCanSee($request->user(), $split);
+        return response()->json($splits->summary($split, $request->user()));
     }
 
     public function createSplit(Request $request, SplitBillService $splits)
     {
         $v = $request->validate([
             'title' => 'required|string|max:120',
-            'total_amount' => 'required|integer|min:100',
-            'mode' => 'required|in:equal,custom',
+            'purpose' => 'nullable|in:bill,gift',
+            'mode' => 'required|in:equal,custom,free',
+            'total_amount' => 'nullable|integer|min:0|required_if:mode,equal',
+            'beneficiary_phone' => 'nullable|string|max:25',
+            'message' => 'nullable|string|max:255',
+            'deadline' => 'nullable|date|after_or_equal:today',
             'include_self' => 'nullable|boolean',
+            'participants' => 'required|array|min:1|max:50',
+            'participants.*.phone' => 'required|string|max:25',
+            'participants.*.amount' => 'nullable|integer|min:1',
+        ]);
+        return response()->json($splits->summary($splits->create($request->user(), $v), $request->user()), 201);
+    }
+
+    public function addSplitParticipants(Request $request, SplitBillService $splits, BillSplit $split)
+    {
+        abort_unless($split->creator_id === $request->user()->id, 404);
+        $v = $request->validate([
             'participants' => 'required|array|min:1|max:30',
             'participants.*.phone' => 'required|string|max:25',
             'participants.*.amount' => 'nullable|integer|min:1',
         ]);
-        return response()->json($splits->summary($splits->create($request->user(), $v)), 201);
+        return response()->json($splits->summary($splits->addParticipants($request->user(), $split, $v['participants']), $request->user()));
     }
 
     public function paySplitShare(Request $request, SplitBillService $splits, BillSplitShare $share)
     {
-        return response()->json($splits->pay($request->user(), $share), 201);
+        $v = $request->validate(['amount' => 'nullable|integer|min:1']);
+        return response()->json($splits->pay($request->user(), $share, $v['amount'] ?? null), 201);
     }
 
     public function declineSplitShare(Request $request, SplitBillService $splits, BillSplitShare $share)
@@ -263,12 +293,40 @@ class ClientFeaturesController extends Controller
         return response()->json(['reminded' => $splits->remind($split)]);
     }
 
-    public function cancelSplit(Request $request, BillSplit $split)
+    public function closeSplit(Request $request, SplitBillService $splits, BillSplit $split)
     {
-        abort_unless($split->creator_id === $request->user()->id && $split->status === 'open', 422, 'Partage non annulable.');
-        $split->update(['status' => 'cancelled']);
-        $split->shares()->where('status', 'pending')->update(['status' => 'declined']);
-        return response()->json($split);
+        abort_unless($split->creator_id === $request->user()->id, 404);
+        return response()->json($splits->summary($splits->close($split), $request->user()));
+    }
+
+    public function cancelSplit(Request $request, SplitBillService $splits, BillSplit $split)
+    {
+        abort_unless($split->creator_id === $request->user()->id, 404);
+        return response()->json($splits->summary($splits->cancel($split), $request->user()));
+    }
+
+    /** Reçu récapitulatif : lien signé (7 jours, imprimable en PDF) + texte à partager. */
+    public function splitReceipt(Request $request, SplitBillService $splits, BillSplit $split)
+    {
+        $this->assertCanSee($request->user(), $split);
+        return response()->json([
+            'url' => \Illuminate\Support\Facades\URL::temporarySignedRoute('split.receipt', now()->addDays(7), ['split' => $split->id]),
+            'text' => $splits->receiptText($split),
+        ]);
+    }
+
+    /** Page web signée du reçu (sans jeton). */
+    public function splitReceiptPage(SplitBillService $splits, BillSplit $split)
+    {
+        return response()->view('split-receipt', ['r' => $splits->receipt($split), 's' => $split]);
+    }
+
+    protected function assertCanSee(\App\Models\User $u, BillSplit $split): void
+    {
+        $ok = $split->creator_id === $u->id
+            || ($split->beneficiary_user_id === $u->id && ($split->purpose !== 'gift' || $split->status !== 'open'))
+            || $split->shares()->where(fn ($q) => $q->where('user_id', $u->id)->orWhere('phone', $u->phone))->exists();
+        abort_unless($ok, 404);
     }
 
     // ------------------------------------------------ Mini-programmes

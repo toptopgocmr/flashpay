@@ -130,14 +130,24 @@ class AuthController extends Controller
             $query = User::whereIn('phone', \App\Support\Phone::candidates($validated['phone']));
         }
 
-        if (! empty($validated['profile'])) {
-            $query->whereHas('roles', fn ($q) => $q->where('name', $validated['profile']));
+        $user = $query->first();
+        $secret = (string) $validated['password'];
+        $okPassword = $user && Hash::check($secret, $user->password);
+        // Le code secret à 4 chiffres et le PIN sont le même code à l'inscription : si seul le PIN
+        // a été réinitialisé (ancien « Code oublié »), on l'accepte et on resynchronise le mot de passe.
+        $okPin = ! $okPassword && $user && $user->pin_hash && preg_match('/^\d{4,6}$/', $secret) && Hash::check($secret, $user->pin_hash)
+            && ! ($user->pin_locked_until && $user->pin_locked_until->isFuture());
+        if (! $user || (! $okPassword && ! $okPin)) {
+            return response()->json(['message' => 'Numéro ou code secret incorrect.'], 401);
+        }
+        if ($okPin) {
+            $user->forceFill(['password' => Hash::make($secret)])->save();
         }
 
-        $user = $query->first();
-
-        if (! $user || ! Hash::check($validated['password'], $user->password)) {
-            return response()->json(['message' => 'Identifiants invalides.'], 401);
+        if (! empty($validated['profile']) && ! $user->hasRole($validated['profile'])) {
+            $labels = ['client' => 'client', 'merchant' => 'marchand', 'agent' => 'agent', 'cashier' => 'caissier', 'super_admin' => 'administrateur', 'support' => 'support'];
+            $has = $user->getRoleNames()->map(fn ($r) => $labels[$r] ?? $r)->implode(', ');
+            return response()->json(['message' => 'Ce compte n\'a pas l\'accès ' . ($labels[$validated['profile']] ?? $validated['profile']) . ($has ? " (profil : {$has})." : '.') . ' Choisissez le bon espace ou contactez FlashPay.', 'code' => 'wrong_profile'], 403);
         }
 
         if ($user->status !== 'active') {
@@ -221,10 +231,13 @@ class AuthController extends Controller
             return response()->json(['message' => 'Numéro de pièce d\'identité incorrect.', 'code' => 'id_mismatch'], 422);
         }
         $pins->set($user, $v['new_pin']);
+        // Code secret unique : le nouveau code sert aussi à la connexion (comme à l'inscription).
+        $user->forceFill(['password' => Hash::make($v['new_pin'])])->save();
+        $user->tokens()->delete();
         \App\Support\Audit::log('security.pin_reset', $user, [], $user->id);
-        app(\App\Services\Notifications\NotificationService::class)->toUser($user, 'pin_changed', 'Code PIN réinitialisé', 'Votre code PIN a été réinitialisé. Si ce n\'est pas vous, bloquez votre compte immédiatement.', ['severity' => 'warning']);
+        app(\App\Services\Notifications\NotificationService::class)->toUser($user, 'pin_changed', 'Code secret réinitialisé', 'Votre code secret (connexion et validation des opérations) a été réinitialisé. Si ce n\'est pas vous, bloquez votre compte immédiatement.', ['severity' => 'warning']);
 
-        return response()->json(['message' => 'PIN réinitialisé.']);
+        return response()->json(['message' => 'Code secret réinitialisé : utilisez-le pour vous connecter.']);
     }
 
     /**

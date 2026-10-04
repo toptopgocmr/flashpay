@@ -224,7 +224,7 @@ class AdminController extends Controller
         return response()->json([
             'merchant' => $merchant,
             'login' => ['phone' => $user->phone, 'profile' => 'Marchand', 'new_account' => $created],
-            'message' => $created ? 'Compte marchand créé.' : 'Profil marchand ajouté au compte existant (mot de passe inchangé).',
+            'message' => $created ? 'Compte marchand créé.' : (! empty($v['password']) ? 'Profil marchand ajouté au compte existant : son code secret est remplacé par celui indiqué.' : 'Profil marchand ajouté au compte existant (code secret inchangé).'),
         ], 201);
     }
 
@@ -310,7 +310,7 @@ class AdminController extends Controller
         return response()->json([
             'agent' => $agent,
             'login' => ['phone' => $user->phone, 'profile' => 'Agent', 'new_account' => $created],
-            'message' => $created ? 'Compte agent créé.' : 'Profil agent ajouté au compte existant (mot de passe inchangé).',
+            'message' => $created ? 'Compte agent créé.' : (! empty($v['password']) ? 'Profil agent ajouté au compte existant : son code secret est remplacé par celui indiqué.' : 'Profil agent ajouté au compte existant (code secret inchangé).'),
         ], 201);
     }
 
@@ -351,10 +351,23 @@ class AdminController extends Controller
     {
         abort_if($user->hasRole('super_admin') && $user->id !== $request->user()->id, 403, 'Mot de passe Super Admin : à changer par son titulaire.');
         $v = $request->validate(['password' => 'required|string|min:4']);
-        $user->update(['password' => \Illuminate\Support\Facades\Hash::make($v['password'])]);
+        $this->applySecret($user, $v['password']);
         $user->tokens()->delete(); // déconnecte ses appareils
 
-        return response()->json(['message' => 'Mot de passe réinitialisé. L\'utilisateur doit se reconnecter.']);
+        return response()->json(['message' => 'Code secret réinitialisé. L\'utilisateur doit se reconnecter avec ce code.']);
+    }
+
+    /** Code secret de connexion ; s'il fait 4 à 6 chiffres, il devient aussi le PIN des opérations. */
+    protected function applySecret(User $user, string $secret): void
+    {
+        $user->forceFill(['password' => \Illuminate\Support\Facades\Hash::make($secret), 'pin_attempts' => 0, 'pin_locked_until' => null])->save();
+        if (preg_match('/^\d{4,6}$/', $secret)) {
+            try {
+                app(\App\Services\Security\PinService::class)->set($user, $secret);
+            } catch (\Throwable) {
+                // PIN trop simple (ex. 1234) : seul le mot de passe est changé
+            }
+        }
     }
 
     /** Utilisateur existant (même numéro) ou nouveau compte + wallet dans la devise du pays. */
@@ -384,6 +397,9 @@ class AdminController extends Controller
                 'password' => \Illuminate\Support\Facades\Hash::make($v['password']),
             ]);
             $created = true;
+        } elseif (! empty($v['password'])) {
+            // Compte existant : le code saisi par l'admin devient son code secret (sinon l'agent ne peut pas se connecter).
+            $this->applySecret($user, $v['password']);
         }
         if (! $user->hasRole($role)) {
             $user->assignRole($role);
@@ -408,6 +424,7 @@ class AdminController extends Controller
             // Cahier des charges v1.5
             'kyc_docs' => \App\Models\KycDocument::where('status', 'pending')->count(),
             'float' => \App\Models\FloatRequest::where('status', 'pending')->whereNull('super_agent_id')->count(),
+            'limits' => \App\Models\LimitRequest::where('status', 'pending')->count(),
             'disputes' => \App\Models\Dispute::whereIn('status', ['open', 'investigating'])->count() + \App\Models\SupportTicket::where('status', 'open')->count(),
             'fraud' => \App\Models\FraudAlert::where('status', 'open')->count(),
             'notifications' => \App\Models\AppNotification::where('audience', 'admin')->whereNull('read_at')->count(),

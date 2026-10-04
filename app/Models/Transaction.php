@@ -83,7 +83,7 @@ class Transaction extends Model
         'cash_in' => 'Recharge', 'deposit' => 'Recharge', 'withdrawal' => 'Retrait', 'cash_out' => 'Retrait chez un agent',
         'cash_pickup' => 'Retrait avec code', 'bank_transfer' => 'Virement bancaire', 'gift' => 'Cadeau envoyé',
         'gift_claim' => 'Cadeau reçu', 'gift_refund' => 'Cadeau remboursé', 'refund' => 'Remboursement',
-        'split_payment' => 'Part de note partagée', 'float_topup' => 'Approvisionnement agent', 'adjustment' => 'Ajustement',
+        'split_payment' => 'Contribution à une cagnotte', 'float_topup' => 'Approvisionnement agent', 'adjustment' => 'Ajustement',
     ];
 
     public const STATUS_LABELS = [

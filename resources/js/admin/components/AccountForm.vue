@@ -36,12 +36,12 @@
       <div v-else><label class="field">Quartier / point de service</label><input v-model.trim="f.zone" placeholder="Ex. Poto-Poto, marché Total" /></div>
       <div class="row2">
         <div>
-          <label class="field">Mot de passe initial</label>
+          <label class="field">Code secret (app mobile)</label>
           <div style="display:flex; gap:6px;">
             <input v-model="f.password" type="text" minlength="4" placeholder="Code secret (4 chiffres min.)" />
             <button type="button" class="btn-normal" title="Générer" @click="gen">↻</button>
           </div>
-          <div class="hint">Laissez vide si le numéro a déjà un compte FlashPay.</div>
+          <div class="hint">Code à 4 chiffres pour l'app mobile. Si le numéro a déjà un compte FlashPay, ce code remplace son code secret actuel (laissez vide pour le garder).</div>
         </div>
       </div>
       <template v-if="kind === 'merchant'">
@@ -85,8 +85,8 @@
         <div v-if="kind === 'merchant'"><span>Modes de retrait</span><strong>{{ SETTLE_TYPES.filter((t) => chosen[t.key]).map((t) => t.label + (t.key === defaultType ? ' (défaut)' : '')).join(', ') }}</strong></div>
         <div><span>Localisation</span><strong><Flag :iso="f.country" /> {{ f.city }}</strong></div>
         <div><span>Téléphone</span><strong class="mono">{{ $phone(done.login.phone) }}</strong></div>
-        <div v-if="done.login.new_account"><span>Mot de passe</span><strong class="mono">{{ sentPassword }}</strong></div>
-        <div v-else><span>Mot de passe</span><strong>inchangé (compte existant)</strong></div>
+        <div v-if="sentPassword"><span>Code secret</span><strong class="mono">{{ sentPassword }}</strong></div>
+        <div v-else><span>Code secret</span><strong>inchangé (compte existant)</strong></div>
       </div>
     </template>
 
@@ -181,7 +181,7 @@ async function save() {
 
 async function copy() {
   const l = done.value.login
-  const text = `FlashPay — profil ${l.profile}\nLocalisation : ${f.city} (${f.country})\nTéléphone : +${l.phone}\n` + (l.new_account ? `Mot de passe : ${sentPassword.value}\n` : '') + "Application : ouvrez FlashPay et choisissez « " + l.profile + ' ».'
+  const text = `FlashPay — profil ${l.profile}\nLocalisation : ${f.city} (${f.country})\nTéléphone : +${l.phone}\n` + (sentPassword.value ? `Code secret : ${sentPassword.value}\n` : '') + "Application : ouvrez FlashPay et choisissez « " + l.profile + ' ».'
   try { await navigator.clipboard.writeText(text); copied.value = true } catch (_) {}
 }
 

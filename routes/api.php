@@ -92,6 +92,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/kyc', [KycController::class, 'show']);
     Route::get('/kyc/documents/{document}/file', [KycController::class, 'myFile']);
     Route::get('/me/photo', [KycController::class, 'myPhoto']);
+    // Demande de relèvement de plafonds (avec justificatif)
+    Route::get('/limits/requests', [\App\Http\Controllers\Api\LimitRequestController::class, 'mine']);
+    Route::post('/limits/requests', [\App\Http\Controllers\Api\LimitRequestController::class, 'store'])->middleware('throttle:10,1');
+    Route::post('/limits/requests/{limitRequest}/cancel', [\App\Http\Controllers\Api\LimitRequestController::class, 'cancel']);
+    Route::get('/limits/requests/{limitRequest}/file', [\App\Http\Controllers\Api\LimitRequestController::class, 'myFile']);
     Route::post('/kyc/documents', [KycController::class, 'upload'])->middleware(['throttle:20,1', 'cap:kyc']);
 
     // --- Notifications (§11) ---
@@ -133,6 +138,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/splits', [ClientFeaturesController::class, 'createSplit']);
     Route::post('/splits/{split}/remind', [ClientFeaturesController::class, 'remindSplit']);
     Route::post('/splits/{split}/cancel', [ClientFeaturesController::class, 'cancelSplit']);
+    Route::get('/splits/{split}', [ClientFeaturesController::class, 'showSplit'])->whereNumber('split');
+    Route::post('/splits/{split}/participants', [ClientFeaturesController::class, 'addSplitParticipants'])->middleware('throttle:20,1');
+    Route::post('/splits/{split}/close', [ClientFeaturesController::class, 'closeSplit']);
+    Route::get('/splits/{split}/receipt', [ClientFeaturesController::class, 'splitReceipt']);
     Route::post('/splits/shares/{share}/pay', [ClientFeaturesController::class, 'paySplitShare'])->middleware(['cap:send', 'pin', 'idempotent']);
     Route::post('/splits/shares/{share}/decline', [ClientFeaturesController::class, 'declineSplitShare']);
     Route::get('/mini-programs', [ClientFeaturesController::class, 'miniPrograms']);
@@ -372,6 +381,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/kyc/documents/{document}/review', [KycController::class, 'review']);
         Route::post('/disputes/{dispute}', [SupportCenterController::class, 'adminUpdateDispute']);
         Route::get('/float-requests', [AdminOpsController::class, 'floatRequests']);
+        Route::get('/limit-requests', [\App\Http\Controllers\Api\LimitRequestController::class, 'index']);
+        Route::get('/limit-requests/{limitRequest}/file', [\App\Http\Controllers\Api\LimitRequestController::class, 'file']);
+        Route::post('/limit-requests/{limitRequest}/review', [\App\Http\Controllers\Api\LimitRequestController::class, 'review']);
+        Route::post('/users/{user}/custom-limits/reset', [\App\Http\Controllers\Api\LimitRequestController::class, 'resetCustom']);
         Route::post('/float-requests/{floatRequest}/review', [AdminOpsController::class, 'reviewFloatRequest']);
         Route::post('/agents/{agent}/hierarchy', [AdminOpsController::class, 'setSuperAgent'])->whereNumber('agent');
         Route::post('/users/{user}/wallet/adjust', [AdminOpsController::class, 'adjustWallet']);

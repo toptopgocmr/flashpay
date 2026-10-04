@@ -180,6 +180,7 @@ const groups = [
   { name: 'À traiter', icon: 'shield', links: [
     { to: '/kyc', label: 'Validation KYC', desc: 'Pièces à valider, paliers et plafonds', icon: 'id', badge: 'kyc_docs' },
     { to: '/float-requests', label: 'Approvisionnements', desc: 'Demandes de float des agents', icon: 'float', badge: 'float' },
+    { to: '/limit-requests', label: 'Demandes de plafonds', desc: 'Relèvement des plafonds avec justificatif', icon: 'id', badge: 'limits' },
     { to: '/settlements', label: 'Règlements', desc: 'Virements bancaires des marchands à exécuter', icon: 'bank', badge: 'bank' },
     { to: '/support', label: 'Litiges & support', desc: 'Contestations et tickets (SLA)', icon: 'chat', badge: 'disputes' },
     { to: '/fraud', label: 'Anti-fraude', desc: 'Alertes, blocages temporaires', icon: 'shield', badge: 'fraud' },

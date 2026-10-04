@@ -34,7 +34,7 @@ class User extends Authenticatable
 
     protected function casts(): array
     {
-        return ['password' => 'hashed', 'status_changed_at' => 'datetime', 'kyc_tier' => 'integer', 'pin_locked_until' => 'datetime', 'pin_changed_at' => 'datetime', 'blocked_until' => 'datetime', 'lost_reported_at' => 'datetime', 'date_of_birth' => 'date'];
+        return ['password' => 'hashed', 'status_changed_at' => 'datetime', 'kyc_tier' => 'integer', 'pin_locked_until' => 'datetime', 'pin_changed_at' => 'datetime', 'blocked_until' => 'datetime', 'lost_reported_at' => 'datetime', 'date_of_birth' => 'date', 'custom_limits' => 'array', 'custom_limits_until' => 'date'];
     }
 
     /** Téléphone toujours enregistré au format international (indicatif pays inclus). */

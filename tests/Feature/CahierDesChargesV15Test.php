@@ -468,6 +468,36 @@ class CahierDesChargesV15Test extends TestCase
         $this->assertSame('settled', \App\Models\BillSplit::find($split['id'])->status);
     }
 
+    public function test_cagnotte_gift_free_amount_goes_to_beneficiary_with_receipt(): void
+    {
+        $creator = $this->mk('client', '242061000161', 20000);
+        $benef = $this->mk('client', '242061000162');
+        $p1 = $this->mk('client', '242061000163', 20000);
+        $p2 = $this->mk('client', '242061000164', 20000);
+        $this->actingAs($creator, 'sanctum');
+        $pot = $this->postJson('/api/splits', [
+            'title' => 'Anniversaire', 'purpose' => 'gift', 'mode' => 'free', 'total_amount' => 10000,
+            'beneficiary_phone' => '242061000162', 'participants' => [['phone' => '242061000163'], ['phone' => '242061000162']],
+        ])->assertCreated()->json();
+        $this->assertSame(2, $pot['contributors_total']); // le créateur + p1 (le bénéficiaire est exclu)
+        $this->postJson("/api/splits/{$pot['id']}/participants", ['participants' => [['phone' => '242061000164']]])->assertOk()->assertJsonPath('contributors_total', 3);
+
+        foreach ([[$p1, 3000], [$p2, 7000]] as [$p, $amount]) {
+            $this->actingAs($p, 'sanctum');
+            $share = collect($this->getJson('/api/splits')->json('to_pay'))->firstWhere('status', 'pending');
+            $this->postJson("/api/splits/shares/{$share['id']}/pay")->assertStatus(422); // montant libre : montant obligatoire
+            $this->postJson("/api/splits/shares/{$share['id']}/pay", ['amount' => $amount])->assertCreated();
+        }
+        $this->assertSame(10000, $benef->wallet->fresh()->balance);
+
+        $this->actingAs($creator, 'sanctum');
+        $this->postJson("/api/splits/{$pot['id']}/cancel")->assertStatus(422); // déjà des contributions
+        $this->postJson("/api/splits/{$pot['id']}/close")->assertOk()->assertJsonPath('status', 'closed')->assertJsonPath('paid_amount', 10000);
+        $url = $this->getJson("/api/splits/{$pot['id']}/receipt")->assertOk()->json('url');
+        $this->get($url)->assertOk()->assertSee('Anniversaire');
+        $this->assertTrue(AppNotification::where('user_id', $benef->id)->where('type', 'split_beneficiary')->exists());
+    }
+
     // ================================================================ Litiges, support, back-office
 
     public function test_dispute_resolved_with_refund_and_ticket(): void

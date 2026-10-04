@@ -31,9 +31,23 @@ class LimitService
         $override = $this->settings->get('limits', []);
         if ($profile === 'client') {
             $tier = min(2, max(0, (int) $user->kyc_tier));
-            return array_merge($cfg['client'][$tier], $override['client'][$tier] ?? [], ['tier' => $tier, 'profile' => 'client']);
+            $base = array_merge($cfg['client'][$tier], $override['client'][$tier] ?? [], ['tier' => $tier, 'profile' => 'client']);
+        } else {
+            $base = array_merge($cfg[$profile], $override[$profile] ?? [], ['tier' => null, 'profile' => $profile]);
         }
-        return array_merge($cfg[$profile], $override[$profile] ?? [], ['tier' => null, 'profile' => $profile]);
+        return array_merge($base, $this->customFor($user));
+    }
+
+    /** Plafonds personnalisés accordés suite à une demande de relèvement (prioritaires sur le palier). */
+    public function customFor(User $user): array
+    {
+        $c = $user->custom_limits;
+        if (! is_array($c) || ! $c || ($user->custom_limits_until && $user->custom_limits_until->endOfDay()->isPast())) {
+            return [];
+        }
+        $out = array_filter(array_intersect_key($c, array_flip(['per_operation', 'daily', 'monthly', 'max_balance'])), fn ($v) => $v !== null && (int) $v > 0);
+        $out = array_map('intval', $out);
+        return $out ? $out + ['custom' => true, 'custom_until' => $user->custom_limits_until?->toDateString()] : [];
     }
 
     public function assertOutgoing(User $owner, Wallet $wallet, int $amount, ?string $scope = null, ?string $type = null): void

@@ -1,20 +1,20 @@
 <template>
-  <Modal title="Réinitialiser le mot de passe" :subtitle="name" @close="$emit('close')">
+  <Modal title="Réinitialiser le code secret" :subtitle="name" @close="$emit('close')">
     <template v-if="!ok">
       <div v-if="error" class="flash err" style="margin:0;"><div>{{ error }}</div></div>
       <div>
-        <label class="field">Nouveau mot de passe</label>
-        <div style="display:flex; gap:6px;"><input v-model="pwd" type="text" minlength="6" /><button class="btn-normal" type="button" @click="gen">↻</button></div>
-        <div class="hint">La personne est déconnectée de ses appareils et devra utiliser ce nouveau mot de passe.</div>
+        <label class="field">Nouveau code secret</label>
+        <div style="display:flex; gap:6px;"><input v-model.trim="pwd" type="text" minlength="4" inputmode="numeric" /><button class="btn-normal" type="button" @click="gen">↻</button></div>
+        <div class="hint">Code à 4 chiffres saisi dans l'application mobile (« Code secret ») ; il devient aussi le PIN des opérations. La personne est déconnectée de ses appareils.</div>
       </div>
     </template>
     <div v-else class="creds">
       <div><span>Téléphone</span><strong class="mono">{{ $phone(phone) }}</strong></div>
-      <div><span>Nouveau mot de passe</span><strong class="mono">{{ pwd }}</strong></div>
+      <div><span>Nouveau code secret</span><strong class="mono">{{ pwd }}</strong></div>
     </div>
     <template #foot>
       <button class="btn-normal" @click="$emit('close')">{{ ok ? 'Fermer' : 'Annuler' }}</button>
-      <button v-if="!ok" class="btn" :disabled="saving || pwd.length < 6" @click="save">Réinitialiser</button>
+      <button v-if="!ok" class="btn" :disabled="saving || pwd.length < 4" @click="save">Réinitialiser</button>
     </template>
   </Modal>
 </template>
@@ -30,9 +30,13 @@ const pwd = ref('')
 const ok = ref(false)
 const saving = ref(false)
 const error = ref('')
+// Code secret de l'app mobile : 4 chiffres, sans suite triviale
 function gen() {
-  const c = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
-  pwd.value = Array.from({ length: 10 }, () => c[Math.floor(Math.random() * c.length)]).join('')
+  let c
+  do {
+    c = String(Math.floor(1000 + Math.random() * 9000))
+  } while (/^(\d)\1+$/.test(c) || ['1234', '4321'].includes(c))
+  pwd.value = c
 }
 gen()
 async function save() {

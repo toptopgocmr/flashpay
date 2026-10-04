@@ -58,7 +58,7 @@ class TransactionPresenter
             'gift' => 'Cadeau / cagnotte',
             'gift_claim' => 'Cadeau reçu',
             'gift_refund' => 'Cadeau non réclamé',
-            'split_payment' => 'Part de note partagée',
+            'split_payment' => 'Contribution à une cagnotte',
             'bank_transfer' => 'Virement bancaire',
             'cash_pickup' => 'Retrait avec code',
             'atm_withdrawal' => 'Retrait au GAB',

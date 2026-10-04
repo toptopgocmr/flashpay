@@ -22,6 +22,7 @@ const routes = [
   { path: '/notifications', component: () => import('../views/Notifications.vue') },
   { path: '/kyc', component: () => import('../views/Kyc.vue') },
   { path: '/float-requests', component: () => import('../views/FloatRequests.vue') },
+  { path: '/limit-requests', component: () => import('../views/LimitRequests.vue') },
   { path: '/support', component: () => import('../views/Support.vue') },
   { path: '/fraud', component: () => import('../views/Fraud.vue') },
   { path: '/reconciliation', component: () => import('../views/Reconciliation.vue') },
