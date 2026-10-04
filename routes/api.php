@@ -185,13 +185,24 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/transactions/{transaction}', [TransactionController::class, 'show']);
     Route::get('/transactions/{transaction}/receipt', [\App\Http\Controllers\Api\ReceiptController::class, 'link']);
 
-    // Messagerie entre utilisateurs (texte, photos, vidéos courtes)
+    // Messagerie entre utilisateurs (texte, photos, vidéos, notes vocales, transfert, modification, appels)
     Route::get('/chats', [\App\Http\Controllers\Api\ChatController::class, 'index']);
     Route::post('/chats', [\App\Http\Controllers\Api\ChatController::class, 'open'])->middleware('throttle:30,1');
     Route::get('/chats/{conversation}/messages', [\App\Http\Controllers\Api\ChatController::class, 'messages'])->whereNumber('conversation');
     Route::post('/chats/{conversation}/messages', [\App\Http\Controllers\Api\ChatController::class, 'send'])->whereNumber('conversation')->middleware('throttle:60,1');
     Route::get('/chats/messages/{message}/file', [\App\Http\Controllers\Api\ChatController::class, 'file'])->whereNumber('message');
     Route::get('/chats/messages/{message}/link', [\App\Http\Controllers\Api\ChatController::class, 'link'])->whereNumber('message');
+    Route::patch('/chats/messages/{message}', [\App\Http\Controllers\Api\ChatController::class, 'update'])->whereNumber('message')->middleware('throttle:30,1');
+    Route::post('/chats/messages/{message}/forward', [\App\Http\Controllers\Api\ChatController::class, 'forward'])->whereNumber('message')->middleware('throttle:20,1');
+    Route::get('/chats/users/{user}/photo', [\App\Http\Controllers\Api\ChatController::class, 'userPhoto'])->whereNumber('user');
+    // Appels audio (WebRTC : le serveur échange seulement l'offre / la réponse SDP)
+    Route::post('/chats/{conversation}/calls', [\App\Http\Controllers\Api\ChatCallController::class, 'start'])->whereNumber('conversation')->middleware('throttle:10,1');
+    Route::get('/chats/calls/config', [\App\Http\Controllers\Api\ChatCallController::class, 'config']);
+    Route::get('/chats/calls/incoming', [\App\Http\Controllers\Api\ChatCallController::class, 'incoming']);
+    Route::get('/chats/calls/{call}', [\App\Http\Controllers\Api\ChatCallController::class, 'show'])->whereNumber('call');
+    Route::post('/chats/calls/{call}/accept', [\App\Http\Controllers\Api\ChatCallController::class, 'accept'])->whereNumber('call');
+    Route::post('/chats/calls/{call}/reject', [\App\Http\Controllers\Api\ChatCallController::class, 'reject'])->whereNumber('call');
+    Route::post('/chats/calls/{call}/end', [\App\Http\Controllers\Api\ChatCallController::class, 'end'])->whereNumber('call');
 
     // --- Client ---
     Route::middleware('role:client')->group(function () {

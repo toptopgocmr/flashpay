@@ -194,4 +194,13 @@ return [
         'client_single_max' => 200000,
         'merchant_daily_max' => 5000000,
     ],
+
+    // Appels audio du chat (WebRTC) : STUN gratuits par défaut ; un serveur TURN
+    // (ex. coturn, Metered, Twilio) améliore la connexion sur les réseaux 4G stricts.
+    'webrtc' => [
+        'stun_urls' => env('WEBRTC_STUN_URLS', 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302'),
+        'turn_url' => env('WEBRTC_TURN_URL'),
+        'turn_username' => env('WEBRTC_TURN_USERNAME'),
+        'turn_password' => env('WEBRTC_TURN_PASSWORD'),
+    ],
 ];
