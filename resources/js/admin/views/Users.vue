@@ -20,7 +20,7 @@
 
     <div class="card">
       <h3>Créer un profil interne (Support / Agent / Super Admin)</h3>
-      <form @submit.prevent="submit" class="grid" style="grid-template-columns: repeat(2, 1fr); gap:12px;">
+      <form @submit.prevent="submit" class="grid grid-2" style="gap:12px;">
         <input v-model="form.full_name" placeholder="Nom complet" required />
         <input v-model="form.phone" placeholder="Téléphone" required />
         <input v-model="form.password" type="password" placeholder="Mot de passe" required />

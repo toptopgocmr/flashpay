@@ -3,13 +3,13 @@
     <h2>PEEX — {{ overview?.sandbox ? 'Sandbox' : 'Production' }}</h2>
 
     <!-- Comptes PEEX -->
-    <div class="grid grid-4" style="grid-template-columns: repeat(3, 1fr); margin-bottom:24px;">
+    <div class="grid grid-3" style="margin-bottom:24px;">
       <div class="card" v-for="(acc, key) in overview?.accounts || {}" :key="key" v-go="'#peex-requests'" title="Voir les demandes PEEX">
         <div class="stat-label">{{ labels[key] }}</div>
         <template v-if="acc.ok">
           <div class="stat-value">{{ formatXaf(acc.data.collect_solde ?? acc.data.disbursement_solde ?? acc.data.solde) }}</div>
           <div class="stat-label">{{ acc.data.name }} · {{ acc.data.is_activated ? 'activé' : 'inactif' }}</div>
-          <div class="stat-label">callback : {{ acc.data.callback_url || 'non défini' }}</div>
+          <div class="stat-label mono" style="word-break:break-all;">callback : {{ acc.data.callback_url || 'non défini' }}</div>
         </template>
         <div v-else style="color:#b91c1c; font-size:13px;">{{ acc.error }}</div>
       </div>
@@ -54,7 +54,7 @@
     <!-- Lancer un test -->
     <div class="card" style="margin-bottom:24px;">
       <h3>Lancer un test</h3>
-      <form @submit.prevent="runTest" class="grid" style="grid-template-columns: repeat(3, 1fr); gap:12px;">
+      <form @submit.prevent="runTest" class="grid grid-3" style="gap:12px;">
         <select v-model="form.action">
           <option value="transfer">Transfert mobile → mobile (collecte puis décaissement)</option>
           <option value="collect">Collecte mobile → wallet admin</option>

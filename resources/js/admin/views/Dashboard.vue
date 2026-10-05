@@ -939,7 +939,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('clic
 .svc-list .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-txt { font-size: 12px; font-weight: 600; white-space: nowrap; }
 .err-hint { margin: 8px 0 0; color: var(--err); }
-.todo-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+.todo-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
 .todo-sum div { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 8px 10px; background: var(--surface-2); border-radius: 10px; }
 .todo-sum b { font-size: 22px; line-height: 28px; color: inherit; }
 .todo-sum span { font-size: 11px; color: var(--text-2); line-height: 14px; }
