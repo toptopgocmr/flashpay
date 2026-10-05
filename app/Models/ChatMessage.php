@@ -20,6 +20,17 @@ class ChatMessage extends Model
     public function conversation() { return $this->belongsTo(ChatConversation::class, 'conversation_id'); }
     public function sender() { return $this->belongsTo(User::class, 'sender_id'); }
     public function replyTo() { return $this->belongsTo(self::class, 'reply_to_id'); }
+    public function agent() { return $this->belongsTo(User::class, 'agent_id'); }
+
+    protected static function booted(): void
+    {
+        // Message envoyé depuis la console au nom du support : on garde l'agent.
+        static::creating(function (self $m) {
+            if (! $m->agent_id && ($agent = \App\Support\SupportChat::agent()) && (int) $m->sender_id === \App\Support\SupportChat::user()->id) {
+                $m->agent_id = $agent->id;
+            }
+        });
+    }
 
     public function fileResponse()
     {

@@ -15,6 +15,8 @@ class ChatConversation extends Model
 
     public function userOne() { return $this->belongsTo(User::class, 'user_one_id'); }
     public function userTwo() { return $this->belongsTo(User::class, 'user_two_id'); }
+    public function assignee() { return $this->belongsTo(User::class, 'assigned_to'); }
+    public function calls() { return $this->hasMany(ChatCall::class, 'conversation_id'); }
     public function messages() { return $this->hasMany(ChatMessage::class, 'conversation_id'); }
 
     public function hasParticipant(User $u): bool

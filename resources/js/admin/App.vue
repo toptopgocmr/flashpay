@@ -123,6 +123,7 @@
       </div>
       <router-view />
     </main>
+    <SupportCallBar />
   </div>
 </template>
 
@@ -132,6 +133,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import api from './services/api'
 import Flag from './components/Flag.vue'
+import SupportCallBar from './components/SupportCallBar.vue'
 import { playNotificationSound, unlockAudio } from './utils/sound'
 
 const route = useRoute()
@@ -182,7 +184,9 @@ const groups = [
     { to: '/float-requests', label: 'Approvisionnements', desc: 'Demandes de float des agents', icon: 'float', badge: 'float' },
     { to: '/limit-requests', label: 'Demandes de plafonds', desc: 'Relèvement des plafonds avec justificatif', icon: 'id', badge: 'limits' },
     { to: '/settlements', label: 'Règlements', desc: 'Virements bancaires des marchands à exécuter', icon: 'bank', badge: 'bank' },
+    { to: '/support-chat', label: 'Chat support', desc: 'Messages, notes vocales et appels des clients', icon: 'chat', badge: 'support_chat' },
     { to: '/support', label: 'Litiges & support', desc: 'Contestations et tickets (SLA)', icon: 'chat', badge: 'disputes' },
+    { to: '/chat-monitor', label: 'Supervision des échanges', desc: 'Toutes les discussions et appels (conformité)', icon: 'shield' },
     { to: '/fraud', label: 'Anti-fraude', desc: 'Alertes, blocages temporaires', icon: 'shield', badge: 'fraud' },
   ] },
   { name: 'Tarifs & finance', icon: 'tag', links: [

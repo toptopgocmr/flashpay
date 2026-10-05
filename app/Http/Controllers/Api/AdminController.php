@@ -425,6 +425,8 @@ class AdminController extends Controller
             'kyc_docs' => \App\Models\KycDocument::where('status', 'pending')->count(),
             'float' => \App\Models\FloatRequest::where('status', 'pending')->whereNull('super_agent_id')->count(),
             'limits' => \App\Models\LimitRequest::where('status', 'pending')->count(),
+            'support_chat' => \App\Models\ChatMessage::whereHas('conversation', fn ($c) => $c->where('kind', 'support'))
+                ->whereNull('read_at')->where('sender_id', '!=', \App\Support\SupportChat::user()->id)->count(),
             'disputes' => \App\Models\Dispute::whereIn('status', ['open', 'investigating'])->count() + \App\Models\SupportTicket::where('status', 'open')->count(),
             'fraud' => \App\Models\FraudAlert::where('status', 'open')->count(),
             'notifications' => \App\Models\AppNotification::where('audience', 'admin')->whereNull('read_at')->count(),

@@ -21,6 +21,7 @@ class ChatCall extends Model
     public function conversation() { return $this->belongsTo(ChatConversation::class, 'conversation_id'); }
     public function caller() { return $this->belongsTo(User::class, 'caller_id'); }
     public function callee() { return $this->belongsTo(User::class, 'callee_id'); }
+    public function agent() { return $this->belongsTo(User::class, 'agent_id'); }
 
     public function isParticipant(User $u): bool
     {

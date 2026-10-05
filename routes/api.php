@@ -203,6 +203,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/chats/messages/{message}/link', [\App\Http\Controllers\Api\ChatController::class, 'link'])->whereNumber('message');
     Route::patch('/chats/messages/{message}', [\App\Http\Controllers\Api\ChatController::class, 'update'])->whereNumber('message')->middleware('throttle:30,1');
     Route::post('/chats/messages/{message}/forward', [\App\Http\Controllers\Api\ChatController::class, 'forward'])->whereNumber('message')->middleware('throttle:20,1');
+    Route::post('/chats/support', [\App\Http\Controllers\Api\ChatController::class, 'support'])->middleware('throttle:30,1');
     Route::get('/chats/users/{user}/photo', [\App\Http\Controllers\Api\ChatController::class, 'userPhoto'])->whereNumber('user');
     // Appels audio (WebRTC : le serveur échange seulement l'offre / la réponse SDP)
     Route::post('/chats/{conversation}/calls', [\App\Http\Controllers\Api\ChatCallController::class, 'start'])->whereNumber('conversation')->middleware('throttle:10,1');
@@ -284,6 +285,19 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/desk/tickets', [SupportCenterController::class, 'adminTickets']);
         Route::post('/desk/tickets/{ticket}/reply', [SupportCenterController::class, 'adminReplyTicket']);
         Route::get('/desk/disputes', [SupportCenterController::class, 'adminDisputes']);
+        // Chat support (texte, photos, notes vocales, appels) — l'agent répond au nom de « Support FlashPay »
+        Route::get('/chat', [\App\Http\Controllers\Api\SupportChatController::class, 'index']);
+        Route::post('/chat/users/{user}', [\App\Http\Controllers\Api\SupportChatController::class, 'openFor'])->whereNumber('user');
+        Route::get('/chat/calls/incoming', [\App\Http\Controllers\Api\SupportChatController::class, 'incomingCall']);
+        Route::get('/chat/calls/config', [\App\Http\Controllers\Api\SupportChatController::class, 'config']);
+        Route::get('/chat/calls/{call}', [\App\Http\Controllers\Api\SupportChatController::class, 'callShow'])->whereNumber('call');
+        Route::post('/chat/calls/{call}/{action}', [\App\Http\Controllers\Api\SupportChatController::class, 'callStep'])->whereNumber('call')->whereIn('action', ['accept', 'reject', 'end']);
+        Route::get('/chat/{conversation}/messages', [\App\Http\Controllers\Api\SupportChatController::class, 'messages'])->whereNumber('conversation');
+        Route::post('/chat/{conversation}/messages', [\App\Http\Controllers\Api\SupportChatController::class, 'send'])->whereNumber('conversation')->middleware('throttle:60,1');
+        Route::post('/chat/{conversation}/status', [\App\Http\Controllers\Api\SupportChatController::class, 'setStatus'])->whereNumber('conversation');
+        Route::post('/chat/{conversation}/calls', [\App\Http\Controllers\Api\SupportChatController::class, 'startCall'])->whereNumber('conversation')->middleware('throttle:10,1');
+        Route::get('/chat/messages/{message}/file', [\App\Http\Controllers\Api\SupportChatController::class, 'file'])->whereNumber('message');
+        Route::get('/chat/messages/{message}/link', [\App\Http\Controllers\Api\SupportChatController::class, 'link'])->whereNumber('message');
         Route::get('/desk/kyc', [KycController::class, 'queue']);
         Route::get('/desk/kyc/users/{user}', [KycController::class, 'userDocuments']);
         Route::get('/desk/kyc/documents/{document}/file', [KycController::class, 'file']);
@@ -371,6 +385,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/peex/balances', [PeexAdminController::class, 'balances']);
         Route::get('/peex/requests', [PeexAdminController::class, 'requests']);
         Route::get('/peex/refund-search', [PeexAdminController::class, 'refundSearch']);
+        // Supervision des discussions (conformité) : lecture seule, consultations auditées
+        Route::get('/chat-monitor', [\App\Http\Controllers\Api\ChatMonitorController::class, 'index']);
+        Route::get('/chat-monitor/calls', [\App\Http\Controllers\Api\ChatMonitorController::class, 'calls']);
+        Route::get('/chat-monitor/{conversation}/messages', [\App\Http\Controllers\Api\ChatMonitorController::class, 'messages'])->whereNumber('conversation');
+        Route::get('/chat-monitor/messages/{message}/file', [\App\Http\Controllers\Api\ChatMonitorController::class, 'file'])->whereNumber('message');
         Route::get('/peex/diagnostic', [PeexAdminController::class, 'diagnostic'])->middleware('throttle:10,1');
         Route::post('/peex/test', [PeexAdminController::class, 'test']);
         Route::post('/peex/requests/{peexRequest}/refresh', [PeexAdminController::class, 'refresh']);

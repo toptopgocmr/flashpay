@@ -37,9 +37,11 @@ class ChatCallController extends Controller
         abort_unless($callee, 404);
 
         $this->expireStale();
+        // Support : plusieurs agents, plusieurs appels simultanés possibles.
+        $supportSide = \App\Support\SupportChat::isSupportUser($me) || \App\Support\SupportChat::isSupportUser($callee);
 
         // Le contact est déjà en ligne avec quelqu'un : occupé.
-        $busy = ChatCall::whereIn('status', ['ringing', 'accepted'])
+        $busy = ! \App\Support\SupportChat::isSupportUser($callee) && ChatCall::whereIn('status', ['ringing', 'accepted'])
             ->where(fn ($q) => $q->whereIn('caller_id', [$callee->id])->orWhereIn('callee_id', [$callee->id]))
             ->exists();
         if ($busy) {
@@ -48,9 +50,12 @@ class ChatCallController extends Controller
             return response()->json(['message' => $callee->full_name . ' est déjà en communication. Réessayez plus tard.', 'status' => 'busy'], 409);
         }
 
-        // Un ancien appel de ma part encore ouvert : on le clôt.
-        ChatCall::whereIn('status', ['ringing', 'accepted'])->where(fn ($q) => $q->where('caller_id', $me->id)->orWhere('callee_id', $me->id))
-            ->get()->each(fn ($c) => $this->finish($c, $c->status === 'ringing' ? 'cancelled' : 'ended', $me));
+        // Un ancien appel de ma part encore ouvert : on le clôt (pas pour le compte support partagé).
+        $stale = ChatCall::whereIn('status', ['ringing', 'accepted']);
+        $supportSide
+            ? $stale->where('conversation_id', $conversation->id)
+            : $stale->where(fn ($q) => $q->where('caller_id', $me->id)->orWhere('callee_id', $me->id));
+        $stale->get()->each(fn ($c) => $this->finish($c, $c->status === 'ringing' ? 'cancelled' : 'ended', $me));
 
         $call = ChatCall::create([
             'conversation_id' => $conversation->id,
@@ -58,7 +63,13 @@ class ChatCallController extends Controller
             'callee_id' => $callee->id,
             'status' => 'ringing',
             'offer' => $v['offer'],
+            'agent_id' => \App\Support\SupportChat::isSupportUser($me) ? \App\Support\SupportChat::agent()?->id : null,
         ]);
+
+        if (\App\Support\SupportChat::isSupportUser($callee)) {
+            app(NotificationService::class)->toAdmins('support_call', '📞 Appel support de ' . $me->full_name, 'À prendre dans la console : Support › Discussions.', ['severity' => 'warning', 'data' => ['conversation_id' => $conversation->id, 'call_id' => $call->id]]);
+            return response()->json($this->present($call, $me) + ['ice_servers' => self::iceServers()], 201);
+        }
 
         // Notification « appel entrant » : utile si l'app du contact est en arrière-plan.
         app(NotificationService::class)->toUser($callee, 'chat_call', '📞 Appel de ' . $me->full_name, 'Ouvrez FlashPay pour répondre.', [
@@ -109,7 +120,7 @@ class ChatCallController extends Controller
         if ($call->status !== 'ringing') {
             return response()->json(['message' => "L'appel est terminé.", 'status' => $call->status], 409);
         }
-        $call->forceFill(['status' => 'accepted', 'answer' => $v['answer'], 'answered_at' => now()])->save();
+        $call->forceFill(['status' => 'accepted', 'answer' => $v['answer'], 'answered_at' => now(), 'agent_id' => (\App\Support\SupportChat::isSupportUser($me) ? \App\Support\SupportChat::agent()?->id : null) ?? $call->agent_id])->save();
         return response()->json($this->present($call, $me));
     }
 
@@ -201,7 +212,9 @@ class ChatCallController extends Controller
             'conversation_id' => $call->conversation_id,
             'status' => $call->status,
             'outgoing' => (int) $call->caller_id === $me->id,
-            'user' => $other ? ['id' => $other->id, 'name' => $other->full_name, 'phone' => $other->phone] : null,
+            'user' => $other ? (\App\Support\SupportChat::isSupportUser($other)
+                ? ['id' => $other->id, 'name' => \App\Support\SupportChat::NAME, 'phone' => null, 'support' => true]
+                : ['id' => $other->id, 'name' => $other->full_name, 'phone' => $other->phone]) : null,
             'answered_at' => $call->answered_at?->toIso8601String(),
             'created_at' => $call->created_at?->toIso8601String(),
         ];

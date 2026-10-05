@@ -11,6 +11,7 @@ use App\Services\Notifications\NotificationService;
 use App\Services\Peex\PeexFlowService;
 use App\Services\Peex\PeexCorridors;
 use App\Services\Translation\Translator;
+use App\Support\SupportChat;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 
@@ -61,6 +62,7 @@ class ChatController extends Controller
         return response()->json([
             'data' => $convs->map(fn ($c) => [
                 'id' => $c->id,
+                'support' => $c->kind === 'support',
                 'user' => $this->person($others[$c->otherId($me)] ?? null, $photos),
                 'last_message' => isset($last[$c->id]) ? $this->preview($last[$c->id], $me) : null,
                 'unread' => (int) ($unread[$c->id] ?? 0),
@@ -88,6 +90,15 @@ class ChatController extends Controller
         $c = ChatConversation::between($me, $other);
 
         return response()->json(['id' => $c->id, 'user' => $this->person($other)]);
+    }
+
+    /** Discussion avec le support FlashPay (créée au besoin) : messages, photos, notes vocales, appels. */
+    public function support(Request $request)
+    {
+        $me = $request->user();
+        abort_if(SupportChat::isSupportUser($me), 422);
+        $c = SupportChat::conversationFor($me);
+        return response()->json(['id' => $c->id, 'support' => true, 'status' => $c->status, 'user' => $this->person(SupportChat::user())]);
     }
 
     /**
@@ -307,6 +318,16 @@ class ChatController extends Controller
         if ($other) {
             $this->translator->forMessage($m, Translator::langOf($other));
         }
+        if ($conversation->kind === 'support' && SupportChat::isSupportUser($other)) {
+            // Client -> support : la discussion se rouvre et la console est alertée
+            // (au plus une alerte par période de 15 min sans réponse).
+            $prev = $conversation->messages()->where('id', '<', $m->id)->latest('id')->first();
+            $conversation->forceFill(['status' => 'open'])->save();
+            if (! $prev || $prev->sender_id !== $me->id || $prev->created_at?->lt(now()->subMinutes(15))) {
+                $notify->toAdmins('support_chat', 'Support : message de ' . $me->full_name, $this->preview($m, $other)['text'], ['data' => ['conversation_id' => $conversation->id, 'user_id' => $me->id]]);
+            }
+            return;
+        }
         $notify->toUser($other, 'chat_message', 'Nouveau message de ' . $me->full_name, $this->preview($m, $other)['text'], [
             'data' => ['conversation_id' => $conversation->id],
             'sms' => false,
@@ -363,6 +384,9 @@ class ChatController extends Controller
     {
         if (! $u) {
             return null;
+        }
+        if (SupportChat::isSupportUser($u)) {
+            return ['id' => $u->id, 'name' => SupportChat::NAME, 'phone' => null, 'has_photo' => false, 'support' => true];
         }
         $photos ??= $this->withPhoto([$u->id]);
         return ['id' => $u->id, 'name' => $u->full_name, 'phone' => $u->phone, 'has_photo' => in_array($u->id, $photos, true)];
@@ -449,6 +473,8 @@ class ChatController extends Controller
             'editable' => $mine && in_array($m->type, ['text', 'image', 'video'], true) && ! $m->forwarded
                 && $m->created_at && $m->created_at->gte(now()->subMinutes(ChatMessage::EDIT_MINUTES)),
             'mine' => $mine,
+            // Réponse du support : prénom de l'agent (« Grâce · Support FlashPay »)
+            'agent' => $m->agent_id ? strtok((string) optional($m->agent)->full_name, ' ') ?: null : null,
             'read' => $m->read_at !== null,
             'at' => $m->created_at?->toIso8601String(),
         ];
