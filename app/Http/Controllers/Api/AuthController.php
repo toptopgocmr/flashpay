@@ -39,7 +39,7 @@ class AuthController extends Controller
             'place_of_birth' => 'nullable|string|max:150',
             'otp' => (config('security.require_otp_on_register') ? 'required' : 'nullable') . '|string|max:10',
             'pin' => 'nullable|string',
-            'language' => 'nullable|in:fr,en',
+            'language' => 'nullable|in:fr,en,es,pt,de,ru,zh,sw,ln,ktu',
             'device_id' => 'nullable|string|max:120',
         ])->validate();
 
@@ -289,7 +289,7 @@ class AuthController extends Controller
     public function updateProfile(Request $request)
     {
         $v = $request->validate([
-            'language' => 'nullable|in:fr,en',
+            'language' => 'nullable|in:fr,en,es,pt,de,ru,zh,sw,ln,ktu',
             'email' => 'nullable|email|unique:users,email,' . $request->user()->id,
             'date_of_birth' => 'nullable|date|before:today',
             'place_of_birth' => 'nullable|string|max:150',

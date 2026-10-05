@@ -296,7 +296,7 @@ class GiftService
         return [
             'code' => $e->code,
             'mode' => $e->mode,
-            'mode_label' => $e->mode === 'random' ? 'Cagnotte surprise' : 'Cadeau à des contacts',
+            'mode_label' => $e->mode === 'random' ? 'Enveloppe surprise' : 'Cadeau à des personnes',
             'occasion' => $e->occasion,
             'occasion_label' => self::OCCASIONS[$e->occasion] ?? '🎁 Cadeau',
             'message' => $e->message,
@@ -348,7 +348,7 @@ class GiftService
     {
         $occasion = trim(preg_replace('/^\S+\s/u', '', self::OCCASIONS[$e->occasion] ?? '') ?: '');
         $intro = $e->mode === 'random'
-            ? "🧧 {$e->sender->full_name} partage une cagnotte surprise FlashPay" . ($occasion ? " ({$occasion})" : '') . ' : ' . $e->shares . ' parts à gagner !'
+            ? "🧧 {$e->sender->full_name} partage une enveloppe surprise FlashPay" . ($occasion ? " ({$occasion})" : '') . ' : ' . $e->shares . ' parts à gagner !'
             : "🧧 {$e->sender->full_name} vous offre un cadeau FlashPay" . ($occasion ? " ({$occasion})" : '') . '.';
         return $intro
             . ($e->message ? "\n« {$e->message} »" : '')

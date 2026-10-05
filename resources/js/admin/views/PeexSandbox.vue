@@ -56,6 +56,36 @@
       </div>
     </div>
 
+    <!-- Remboursement PEEX -->
+    <div class="card" style="margin-bottom:24px;">
+      <h3>Remboursement PEEX</h3>
+      <p class="stat-label" style="margin-top:-6px;">Rembourser un client depuis le compte PEEX de FlashPay (mobile money ou compte bancaire). Retrouvez l'opération par sa référence FlashPay (FP-…), le track_id PEEX ou le numéro du client.</p>
+      <form @submit.prevent="searchRefund" style="display:flex; gap:12px; margin-top:8px;">
+        <input v-model.trim="refundQ" placeholder="Ex. FP-CNSW0VIZPMGO, FP-…-C1 ou 057563644" style="flex:1;" />
+        <button class="btn" type="submit" :disabled="refundSearching || refundQ.length < 3">{{ refundSearching ? 'Recherche…' : 'Rechercher' }}</button>
+      </form>
+      <div v-if="refundError" style="margin-top:10px; color:#b91c1c;">{{ refundError }}</div>
+      <div v-if="refundResults" class="req-wrap" style="margin-top:12px;">
+        <table class="req-table">
+          <thead><tr><th>Date</th><th>Référence</th><th>Opération</th><th>Client</th><th>Montant</th><th>Statut</th><th>Remboursable</th><th></th></tr></thead>
+          <tbody>
+            <tr v-for="t in refundResults" :key="t.id">
+              <td class="nowrap">{{ new Date(t.created_at).toLocaleDateString('fr-FR') }}</td>
+              <td class="mono small"><router-link :to="'/transactions/' + t.id">{{ t.reference }}</router-link></td>
+              <td>{{ t.type }}</td>
+              <td>{{ t.sender || '—' }}<br /><small class="muted">{{ t.sender_phone ? $phone(t.sender_phone) : '' }}</small></td>
+              <td class="nowrap">{{ formatXaf(t.amount) }}<br /><small class="muted">frais {{ formatXaf(t.fee) }}</small></td>
+              <td><span class="badge" :class="badge(t.status)">{{ t.status_label }}</span><br /><small class="muted">{{ t.failure_reason }}</small></td>
+              <td class="nowrap"><strong>{{ formatXaf(t.refundable) }}</strong><br /><small class="muted" v-if="t.refunds">{{ t.refunds }} remboursement(s) déjà demandé(s)</small></td>
+              <td><button class="btn" :disabled="!t.refundable" @click="refundTx = t.id">Rembourser</button></td>
+            </tr>
+            <tr v-if="!refundResults.length"><td colspan="8" class="stat-label">Aucune opération trouvée.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <PeexRefund v-if="refundTx" :transaction-id="refundTx" @close="refundTx = null" @done="searchRefund(); loadRequests()" />
+
     <!-- Demandes PEEX -->
     <div id="peex-requests" class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -98,6 +128,7 @@
               <span v-else class="muted">—</span>
             </td>
             <td style="white-space:nowrap;">
+              <a v-if="r.transaction" href="#" @click.prevent="refundTx = r.transaction.id" style="margin-right:8px;">Rembourser</a>
               <template v-if="!r.finalized_at">
                 <a href="#" @click.prevent="refresh(r)">Statut</a>
                 <template v-if="overview?.sandbox">
@@ -126,6 +157,7 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import api from '../services/api'
+import PeexRefund from '../components/PeexRefund.vue'
 
 const labels = { collect: 'Compte Collecte', disbursement: 'Compte Décaissement', remittance: 'Compte Remittance' }
 const overview = ref(null)
@@ -137,6 +169,25 @@ const error = ref('')
 const lastTx = ref(null)
 const autoRefresh = ref(true)
 let timer = null
+
+// Remboursement PEEX (formulaire)
+const refundQ = ref('')
+const refundResults = ref(null)
+const refundSearching = ref(false)
+const refundError = ref('')
+const refundTx = ref(null)
+async function searchRefund() {
+  if (refundQ.value.length < 3) return
+  refundSearching.value = true
+  refundError.value = ''
+  try {
+    refundResults.value = (await api.get('/admin/peex/refund-search', { params: { q: refundQ.value } })).data.data
+  } catch (e) {
+    refundError.value = e.response?.data?.message || e.message
+  } finally {
+    refundSearching.value = false
+  }
+}
 
 const form = reactive({ action: 'transfer', source_phone: '065123456', destination_phone: '055123456', amount: 100, beneficiary_name: 'Test Airtel' })
 

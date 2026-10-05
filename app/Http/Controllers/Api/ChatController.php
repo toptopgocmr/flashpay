@@ -87,7 +87,7 @@ class ChatController extends Controller
         abort_unless($conversation->hasParticipant($me), 403);
         $now = now();
 
-        $q = $conversation->messages()->orderByDesc('id');
+        $q = $conversation->messages()->with('replyTo')->orderByDesc('id');
         if ($after = (int) $request->query('after')) {
             $q->where('id', '>', $after);
         }
@@ -108,7 +108,7 @@ class ChatController extends Controller
         if ($since = $request->query('since')) {
             try {
                 $from = \Illuminate\Support\Carbon::parse($since)->subSeconds(2);
-                $out['edits'] = $conversation->messages()->whereNotNull('edited_at')->where('edited_at', '>=', $from)
+                $out['edits'] = $conversation->messages()->with('replyTo')->whereNotNull('edited_at')->where('edited_at', '>=', $from)
                     ->orderBy('id')->limit(50)->get()->map(fn ($m) => $this->present($m, $me))->values();
             } catch (\Throwable) {
                 $out['edits'] = [];
@@ -128,6 +128,7 @@ class ChatController extends Controller
             'file' => 'nullable|file',
             'kind' => 'nullable|in:audio',          // note vocale
             'duration' => 'nullable|integer|min:0|max:3600',
+            'reply_to_id' => 'nullable|integer',
         ]);
 
         $file = $request->file('file');
@@ -137,6 +138,10 @@ class ChatController extends Controller
         }
 
         $data = ['conversation_id' => $conversation->id, 'sender_id' => $me->id, 'type' => 'text', 'body' => $body];
+        // Réponse ciblée : le message cité doit appartenir à la même discussion.
+        if ($replyId = (int) $request->input('reply_to_id')) {
+            $data['reply_to_id'] = ChatMessage::where('conversation_id', $conversation->id)->whereKey($replyId)->value('id');
+        }
         if ($file) {
             [$kind, $mime] = $this->kindOf($file, $request->input('kind'));
             if (! $kind) {
@@ -368,10 +373,26 @@ class ChatController extends Controller
         ];
     }
 
+    /** Aperçu du message cité (réponse ciblée). */
+    protected function quote(?ChatMessage $q, User $me): ?array
+    {
+        if (! $q) {
+            return null;
+        }
+        return [
+            'id' => $q->id,
+            'type' => $q->type,
+            'body' => $q->body !== null ? mb_strimwidth((string) $q->body, 0, 160, '…') : null,
+            'duration' => $q->duration,
+            'mine' => $q->sender_id === $me->id,
+        ];
+    }
+
     protected function present(ChatMessage $m, User $me): array
     {
         $mine = $m->sender_id === $me->id;
         return [
+            'reply_to' => $m->reply_to_id ? $this->quote($m->relationLoaded('replyTo') ? $m->replyTo : $m->replyTo()->first(), $me) : null,
             'id' => $m->id,
             'type' => $m->type,
             'body' => $m->body,

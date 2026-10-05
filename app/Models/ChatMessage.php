@@ -19,6 +19,7 @@ class ChatMessage extends Model
 
     public function conversation() { return $this->belongsTo(ChatConversation::class, 'conversation_id'); }
     public function sender() { return $this->belongsTo(User::class, 'sender_id'); }
+    public function replyTo() { return $this->belongsTo(self::class, 'reply_to_id'); }
 
     public function fileResponse()
     {

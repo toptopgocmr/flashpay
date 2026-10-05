@@ -199,8 +199,12 @@ return [
     // (ex. coturn, Metered, Twilio) améliore la connexion sur les réseaux 4G stricts.
     'webrtc' => [
         'stun_urls' => env('WEBRTC_STUN_URLS', 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302'),
-        'turn_url' => env('WEBRTC_TURN_URL'),
-        'turn_username' => env('WEBRTC_TURN_USERNAME'),
-        'turn_password' => env('WEBRTC_TURN_PASSWORD'),
+        // Relais TURN indispensable quand les deux téléphones sont en 4G (NAT opérateur) :
+        // par défaut le relais public gratuit « Open Relay » (Metered) ; pour la production,
+        // créez un compte TURN (Metered, Twilio, coturn…) et renseignez WEBRTC_TURN_* .
+        // WEBRTC_TURN_URL=none désactive le relais.
+        'turn_url' => env('WEBRTC_TURN_URL', 'turn:openrelay.metered.ca:80,turn:openrelay.metered.ca:443,turn:openrelay.metered.ca:443?transport=tcp'),
+        'turn_username' => env('WEBRTC_TURN_USERNAME', 'openrelayproject'),
+        'turn_password' => env('WEBRTC_TURN_PASSWORD', 'openrelayproject'),
     ],
 ];

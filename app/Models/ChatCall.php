@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class ChatCall extends Model
 {
     /** Au-delà, un appel qui sonne toujours est considéré comme manqué. */
-    public const RING_SECONDS = 45;
+    public const RING_SECONDS = 60;
 
     protected $guarded = ['id'];
     protected $hidden = ['offer', 'answer'];

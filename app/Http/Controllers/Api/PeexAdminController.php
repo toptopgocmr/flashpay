@@ -125,6 +125,46 @@ class PeexAdminController extends Controller
     }
 
     /**
+     * Formulaire « Remboursement PEEX » : retrouve les opérations à rembourser par
+     * référence FlashPay (FP-…), track_id PEEX ou numéro de téléphone du client.
+     */
+    public function refundSearch(Request $request)
+    {
+        $v = $request->validate(['q' => 'required|string|min:3|max:60']);
+        $q = trim($v['q']);
+        $digits = preg_replace('/\D/', '', $q);
+
+        $ids = PeexRequest::where('track_id', 'like', '%' . $q . '%')->whereNotNull('transaction_id')->limit(20)->pluck('transaction_id');
+        $query = Transaction::with('peexRequests')->where(function ($w) use ($q, $digits, $ids) {
+            $w->where('reference', 'like', '%' . strtoupper($q) . '%')->orWhereIn('id', $ids);
+            if (strlen($digits) >= 6) {
+                $w->orWhere('source_account', 'like', '%' . $digits . '%')->orWhere('destination_account', 'like', '%' . $digits . '%');
+            }
+        })->latest()->limit(15);
+
+        return response()->json(['data' => $query->get()->map(function (Transaction $t) {
+            $p = \App\Support\TransactionPresenter::parties($t);
+            return [
+                'id' => $t->id,
+                'reference' => $t->reference,
+                'type' => $t->typeLabel(),
+                'status' => $t->status,
+                'status_label' => $t->statusLabel(),
+                'failure_reason' => $t->failure_reason,
+                'amount' => (int) $t->amount,
+                'fee' => (int) $t->fee,
+                'currency' => $t->currency,
+                'created_at' => $t->created_at?->toIso8601String(),
+                'sender' => $p['sender_name'] ?? null,
+                'sender_phone' => $p['sender_phone'] ?? null,
+                'beneficiary' => $p['beneficiary_name'] ?? null,
+                'refundable' => \App\Services\Peex\ManualRefundService::refundableOf($t),
+                'refunds' => \App\Services\Peex\ManualRefundService::requestsOf($t)->count(),
+            ];
+        })->values()]);
+    }
+
+    /**
      * Lance un test sandbox.
      *  action = collect  : numéro -> wallet admin
      *  action = payout   : wallet admin -> numéro

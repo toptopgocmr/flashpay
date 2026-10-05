@@ -370,6 +370,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/peex/overview', [PeexAdminController::class, 'overview']);
         Route::get('/peex/balances', [PeexAdminController::class, 'balances']);
         Route::get('/peex/requests', [PeexAdminController::class, 'requests']);
+        Route::get('/peex/refund-search', [PeexAdminController::class, 'refundSearch']);
         Route::post('/peex/test', [PeexAdminController::class, 'test']);
         Route::post('/peex/requests/{peexRequest}/refresh', [PeexAdminController::class, 'refresh']);
         Route::post('/peex/sync', [PeexAdminController::class, 'sync']);

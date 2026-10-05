@@ -60,6 +60,12 @@ class ChatCallController extends Controller
             'offer' => $v['offer'],
         ]);
 
+        // Notification « appel entrant » : utile si l'app du contact est en arrière-plan.
+        app(NotificationService::class)->toUser($callee, 'chat_call', '📞 Appel de ' . $me->full_name, 'Ouvrez FlashPay pour répondre.', [
+            'data' => ['conversation_id' => $conversation->id, 'call_id' => $call->id],
+            'sms' => false,
+        ]);
+
         return response()->json($this->present($call, $me) + ['ice_servers' => self::iceServers()], 201);
     }
 
@@ -136,7 +142,7 @@ class ChatCallController extends Controller
     {
         $stun = array_values(array_filter(array_map('trim', explode(',', (string) (config('flashpay.webrtc.stun_urls') ?: 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302')))));
         $servers = $stun ? [['urls' => $stun]] : [];
-        if ($turn = config('flashpay.webrtc.turn_url')) {
+        if (($turn = config('flashpay.webrtc.turn_url')) && strtolower((string) $turn) !== 'none') {
             $servers[] = [
                 'urls' => array_values(array_filter(array_map('trim', explode(',', (string) $turn)))),
                 'username' => (string) config('flashpay.webrtc.turn_username', ''),
