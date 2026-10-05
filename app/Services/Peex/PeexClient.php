@@ -73,6 +73,14 @@ class PeexClient
                 Log::critical('PEEX 403 : IP du serveur refusée par le pare-feu PEEX', ['path' => $path, 'ip_hint' => 'Faire autoriser l\'IP sortante Railway par PEEX']);
                 throw new PeexException('PEEX 403 : accès refusé par le pare-feu PEEX (adresse IP du serveur FlashPay non autorisée).', 403, $body);
             }
+            // 5xx sans message JSON (page HTML / réponse vide) : panne ou maintenance côté PEEX
+            // (serveur, passerelle ou opérateur MTN/Airtel derrière PEEX), pas une erreur FlashPay.
+            if ($response->status() >= 500 && ! isset($body['message']) && ! isset($body['error']) && ! isset($body['errors'])) {
+                $hint = self::snippet($body['raw'] ?? '');
+                throw new PeexException("PEEX {$response->status()} : serveur PEEX indisponible (" . ($response->reason() ?: 'erreur serveur') . ')'
+                    . ' — panne ou maintenance chez PEEX, rien n\'a été débité. Statut revérifié automatiquement.'
+                    . ($hint ? " [{$hint}]" : ''), $response->status(), ['raw' => mb_substr((string) ($body['raw'] ?? ''), 0, 2000)]);
+            }
             $message = $body['message'] ?? $body['error']['message'] ?? $body['error'] ?? $body['errors'] ?? $response->reason();
             if (is_array($message)) {
                 $message = json_encode($message, JSON_UNESCAPED_UNICODE);
@@ -309,6 +317,42 @@ class PeexClient
         }
 
         return isset($body['status']) || isset($body['track_id']) ? $body : null;
+    }
+
+    /** Extrait lisible d'une réponse non JSON (titre HTML ou début du texte). */
+    public static function snippet(string $raw): string
+    {
+        if ($raw === '') {
+            return '';
+        }
+        if (preg_match('/<title>(.*?)<\/title>/is', $raw, $m)) {
+            return trim(html_entity_decode(strip_tags($m[1])));
+        }
+        return mb_strimwidth(trim(preg_replace('/\s+/', ' ', strip_tags($raw))), 0, 160, '…');
+    }
+
+    /**
+     * Diagnostic brut d'un appel GET (console) : statut HTTP, durée, extrait de réponse.
+     * N'exécute aucune opération (lecture seule).
+     */
+    public function probe(string $path, array $query = []): array
+    {
+        $t = microtime(true);
+        try {
+            $r = $this->http()->timeout(15)->get($path, $query);
+            $body = $r->json();
+            return [
+                'path' => $path,
+                'http' => $r->status(),
+                'ok' => $r->successful(),
+                'ms' => (int) round((microtime(true) - $t) * 1000),
+                'message' => is_array($body) ? ($body['message'] ?? $body['error'] ?? null) : null,
+                'snippet' => is_array($body) ? mb_strimwidth(json_encode($body, JSON_UNESCAPED_UNICODE), 0, 300, '…') : self::snippet($r->body()),
+                'server' => $r->header('Server') ?: null,
+            ];
+        } catch (\Throwable $e) {
+            return ['path' => $path, 'http' => 0, 'ok' => false, 'ms' => (int) round((microtime(true) - $t) * 1000), 'message' => $e->getMessage(), 'snippet' => null, 'server' => null];
+        }
     }
 
     /** Traduit en français les messages d'erreur PEEX connus (le texte d'origine reste entre parenthèses). */

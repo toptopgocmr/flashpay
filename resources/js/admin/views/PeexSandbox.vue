@@ -16,6 +16,41 @@
     </div>
     <p v-if="loadingOverview" class="stat-label">Connexion à PEEX…</p>
 
+    <!-- Diagnostic PEEX (erreurs 503, 403, injoignable…) -->
+    <div class="card" style="margin-bottom:24px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0;">Diagnostic PEEX</h3>
+          <p class="stat-label" style="margin:4px 0 0;">Teste chaque service PEEX depuis le serveur (lecture seule, aucun paiement) et prépare le message pour le support PEEX.</p>
+        </div>
+        <button class="btn" :disabled="diagLoading" @click="runDiagnostic">{{ diagLoading ? 'Test en cours…' : 'Lancer le diagnostic' }}</button>
+      </div>
+      <div v-if="diagError" style="margin-top:10px; color:#b91c1c;">{{ diagError }}</div>
+      <template v-if="diag">
+        <div class="flash" :class="diag.probes && Object.values(diag.probes).every((p) => p.ok) && !diag.last24h.errors_5xx ? 'info' : 'err'" style="margin:12px 0 8px;"><div><strong>{{ diag.verdict }}</strong></div></div>
+        <div class="stat-label" style="margin-bottom:8px;">{{ diag.base_url }} · {{ diag.sandbox ? 'sandbox' : 'production' }} · IP du serveur : <span class="mono">{{ diag.server_ip || '?' }}</span>
+          · 24 h : {{ diag.last24h.total }} demande(s), {{ diag.last24h.errors_5xx }} erreur(s) 5xx, {{ diag.last24h.unknown }} en statut inconnu</div>
+        <div class="req-wrap">
+          <table class="req-table">
+            <thead><tr><th>Test</th><th>HTTP</th><th>Durée</th><th>Réponse</th></tr></thead>
+            <tbody>
+              <tr v-for="(p, label) in diag.probes" :key="label">
+                <td><strong>{{ label }}</strong><br /><small class="mono muted">{{ p.path }}</small></td>
+                <td><span class="status" :class="p.ok ? 'ok' : 'err'">{{ p.http || '—' }}</span></td>
+                <td class="nowrap">{{ p.ms }} ms</td>
+                <td style="max-width:520px;"><small>{{ p.message || '' }}</small><br v-if="p.message && p.snippet" /><small class="mono muted" style="word-break:break-all;">{{ p.snippet }}</small></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <details style="margin-top:12px;">
+          <summary><strong>Message pour le support PEEX</strong> (à envoyer à support@peexit.com)</summary>
+          <textarea readonly :value="diag.support_message" rows="12" style="width:100%; margin-top:8px; font-family:inherit;"></textarea>
+          <button class="btn-normal" style="margin-top:6px;" @click="copySupport">{{ copied ? 'Copié ✓' : 'Copier le message' }}</button>
+        </details>
+      </template>
+    </div>
+
     <!-- Lancer un test -->
     <div class="card" style="margin-bottom:24px;">
       <h3>Lancer un test</h3>
@@ -169,6 +204,27 @@ const error = ref('')
 const lastTx = ref(null)
 const autoRefresh = ref(true)
 let timer = null
+
+// Diagnostic PEEX
+const diag = ref(null)
+const diagLoading = ref(false)
+const diagError = ref('')
+const copied = ref(false)
+async function runDiagnostic() {
+  diagLoading.value = true
+  diagError.value = ''
+  copied.value = false
+  try {
+    diag.value = (await api.get('/admin/peex/diagnostic')).data
+  } catch (e) {
+    diagError.value = e.response?.data?.message || e.message
+  } finally {
+    diagLoading.value = false
+  }
+}
+async function copySupport() {
+  try { await navigator.clipboard.writeText(diag.value.support_message); copied.value = true } catch (_) {}
+}
 
 // Remboursement PEEX (formulaire)
 const refundQ = ref('')

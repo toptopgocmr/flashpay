@@ -58,6 +58,66 @@ class PeexAdminController extends Controller
     }
 
     /**
+     * Diagnostic PEEX (lecture seule) : chaque service est interrogé (me, get_fees),
+     * avec statut HTTP, durée et extrait de réponse ; statistiques des dernières
+     * demandes et message prêt à envoyer au support PEEX.
+     */
+    public function diagnostic(PeexClient $client)
+    {
+        $probes = [
+            'Compte collecte' => $client->probe('collection/me'),
+            'Compte décaissement' => $client->probe('disbursement/me'),
+            'Compte remittance' => $client->probe('clients/me'),
+            'Frais collecte MTN CG (100 XAF)' => $client->probe('collection/get_fees', ['amount' => 100, 'country' => 'CG', 'phone_number' => '242065123456']),
+            'Frais collecte Airtel CG (100 XAF)' => $client->probe('collection/get_fees', ['amount' => 100, 'country' => 'CG', 'phone_number' => '242055123456']),
+        ];
+        $since = now()->subDay();
+        $recent = PeexRequest::where('created_at', '>=', $since)->latest()->limit(200)->get();
+        $failed5xx = $recent->filter(fn ($r) => preg_match('/PEEX 5\d\d/', (string) $r->message))->values();
+        $ip = \Illuminate\Support\Facades\Cache::remember('server:egress_ip', now()->addMinutes(10), function () {
+            try {
+                return trim(\Illuminate\Support\Facades\Http::timeout(5)->get('https://api.ipify.org')->body()) ?: null;
+            } catch (\Throwable) {
+                return null;
+            }
+        });
+
+        $allOk = collect($probes)->every(fn ($p) => $p['ok']);
+        $anyUp = collect($probes)->contains(fn ($p) => $p['ok']);
+        $verdict = match (true) {
+            $allOk && $failed5xx->isEmpty() => 'PEEX répond normalement.',
+            $allOk => 'Les comptes PEEX répondent, mais des demandes de paiement ont reçu une erreur 5xx : panne côté PEEX ou côté opérateur (MTN/Airtel) au moment de l\'envoi. À signaler au support PEEX avec les track_id ci-dessous.',
+            $anyUp => 'PEEX répond partiellement : certains services sont indisponibles chez PEEX.',
+            collect($probes)->contains(fn ($p) => $p['http'] === 403) => 'PEEX refuse l\'accès (403) : l\'adresse IP du serveur doit être autorisée par PEEX.',
+            collect($probes)->every(fn ($p) => $p['http'] === 0) => 'PEEX est injoignable depuis le serveur (réseau, DNS ou URL de production).',
+            default => 'PEEX est indisponible (erreurs serveur) : panne ou maintenance chez PEEX.',
+        };
+
+        $tracks = $failed5xx->take(10)->map(fn ($r) => "- {$r->track_id} · {$r->service} · {$r->phone} · {$r->amount} {$r->currency} · " . $r->created_at?->timezone('Africa/Brazzaville')->format('d/m/Y H:i'))->implode("\n");
+        $probeLines = collect($probes)->map(fn ($p, $k) => "- {$k} ({$p['path']}) : HTTP {$p['http']}" . ($p['message'] ? " — {$p['message']}" : ''))->implode("\n");
+        $support = "Bonjour l'équipe PEEX,\n\nNous (FlashPay, compte " . ($client->isSandbox() ? 'sandbox' : 'production') . ") recevons des erreurs HTTP 503 « Service Unavailable » sur l'API " . $client->baseUrl()
+            . ".\n\nAppels de contrôle depuis notre serveur (" . now()->timezone('Africa/Brazzaville')->format('d/m/Y H:i') . ", heure de Brazzaville) :\n{$probeLines}\n\n"
+            . ($tracks ? "Demandes concernées (collection/request_payment) :\n{$tracks}\n\n" : '')
+            . 'Adresse IP sortante de notre serveur : ' . ($ip ?: 'inconnue') . "\n\nPouvez-vous nous confirmer l'état de vos services (collecte MTN / Airtel Congo) et si une action est nécessaire de notre côté (activation, IP à autoriser) ?\n\nCordialement,\nFlashPay — Brazzaville";
+
+        return response()->json([
+            'base_url' => $client->baseUrl(),
+            'sandbox' => $client->isSandbox(),
+            'server_ip' => $ip,
+            'probes' => $probes,
+            'verdict' => $verdict,
+            'last24h' => [
+                'total' => $recent->count(),
+                'errors_5xx' => $failed5xx->count(),
+                'unknown' => $recent->where('status', 'unknown')->count(),
+                'paid' => $recent->whereIn('status', ['paid', 'success', 'successful'])->count(),
+            ],
+            'failed_5xx' => $failed5xx->take(20)->map(fn ($r) => $r->only(['id', 'track_id', 'service', 'phone', 'amount', 'currency', 'status', 'message', 'created_at']))->values(),
+            'support_message' => $support,
+        ]);
+    }
+
+    /**
      * Soldes des trois comptes PEEX (tableau de bord Super Admin) :
      *   remittance    GET clients/me       -> solde
      *   disbursement  GET disbursement/me  -> disbursement_solde
