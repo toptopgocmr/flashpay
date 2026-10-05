@@ -287,6 +287,7 @@ onMounted(load)
 .layout .container { margin: 0; }
 @media (max-width: 1200px) { .layout { grid-template-columns: 1fr; } }
 .matrix .c { text-align: center; }
+.matrix th, .matrix td { padding-left: 8px; padding-right: 8px; }
 .matrix .grp td { background: var(--surface-2); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-2); padding-top: 6px; padding-bottom: 6px; }
 .cell { background: none; border: 1px solid transparent; border-radius: 8px; padding: 4px 10px; cursor: pointer; font: inherit; display: inline-flex; flex-direction: column; align-items: center; min-width: 90px; }
 .cell:hover { border-color: var(--link); background: var(--info-bg); }

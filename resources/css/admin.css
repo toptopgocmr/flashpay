@@ -415,3 +415,9 @@ input, select, textarea { max-width: 100%; }
 @media (max-width: 1100px) {
   .env-pill { display: none; } /* rappelés en bas du menu latéral */
 }
+
+/* Tableaux : en-têtes sur deux lignes plutôt que des colonnes cachées, cellules plus compactes */
+th { white-space: normal; }
+@media (max-width: 1440px) { th, td { padding: 10px 12px; } }
+@media (max-width: 1100px) { th, td { padding: 8px 9px; font-size: 13px; } th { font-size: 11px; letter-spacing: .3px; } }
+.req-table td { max-width: 300px; }

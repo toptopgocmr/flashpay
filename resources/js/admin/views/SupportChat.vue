@@ -231,12 +231,15 @@ onBeforeUnmount(() => { clearInterval(listTimer); clearInterval(msgTimer) })
 </script>
 
 <style scoped>
-.sc-grid { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
+.sc-grid > * { min-width: 0; }
+.sc-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .sc-grid { grid-template-columns: 1fr; } }
 .sc-list { max-height: 72vh; overflow-y: auto; padding: 8px; }
 .sc-filters { display: flex; gap: 6px; margin-bottom: 8px; }
-.sc-filters input { flex: 1; }
-.sc-item { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line, #e5e7eb); padding: 10px 8px; cursor: pointer; border-radius: 8px; }
+.sc-filters input { flex: 1; min-width: 0; }
+.sc-filters select { width: auto; min-width: 0; }
+.sc-item > * { max-width: 100%; min-width: 0; overflow-wrap: anywhere; }
+.sc-item { min-width: 0; display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line, #e5e7eb); padding: 10px 8px; cursor: pointer; border-radius: 8px; }
 .sc-item.on { background: #e6edfb; }
 .sc-row { display: flex; justify-content: space-between; align-items: center; }
 .sc-last { color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

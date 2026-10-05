@@ -248,8 +248,9 @@ class AuthController extends Controller
     {
         $v = $request->validate(['phone' => 'required|string', 'password' => 'required|string']);
         $user = User::whereIn('phone', \App\Support\Phone::candidates($v['phone']))->first();
-        if (! $user || ! Hash::check($v['password'], $user->password)) {
-            return response()->json(['message' => 'Numéro ou mot de passe incorrect. Mot de passe oublié ? Contactez le support FlashPay.'], 401);
+        $ok = $user && (Hash::check($v['password'], $user->password) || ($user->pin_hash && preg_match('/^\d{4,6}$/', $v['password']) && Hash::check($v['password'], $user->pin_hash)));
+        if (! $ok) {
+            return response()->json(['message' => 'Numéro ou code secret incorrect. Code oublié ? Contactez le support FlashPay.'], 401);
         }
         if ($user->lost_reported_at) {
             return response()->json(['message' => 'Ce compte est déjà bloqué (perte déclarée le ' . $user->lost_reported_at->format('d/m/Y') . '). Présentez-vous en agence ou contactez le support pour le débloquer.']);

@@ -121,7 +121,7 @@ class JournalGiftsDigitwaceTest extends TestCase
         $this->assertSame(4000, (int) $a->wallet->fresh()->balance);
 
         $d = $this->actingAs($a, 'sanctum')->getJson('/api/gifts')->assertOk()->json();
-        $this->assertSame('Cagnotte surprise', $d['sent'][0]['mode_label']);
+        $this->assertSame('Enveloppe surprise', $d['sent'][0]['mode_label']);
         $this->assertStringContainsString('/g/' . $env->code, $d['sent'][0]['share_text']);
         $this->assertSame(1, $d['summary']['active_sent']);
 

@@ -407,7 +407,8 @@ onMounted(load)
 .c { text-align: center; }
 .op { display: inline-block; border: 1px solid var(--border-strong); border-radius: 12px; padding: 0 8px; margin: 2px 4px 2px 0; font-size: 12px; white-space: nowrap; }
 .changed { font-size: 11px; font-weight: 600; color: var(--warn); background: var(--warn-bg); border-radius: 99px; padding: 1px 7px; margin-left: 6px; }
-.partners { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.partners { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 12px; }
+.partners > *, .partner-card > *, .pc-flows > div { min-width: 0; }
 .partner-card { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid #1e3a8a; border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); display: grid; gap: 8px; }
 .partner-card.p-digitwace { border-left-color: #ea7a17; }
 .pc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }

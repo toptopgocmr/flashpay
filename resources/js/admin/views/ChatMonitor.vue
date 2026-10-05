@@ -125,11 +125,14 @@ onMounted(() => load(1))
 </script>
 
 <style scoped>
-.cm-grid { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
+.cm-grid > * { min-width: 0; }
+.cm-item { overflow-wrap: anywhere; }
+.cm-grid { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .cm-grid { grid-template-columns: 1fr; } }
 .cm-list { max-height: 74vh; overflow-y: auto; padding: 8px; }
 .cm-filters { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
-.cm-filters input[type=text], .cm-filters input:not([type]) { flex: 1; min-width: 160px; }
+.cm-filters input[type=text], .cm-filters input:not([type]) { flex: 1; min-width: 0; }
+.cm-filters select { width: auto; min-width: 0; }
 .cm-item { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid #e5e7eb; padding: 10px 8px; cursor: pointer; border-radius: 8px; }
 .cm-item.on { background: #e6edfb; }
 .cm-pages { display: flex; gap: 8px; justify-content: center; align-items: center; padding: 8px; }

@@ -326,7 +326,7 @@ const results = computed(() => {
 watch(query, () => { cursor.value = 0 })
 
 function isActive(to) {
-  return to === '/' ? route.path === '/' : route.path.startsWith(to)
+  return to === '/' ? route.path === '/' : (route.path === to || route.path.startsWith(to + '/'))
 }
 function toggle(which) {
   const s = which === 'services'

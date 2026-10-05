@@ -131,7 +131,7 @@
         </div>
       </div>
       <div class="req-wrap">
-      <table class="req-table">
+      <table class="req-table peex-req">
         <thead>
           <tr><th>Date</th><th>Service</th><th>track_id</th><th>Corridor</th><th>Numéro</th><th>Montant</th><th>PEEX</th><th>Transaction</th><th>Actions</th></tr>
         </thead>
@@ -162,13 +162,13 @@
               </template>
               <span v-else class="muted">—</span>
             </td>
-            <td style="white-space:nowrap;">
-              <a v-if="r.transaction" href="#" @click.prevent="refundTx = r.transaction.id" style="margin-right:8px;">Rembourser</a>
+            <td class="act-cell">
+              <a v-if="r.transaction" href="#" @click.prevent="refundTx = r.transaction.id">Rembourser</a>
               <template v-if="!r.finalized_at">
                 <a href="#" @click.prevent="refresh(r)">Statut</a>
                 <template v-if="overview?.sandbox">
-                  · <a href="#" @click.prevent="simulate(r, 'paid')">Simuler payé</a>
-                  · <a href="#" @click.prevent="simulate(r, 'failed')">Simuler échec</a>
+                  <a href="#" @click.prevent="simulate(r, 'paid')">Simuler payé</a>
+                  <a href="#" @click.prevent="simulate(r, 'failed')">Simuler échec</a>
                 </template>
               </template>
             </td>
@@ -355,14 +355,18 @@ onBeforeUnmount(stopTimer)
 .nowrap { white-space: nowrap; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; }
 .small { font-size: 11.5px; }
-.track { font-size: 11px; white-space: nowrap; }
+.track { font-size: 11px; word-break: break-all; min-width: 90px; max-width: 130px; }
+.act-cell a { display: block; white-space: nowrap; margin: 2px 0; }
+/* Écrans moyens : service et corridor masqués (le track_id et le numéro suffisent) */
+@media (max-width: 1340px) { .peex-req th:nth-child(2), .peex-req td:nth-child(2), .peex-req th:nth-child(4), .peex-req td:nth-child(4) { display: none; } }
 .muted { color: #6b7280; }
-.peex-cell { min-width: 240px; max-width: 340px; }
+.peex-cell { min-width: 200px; max-width: 280px; }
 .peex-cell .badge, .tx-cell .badge { font-size: 11.5px; padding: 1px 8px; }
 .proof { margin-top: 4px; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 .raw { margin-top: 4px; font-size: 11.5px; }
 .raw summary { cursor: pointer; color: var(--link, #0972d3); }
 .raw pre { margin: 6px 0 0; padding: 8px; background: #f6f7f9; border-radius: 6px; max-height: 200px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
-.tx-cell { min-width: 130px; white-space: nowrap; }
+.tx-cell { min-width: 110px; max-width: 150px; }
+.tx-cell .mono { word-break: break-all; }
 .tx-cell .badge { margin-top: 3px; display: inline-block; }
 </style>

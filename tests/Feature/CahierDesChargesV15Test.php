@@ -110,7 +110,8 @@ class CahierDesChargesV15Test extends TestCase
         $this->postJson('/api/auth/pin/reset', ['phone' => '242061000012', 'otp' => $otp, 'password' => 'secret123', 'id_number' => 'cg123', 'new_pin' => '5823'])->assertOk();
         $this->assertTrue($u->fresh()->hasPin());
 
-        $this->postJson('/api/auth/report-lost', ['phone' => '242061000012', 'password' => 'secret123'])->assertOk();
+        // Le nouveau code sert aussi de code de connexion (code secret unifié)
+        $this->postJson('/api/auth/report-lost', ['phone' => '242061000012', 'password' => '5823'])->assertOk();
         $this->assertTrue($u->fresh()->blocked_until->isFuture());
         $this->actingAs($u->fresh(), 'sanctum');
         $this->postJson('/api/pay/transfer', ['source' => 'wallet', 'destination_phone' => '242061000099', 'amount' => 100], ['X-FlashPay-Pin' => '5823'])->assertStatus(423);

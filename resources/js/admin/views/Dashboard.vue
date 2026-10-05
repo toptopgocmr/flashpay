@@ -985,6 +985,11 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('clic
 
 /* ================= Tables ================= */
 .scroll-x { overflow-x: auto; }
+.ops th, .ops td { padding: 8px 8px; font-size: 12.5px; }
+.ops th { font-size: 10.5px; }
+/* Écrans moyens : colonnes secondaires (rejetées, en attente, panier moyen) masquées */
+@media (max-width: 1440px) { .ops th:nth-child(7), .ops td:nth-child(7), .ops th:nth-child(8), .ops td:nth-child(8), .ops th:nth-child(10), .ops td:nth-child(10) { display: none; } }
+@media (max-width: 900px) { .ops th:nth-child(4), .ops td:nth-child(4), .ops th:nth-child(11), .ops td:nth-child(11) { display: none; } }
 .mini { font-size: 13px; }
 .mini th, .mini td { padding-top: 9px; padding-bottom: 9px; }
 .mini .rank { color: var(--text-2); font-weight: 700; width: 28px; }
