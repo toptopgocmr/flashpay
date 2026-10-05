@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Notifications\NotificationService;
 use App\Services\Peex\PeexFlowService;
 use App\Services\Peex\PeexCorridors;
+use App\Services\Translation\Translator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 
@@ -26,8 +27,21 @@ class ChatController extends Controller
     public const AUDIO_MAX_KB = 3072;  // 3 Mo (≈ 5 min de note vocale)
     public const FORWARD_MAX = 5;      // destinataires par transfert
 
-    public function __construct(protected PeexFlowService $flows)
+    /** Traduction automatique pour la requête en cours : [langue du lecteur, activée, appels distants restants]. */
+    protected array $tr = ['target' => null, 'on' => false, 'budget' => 0];
+
+    public function __construct(protected PeexFlowService $flows, protected Translator $translator)
     {
+    }
+
+    /** Active la traduction vers la langue de [me] (?translate=0 la coupe). */
+    protected function useTranslation(Request $request, User $me, int $budget = 8): void
+    {
+        $this->tr = [
+            'target' => Translator::langOf($me),
+            'on' => $this->translator->enabled() && $request->query('translate', '1') !== '0',
+            'budget' => $budget,
+        ];
     }
 
     /** Conversations de l'utilisateur, la plus récente en premier. */
@@ -86,6 +100,7 @@ class ChatController extends Controller
         $me = $request->user();
         abort_unless($conversation->hasParticipant($me), 403);
         $now = now();
+        $this->useTranslation($request, $me);
 
         $q = $conversation->messages()->with('replyTo')->orderByDesc('id');
         if ($after = (int) $request->query('after')) {
@@ -137,7 +152,7 @@ class ChatController extends Controller
             return response()->json(['message' => 'Message vide.'], 422);
         }
 
-        $data = ['conversation_id' => $conversation->id, 'sender_id' => $me->id, 'type' => 'text', 'body' => $body];
+        $data = ['conversation_id' => $conversation->id, 'sender_id' => $me->id, 'type' => 'text', 'body' => $body, 'lang' => Translator::langOf($me)];
         // Réponse ciblée : le message cité doit appartenir à la même discussion.
         if ($replyId = (int) $request->input('reply_to_id')) {
             $data['reply_to_id'] = ChatMessage::where('conversation_id', $conversation->id)->whereKey($replyId)->value('id');
@@ -198,7 +213,12 @@ class ChatController extends Controller
             return response()->json(['message' => 'Message vide.'], 422);
         }
 
-        $message->forceFill(['body' => $body ?: null, 'edited_at' => now()])->save();
+        $message->forceFill(['body' => $body ?: null, 'edited_at' => now(), 'lang' => Translator::langOf($me)])->save();
+        $this->translator->forget($message);
+        $other = User::find($message->conversation->otherId($me));
+        if ($other) {
+            $this->translator->forMessage($message, Translator::langOf($other));
+        }
 
         return response()->json($this->present($message, $me));
     }
@@ -231,6 +251,7 @@ class ChatController extends Controller
                 'type' => $message->type,
                 'forwarded' => true,
                 'body' => $message->body,
+                'lang' => $message->lang ?: Translator::langOf($me),
                 'mime' => $message->mime,
                 'size' => $message->size,
                 'duration' => $message->duration,
@@ -283,6 +304,9 @@ class ChatController extends Controller
     {
         $conversation->forceFill(['last_message_at' => now()])->save();
         $other = User::find($conversation->otherId($me));
+        if ($other) {
+            $this->translator->forMessage($m, Translator::langOf($other));
+        }
         $notify->toUser($other, 'chat_message', 'Nouveau message de ' . $me->full_name, $this->preview($m, $other)['text'], [
             'data' => ['conversation_id' => $conversation->id],
             'sms' => false,
@@ -359,12 +383,16 @@ class ChatController extends Controller
     {
         $mine = $viewer && $m->sender_id === $viewer->id;
         $fw = $m->forwarded ? '↪ ' : '';
+        $body = $m->body;
+        if (! $mine && $viewer && $body) {
+            $body = $this->translator->forMessage($m, Translator::langOf($viewer), false) ?? $body;
+        }
         $text = match ($m->type) {
-            'image' => $fw . '📷 Photo' . ($m->body ? ' · ' . $m->body : ''),
-            'video' => $fw . '🎬 Vidéo' . ($m->body ? ' · ' . $m->body : ''),
+            'image' => $fw . '📷 Photo' . ($body ? ' · ' . $body : ''),
+            'video' => $fw . '🎬 Vidéo' . ($body ? ' · ' . $body : ''),
             'audio' => $fw . '🎤 Note vocale' . ($m->duration ? ' (' . intdiv((int) $m->duration, 60) . ':' . str_pad((string) ((int) $m->duration % 60), 2, '0', STR_PAD_LEFT) . ')' : ''),
             'call' => self::callLabel($m, $mine),
-            default => $fw . (string) $m->body,
+            default => $fw . (string) $body,
         };
         return [
             'text' => mb_strimwidth($text, 0, 80, '…'),
@@ -388,6 +416,21 @@ class ChatController extends Controller
         ];
     }
 
+    /** Traduction du message dans la langue du lecteur (cache, sinon quelques appels au moteur par requête). */
+    protected function translationFor(ChatMessage $m): ?string
+    {
+        if (! $this->tr['on'] || ! $this->tr['target'] || ! $m->body || ! $m->lang || $m->lang === $this->tr['target']) {
+            return null;
+        }
+        $remote = $this->tr['budget'] > 0;
+        $cached = $this->translator->forMessage($m, $this->tr['target'], false);
+        if ($cached !== null || ! $remote) {
+            return $cached;
+        }
+        $this->tr['budget']--;
+        return $this->translator->forMessage($m, $this->tr['target']);
+    }
+
     protected function present(ChatMessage $m, User $me): array
     {
         $mine = $m->sender_id === $me->id;
@@ -396,6 +439,8 @@ class ChatController extends Controller
             'id' => $m->id,
             'type' => $m->type,
             'body' => $m->body,
+            'lang' => $m->lang,
+            'translation' => $mine ? null : $this->translationFor($m),
             'mime' => $m->mime,
             'size' => $m->size,
             'duration' => $m->duration,

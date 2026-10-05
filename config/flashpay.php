@@ -207,4 +207,13 @@ return [
         'turn_username' => env('WEBRTC_TURN_USERNAME', 'openrelayproject'),
         'turn_password' => env('WEBRTC_TURN_PASSWORD', 'openrelayproject'),
     ],
+
+    // Chat traduit automatiquement (chacun lit dans sa langue, comme Alibaba).
+    'translation' => [
+        'enabled' => (bool) env('CHAT_TRANSLATION', true),
+        'driver' => env('CHAT_TRANSLATION_DRIVER', 'mymemory'), // mymemory | google | deepl
+        'mymemory_email' => env('MYMEMORY_EMAIL'),              // quota gratuit porté à 50 000 caractères/jour
+        'google_key' => env('GOOGLE_TRANSLATE_KEY'),
+        'deepl_key' => env('DEEPL_KEY'),
+    ],
 ];
