@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Demandes de plafonds</h1><p>Clients qui demandent à relever leurs plafonds (par jour, par mois, par opération, solde maximal), avec motif, justification et justificatif. Les plafonds accordés remplacent ceux du palier KYC, éventuellement jusqu'à une date.</p></div>
+      <div><h1>Demandes de plafonds</h1></div>
       <div class="actions"><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>
     <div class="tabs mb">

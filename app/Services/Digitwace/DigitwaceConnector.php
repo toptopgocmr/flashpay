@@ -45,7 +45,8 @@ class DigitwaceConnector implements PaymentRailConnector
                 throw new DigitwaceException("Collecte WacePay non disponible pour {$route['country']} (aucun payeur PAYIN — synchronisez la couverture).", '1001');
             }
             $r = $this->client->payin($ref, $payer, $amountMinor, $currency, $route['phone'],
-                $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $tx?->initiator?->full_name ?? 'Client FlashPay', $route['country']);
+                $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $tx?->initiator?->full_name ?? 'Client FlashPay', $route['country'],
+                $meta['source_operator'] ?? null, $tx?->initiator?->email ?? null);
             $req->update(['wace_id' => $r['wace_id'], 'status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'last_response' => $r['raw'], 'last_checked_at' => now()]);
 
             return ['status' => $r['status'] === 'successful' ? 'successful' : ($r['status'] === 'failed' ? 'failed' : 'pending'), 'external_ref' => $r['wace_id'] ?: $ref, 'raw' => $r['raw']];
@@ -73,6 +74,14 @@ class DigitwaceConnector implements PaymentRailConnector
             $payer = $this->client->payerCodeFor($route['country'], $meta['destination_operator'] ?? null);
             if (! $payer) {
                 throw new DigitwaceException("Aucun payerCode WacePay pour {$route['country']} / " . ($meta['destination_operator'] ?? 'opérateur inconnu') . ' (DIGITWACE_PAYER_CODES).', '1001');
+            }
+            if ($this->client->partner()) {
+                // API Partenaire : un seul appel (payout/execute), payerCode = payoutSubscriptionId
+                $r = $this->client->payoutDirect($reference, $payer, $amountMinor, $route['phone'],
+                    $meta['beneficiary_verified_name'] ?? $meta['beneficiary_name'] ?? null);
+                $req->update(['wace_id' => $r['wace_id'], 'status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'last_response' => $r['raw'], 'last_checked_at' => now()]);
+
+                return ['status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'external_ref' => $r['wace_id'] ?: $reference, 'raw' => $r['raw']];
             }
             $sender = $this->client->senderCode([
                 'name' => $meta['sender_name'] ?? $tx?->initiator?->full_name ?? 'Client FlashPay',
@@ -110,7 +119,10 @@ class DigitwaceConnector implements PaymentRailConnector
     {
         $req = DigitwaceRequest::where('wace_id', $externalRef)->orWhere('reference', $externalRef)->first();
         try {
-            $r = $this->client->status($req?->wace_id ?: $externalRef);
+            $op = $req?->operation;
+            // Collecte (API Partenaire) : statut par referenceId ; versement : par id WacePay
+            $id = ($op === 'payin' && $this->client->partner()) ? ($req?->reference ?: $externalRef) : ($req?->wace_id ?: $externalRef);
+            $r = $this->client->status($id, $op);
         } catch (\Throwable $e) {
             $req?->update(['last_checked_at' => now()]);
             return ['status' => 'unknown', 'external_ref' => $externalRef, 'raw' => ['error' => $e->getMessage()], 'checked' => false];

@@ -18,7 +18,7 @@ class WacepayCardBankTest extends TestCase
         Artisan::call('migrate:fresh', ['--seed' => true, '--force' => true]);
         Cache::flush();
         config([
-            'flashpay.digitwace.enabled' => true, 'flashpay.digitwace.public_key' => 'pub', 'flashpay.digitwace.private_key' => 'priv',
+            'flashpay.digitwace.enabled' => true, 'flashpay.digitwace.api' => 'legacy', 'flashpay.digitwace.public_key' => 'pub', 'flashpay.digitwace.private_key' => 'priv',
             'flashpay.digitwace.base_url' => 'https://wace.test/api/v1/', 'flashpay.rails.digitwace.enabled' => true,
             'payment_methods.card_driver' => 'wacepay', 'payment_methods.bank_debit_driver' => 'wacepay',
         ]);

@@ -21,7 +21,6 @@
       <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
         <div>
           <h3 style="margin:0;">Diagnostic PEEX</h3>
-          <p class="stat-label" style="margin:4px 0 0;">Teste chaque service PEEX depuis le serveur (lecture seule, aucun paiement) et prépare le message pour le support PEEX.</p>
         </div>
         <button class="btn" :disabled="diagLoading" @click="runDiagnostic">{{ diagLoading ? 'Test en cours…' : 'Lancer le diagnostic' }}</button>
       </div>
@@ -94,7 +93,6 @@
     <!-- Remboursement PEEX -->
     <div class="card" style="margin-bottom:24px;">
       <h3>Remboursement PEEX</h3>
-      <p class="stat-label" style="margin-top:-6px;">Rembourser un client depuis le compte PEEX de FlashPay (mobile money ou compte bancaire). Retrouvez l'opération par sa référence FlashPay (FP-…), le track_id PEEX ou le numéro du client.</p>
       <form @submit.prevent="searchRefund" style="display:flex; gap:12px; margin-top:8px;">
         <input v-model.trim="refundQ" placeholder="Ex. FP-CNSW0VIZPMGO, FP-…-C1 ou 057563644" style="flex:1;" />
         <button class="btn" type="submit" :disabled="refundSearching || refundQ.length < 3">{{ refundSearching ? 'Recherche…' : 'Rechercher' }}</button>
@@ -183,8 +181,6 @@
       <h3>Callbacks à déclarer chez PEEX</h3>
       <div v-for="(url, k) in overview.callback_urls" :key="k"><strong>{{ k }}</strong> : <code>{{ url }}</code></div>
       <div style="margin-top:8px"><strong>IP sortante du serveur</strong> (à faire autoriser par PEEX) : <code>{{ overview.server_ip || 'inconnue' }}</code></div>
-      <p class="stat-label">En local, PEEX ne peut pas joindre localhost : les statuts sont récupérés par polling
-        (fenêtre « Planificateur » / bouton Synchroniser) ou via un tunnel HTTPS (ngrok, cloudflared).</p>
     </div>
   </div>
 </template>

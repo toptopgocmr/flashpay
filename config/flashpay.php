@@ -42,6 +42,16 @@ return [
         // basic = GET get-token + Authorization: Basic base64(public_key:private_key) (doc PayIn)
         // login = POST login avec les clés dans le corps (API Business)
         'auth_mode' => env('DIGITWACE_AUTH_MODE', 'basic'),
+        // partner = API Partenaire WacePay (payments/* et payout/*, collection Postman oct. 2026)
+        // legacy  = ancienne API Business (sender / beneficiary / wallet / confirm)
+        'api' => env('DIGITWACE_API', 'partner'),
+        // Chemins de l'API Partenaire à surcharger si WacePay les change (sinon valeurs de DigitwaceClient::PARTNER_PATHS)
+        'partner_paths' => array_filter([
+            'login' => env('DIGITWACE_PARTNER_PATH_LOGIN'),
+            'payin' => env('DIGITWACE_PARTNER_PATH_PAYIN'),
+            'payout' => env('DIGITWACE_PARTNER_PATH_PAYOUT'),
+            'balance' => env('DIGITWACE_PARTNER_PATH_BALANCE'),
+        ]),
         'payer_codes_method' => env('DIGITWACE_PAYER_CODES_METHOD', 'post'),
         'payout_service' => env('DIGITWACE_PAYOUT_SERVICE', 'WALLET'),
         'origin_fund' => env('DIGITWACE_ORIGIN_FUND', 'SALARY'),

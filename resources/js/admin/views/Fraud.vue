@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Anti-fraude</h1><p>Alertes générées par les contrôles (§4.5) : vélocité anormale, seuil LCB-FT, blocages temporaires, comptes déclarés perdus/volés. Levez le blocage après vérification d'identité.</p></div>
+      <div><h1>Anti-fraude</h1></div>
       <div class="actions">
         <ExportButton filename="alertes-fraude" :columns="EXP_COLS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>

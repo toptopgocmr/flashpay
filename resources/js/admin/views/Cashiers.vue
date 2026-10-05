@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h1>Caissiers</h1>
-        <p>Sous-comptes créés par les marchands pour encaisser à leur place (QR dynamique, lien de paiement). Aucun accès au solde ni aux retraits. FlashPay peut révoquer un accès à tout moment.</p>
       </div>
       <div class="actions">
         <ExportButton filename="caissiers" :columns="EXP_COLS" :fetch="expFetch" />

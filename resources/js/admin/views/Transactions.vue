@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h1>Transactions</h1>
-        <p>{{ subtitle }}</p>
+        <p v-if="subtitle">{{ subtitle }}</p>
       </div>
       <div class="actions">
         <ExportButton filename="transactions" :columns="EXP_COLS" :fetch="expFetch" />
@@ -150,7 +150,7 @@ const subtitle = computed(() => {
   else if (f.from) parts.push(`depuis le ${frDate(f.from)}`)
   else if (f.to) parts.push(`jusqu'au ${frDate(f.to)}`)
   else if (f.days) parts.push(f.days === '1' ? "aujourd'hui" : `${f.days} derniers jours`)
-  return parts.length ? parts.join(' · ') : 'Toutes les transactions de la plateforme'
+  return parts.length ? parts.join(' · ') : ''
 })
 
 function syncFromRoute() {

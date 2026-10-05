@@ -146,7 +146,7 @@ class JournalGiftsDigitwaceTest extends TestCase
     {
         config([
             'flashpay.rails.digitwace.enabled' => true,
-            'flashpay.digitwace.enabled' => true,
+            'flashpay.digitwace.enabled' => true, 'flashpay.digitwace.api' => 'legacy',
             'flashpay.digitwace.public_key' => 'pub', 'flashpay.digitwace.private_key' => 'priv',
             'flashpay.digitwace.base_url' => 'https://wace.test/api/',
             'flashpay.digitwace.payer_map' => ['SN:ORANGE' => 'PAY-SN-OR'],
@@ -269,7 +269,7 @@ class JournalGiftsDigitwaceTest extends TestCase
         } catch (\App\Services\Peex\PeexException $e) {
             $this->assertStringContainsString('WacePay', $e->getMessage());
         }
-        config(['flashpay.rails.digitwace.enabled' => true, 'flashpay.digitwace.enabled' => true, 'flashpay.digitwace.public_key' => 'p', 'flashpay.digitwace.private_key' => 'k']);
+        config(['flashpay.rails.digitwace.enabled' => true, 'flashpay.digitwace.enabled' => true, 'flashpay.digitwace.api' => 'legacy', 'flashpay.digitwace.public_key' => 'p', 'flashpay.digitwace.private_key' => 'k']);
         $this->assertSame('digitwace', $flows->payoutRailFor(['rail' => 'peex', 'country' => 'SN']));
         $this->assertSame('peex', $flows->payoutRailFor(['rail' => 'peex', 'country' => 'CG']));
         $this->assertSame('wallet', $flows->payoutRailFor(['rail' => 'wallet', 'country' => 'CG']));
@@ -278,7 +278,7 @@ class JournalGiftsDigitwaceTest extends TestCase
     public function test_wacepay_coverage_sync_adds_corridors_and_collects(): void
     {
         config([
-            'flashpay.rails.digitwace.enabled' => true, 'flashpay.digitwace.enabled' => true,
+            'flashpay.rails.digitwace.enabled' => true, 'flashpay.digitwace.enabled' => true, 'flashpay.digitwace.api' => 'legacy',
             'flashpay.digitwace.public_key' => 'p', 'flashpay.digitwace.private_key' => 'k',
             'flashpay.digitwace.base_url' => 'https://wace.test/api/',
         ]);
@@ -397,7 +397,7 @@ class JournalGiftsDigitwaceTest extends TestCase
         $this->assertCount(2, $svc->parse(['data' => [['currency' => 'XAF', 'balance' => 10], ['currency' => 'XOF', 'availableBalance' => 20]]]));
         $this->assertCount(2, $svc->parse(['data' => ['XAF' => 5, 'EUR' => 1]]));
 
-        config(['flashpay.digitwace.enabled' => true, 'flashpay.digitwace.public_key' => 'p', 'flashpay.digitwace.private_key' => 'k',
+        config(['flashpay.digitwace.enabled' => true, 'flashpay.digitwace.api' => 'legacy', 'flashpay.digitwace.public_key' => 'p', 'flashpay.digitwace.private_key' => 'k',
             'flashpay.digitwace.base_url' => 'https://wace.test/api/', 'flashpay.digitwace.low_balance_alert' => 100000]);
         Http::fake(fn ($r) => str_contains($r->url(), 'get-token')
             ? Http::response(['code' => 2000, 'token' => 't'])

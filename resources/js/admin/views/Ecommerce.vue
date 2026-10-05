@@ -1,8 +1,9 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>E-commerce & API</h1><p>Clés API actives des marchands, derniers paiements en ligne (payment intents) et webhooks en échec (§4.7). Documentation d'intégration : <a href="/docs/api-ecommerce" target="_blank">/docs/api-ecommerce</a>.</p></div>
+      <div><h1>E-commerce & API</h1></div>
       <div class="actions">
+        <a class="btn-normal" href="/docs/api-ecommerce" target="_blank">Documentation API</a>
         <ExportButton label="Exporter les intégrations" filename="integrations-ecommerce" :columns="EXP_COLS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>
     <div class="grid grid-3 mb">

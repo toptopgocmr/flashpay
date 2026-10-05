@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h1>Marchands</h1>
-        <p>Commerces qui encaissent avec FlashPay : QR, code client, sans contact (NFC / TPE), USSD.</p>
       </div>
       <div class="actions">
         <ExportButton filename="marchands" :columns="EXP_COLS" :fetch="expFetch" />

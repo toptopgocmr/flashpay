@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Continuité & plafonds</h1><p>Mode dégradé par canal en cas d'incident partenaire (§14) — un canal désactivé refuse les nouvelles opérations avec un message explicite, affiché aussi dans l'app — et plafonds par palier KYC (§12, montants indicatifs à valider avec la conformité COBAC).</p></div>
+      <div><h1>Continuité & plafonds</h1></div>
     </div>
     <div v-if="msg" class="flash info"><div>{{ msg }}</div></div>
     <section class="container mb">

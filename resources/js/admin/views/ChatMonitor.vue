@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Supervision des échanges</h1><p>Toutes les discussions entre utilisateurs et avec le support : messages, photos, vidéos, notes vocales et appels (lecture seule). Usage réservé à la conformité et à la lutte contre la fraude ; chaque consultation est inscrite au journal d'audit et les utilisateurs en sont informés dans l'application.</p></div>
+      <div><h1>Supervision des échanges</h1></div>
       <div class="actions"><button class="btn-normal" @click="load(1)">Actualiser</button></div>
     </div>
     <div class="tabs mb">

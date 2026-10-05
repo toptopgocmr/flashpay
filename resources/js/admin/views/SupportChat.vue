@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Chat support</h1><p>Discussions des clients avec « Support FlashPay » : messages, photos, vidéos, notes vocales et appels audio. Vous répondez au nom du support ; votre prénom s'affiche chez le client et chaque action est tracée.</p></div>
+      <div><h1>Chat support</h1></div>
       <div class="actions"><button class="btn-normal" @click="loadList">Actualiser</button></div>
     </div>
     <div class="sc-grid">

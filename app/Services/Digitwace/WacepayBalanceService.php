@@ -38,7 +38,9 @@ class WacepayBalanceService
             Cache::forget('digitwace:balance');
         }
         try {
-            $json = Cache::remember('digitwace:balance', 30, fn () => $this->client->call('get', 'balance'));
+            $json = Cache::remember('digitwace:balance', 30, fn () => $this->client->partner()
+                ? $this->client->call('get', 'balance', ['page' => 1, 'limit' => 20])
+                : $this->client->call('get', 'balance'));
         } catch (\Throwable $e) {
             return ['ok' => false, 'configured' => true, 'error' => $e->getMessage(), 'accounts' => [], 'low_balance_alert' => $low, 'checked_at' => now()->toIso8601String(),
                 'sandbox' => (bool) config('flashpay.digitwace.sandbox', true),
@@ -49,7 +51,7 @@ class WacepayBalanceService
 
         $reserved = $this->reservedByCurrency();
         $accounts = [];
-        foreach ($this->parse($json) as $a) {
+        foreach (($this->client->partner() ? $this->parseHistory($json) : $this->parse($json)) as $a) {
             $cur = $a['currency'];
             $res = $reserved[$cur] ?? 0;
             $available = $a['balance'] !== null ? $a['balance'] - $res : null;
@@ -113,6 +115,31 @@ class WacepayBalanceService
             }
         }
         return $rows;
+    }
+
+    /**
+     * API Partenaire : payout/balance/history → solde courant = solde après le
+     * mouvement le plus récent, par devise.
+     */
+    public function parseHistory(array $json): array
+    {
+        $rows = [];
+        foreach (DigitwaceClient::listOf($json) as $m) {
+            if (! is_array($m)) {
+                continue;
+            }
+            $bal = collect(['balanceAfter', 'balance_after', 'newBalance', 'new_balance', 'currentBalance', 'closingBalance', 'availableBalance', 'balance'])
+                ->map(fn ($k) => data_get($m, $k))->first(fn ($v) => is_numeric($v));
+            $cur = strtoupper((string) ($m['currency'] ?? $m['currencyCode'] ?? 'XAF'));
+            if ($bal === null || isset($rows[$cur])) {
+                continue; // la liste est triée du plus récent au plus ancien
+            }
+            $rows[$cur] = ['label' => 'Compte versement ' . $cur, 'currency' => $cur, 'balance' => (float) $bal];
+        }
+        if (! $rows) {
+            return $this->parse($json); // format solde direct
+        }
+        return array_values($rows);
     }
 
     /** Versements WacePay en cours (non finalisés) : montant par devise. */

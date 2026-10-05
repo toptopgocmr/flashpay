@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h1>Grille tarifaire</h1>
-        <p>Frais appliqués à chaque opération, par zone et par tranche de montant.</p>
       </div>
       <div class="actions">
         <button class="btn-normal" @click="load">Actualiser</button>
@@ -29,7 +28,7 @@
     <div class="layout mb">
       <!-- Matrice par famille -->
       <section id="tariff-matrix" class="container">
-        <div class="container-head"><div><h3>Vue d'ensemble</h3><p>Frais du premier palier actif — cliquez sur une case pour voir et modifier ses paliers</p></div></div>
+        <div class="container-head"><div><h3>Vue d'ensemble</h3></div></div>
         <div class="container-body flush" style="overflow-x:auto;">
           <table class="matrix">
             <thead>
@@ -58,7 +57,7 @@
 
       <!-- Simulateur -->
       <section id="tariff-sim" class="container sim">
-        <div class="container-head"><div><h3>Simulateur</h3><p>Comparez les frais dans les 3 zones</p></div></div>
+        <div class="container-head"><div><h3>Simulateur</h3></div></div>
         <div class="container-body">
           <label class="field">Opération</label>
           <select v-model="sim.op"><option v-for="(l, k) in operations" :key="k" :value="k">{{ l }}</option></select>
@@ -75,7 +74,6 @@
               </tr>
             </tbody>
           </table>
-          <p class="hint">Sans palier régional ou international, le tarif national s'applique.</p>
         </div>
       </section>
     </div>

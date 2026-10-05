@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h1>Agents</h1>
-        <p>Points FlashPay qui encaissent les dépôts d'espèces (QR client) et remettent les retraits cash (code de retrait).</p>
       </div>
       <div class="actions">
         <ExportButton filename="agents" :columns="EXP_COLS" :fetch="expFetch" />
@@ -91,7 +90,6 @@
 
     <AccountForm v-if="creating" kind="agent" :country="country" :city="city" @close="creating = false" @created="load" />
     <Modal v-if="fundFor" title="Approvisionner le float" :subtitle="fundFor.name + ' · solde actuel ' + money(fundFor.float, fundFor.currency)" @close="fundFor = null">
-      <div class="flash info" style="margin:0;"><div>À faire après avoir reçu l'équivalent en espèces ou par virement : le float électronique permet à l'agent de créditer les wallets des clients qui déposent du cash.</div></div>
       <div><label class="field">Montant</label><input v-model.number="fundAmount" type="number" min="100" step="100" placeholder="Ex. 500000" /></div>
       <div><label class="field">Référence du versement (facultatif)</label><input v-model.trim="fundNote" placeholder="Ex. reçu n° 1234 / virement BGFI" /></div>
       <template #foot>

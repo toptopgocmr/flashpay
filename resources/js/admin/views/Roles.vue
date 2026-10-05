@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h1>Rôles & habilitations</h1>
-        <p>Choisissez un profil, puis ajoutez, restreignez ou retirez ses habilitations. Les changements s'appliquent immédiatement : l'API refuse les actions retirées et l'application masque les boutons correspondants.</p>
       </div>
       <div class="actions">
         <button class="btn-normal" @click="load">Actualiser</button>
@@ -57,7 +56,6 @@
             <div><span>Création du compte</span><b>{{ role.created_by }}</b></div>
             <div><span>Connexion</span><b>{{ role.login }}</b></div>
           </div>
-          <div v-if="role.locked" class="flash info" style="margin:14px 0 0;"><div>Le Super Admin conserve toujours l'ensemble des droits de la console : ils ne peuvent pas être retirés, pour éviter de bloquer l'administration.</div></div>
 
           <div class="caps">
             <div v-for="(label, cap) in d.capabilities[role.space]" :key="cap" class="cap" :class="['v-' + (role.grants[cap]?.value || 'no'), { changed: role.grants[cap]?.overridden }]">
@@ -89,7 +87,7 @@
     <!-- ===== Vue d'ensemble ===== -->
     <section v-if="d" class="container mb" style="margin-top:16px;">
       <div class="container-head">
-        <div><h3>Vue d'ensemble</h3><p>✓ autorisé · ◐ restreint · — retiré · point rouge : modifié par rapport au défaut. Cliquez sur une colonne pour modifier ce profil.</p></div>
+        <div><h3>Vue d'ensemble</h3></div>
         <div class="tabs" style="border:0;padding:0;">
           <button :class="{ on: space === 'app' }" @click="space = 'app'">Application mobile</button>
           <button :class="{ on: space === 'console' }" @click="space = 'console'">Console</button>
@@ -120,7 +118,7 @@
 
     <!-- ===== Comptes démo ===== -->
     <section v-if="d?.demo_accounts?.length" class="container">
-      <div class="container-head"><div><h3>Comptes de démonstration</h3><p>Environnement de test uniquement — non créés en production</p></div></div>
+      <div class="container-head"><div><h3>Comptes de démonstration</h3></div></div>
       <div class="container-body flush">
         <table>
           <thead><tr><th>Profil</th><th>Titulaire</th><th>Numéro</th><th>Code</th></tr></thead>

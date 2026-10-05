@@ -3,8 +3,8 @@
     <!-- ================= En-tête (style « Console Home ») ================= -->
     <header class="home-head">
       <div>
-        <h1>Tableau de bord <button class="info-link" @click="showInfo = !showInfo">Info</button></h1>
-        <p>Activité de la plateforme FlashPay — du {{ fmtDate(d?.period.from) }} au {{ fmtDate(d?.period.to) }}</p>
+        <h1>Tableau de bord</h1>
+        <p>Du {{ fmtDate(d?.period.from) }} au {{ fmtDate(d?.period.to) }}</p>
       </div>
       <div class="actions">
         <button class="btn-normal" @click="resetLayout" title="Rétablir les widgets et leur ordre d'origine">Réinitialiser la disposition</button>
@@ -16,14 +16,6 @@
       </div>
     </header>
 
-    <div v-if="showInfo" class="flash info">
-      <div>
-        <strong>Personnalisez votre tableau de bord.</strong>
-        Glissez un widget par sa poignée <b>⋮⋮</b> pour le déplacer, utilisez le menu <b>⋮</b> pour changer sa taille ou le retirer,
-        et « Ajouter des widgets » pour en réafficher. La disposition est enregistrée dans ce navigateur.
-      </div>
-      <button class="x" @click="showInfo = false" aria-label="Fermer">✕</button>
-    </div>
 
     <!-- ================= Barre de période ================= -->
     <div class="toolbar-line">
@@ -68,7 +60,6 @@
               <span v-if="w.key === 'recent'" class="counter">({{ d?.recent.length ?? 0 }})</span>
               <span v-if="w.key === 'peex' && peex?.sandbox" class="status pending">Sandbox</span>
             </h2>
-            <p v-if="W[w.key].desc">{{ W[w.key].desc }}</p>
           </div>
 
           <!-- Actions propres au widget -->

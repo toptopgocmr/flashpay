@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h1>Comptes utilisateurs</h1>
-        <p>Clients, marchands, agents et équipe interne — activer ou désactiver l'accès à FlashPay.</p>
       </div>
       <div class="actions">
         <ExportButton filename="comptes-utilisateurs" :columns="EXP_COLS" :fetch="expFetch" />

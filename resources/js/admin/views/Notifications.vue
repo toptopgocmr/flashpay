@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Centre de notifications</h1><p>KYC en attente, approvisionnements, alertes anti-fraude, anomalies de rapprochement, interventions manuelles et incidents techniques (§11.4).</p></div>
+      <div><h1>Centre de notifications</h1></div>
       <div class="actions">
         <ExportButton filename="notifications" :columns="EXP_COLS" :fetch="expFetch" />
         <button class="btn-normal" :disabled="loading" @click="load">{{ loading ? 'Actualisation…' : 'Actualiser' }}</button>

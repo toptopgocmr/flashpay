@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Équipe interne</h1><p>Comptes Super Admin et Support ayant accès à la console. Les clients et les agents se gèrent dans leurs menus.</p></div>
+      <div><h1>Équipe interne</h1></div>
       <div class="actions"><ExportButton filename="equipe-interne" :columns="EXP_COLS" :fetch="expFetch" /></div>
     </div>
     <div class="container mb" style="overflow-x:auto;">

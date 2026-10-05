@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h1>Règlements marchands</h1>
-        <p>Virements bancaires demandés par les marchands. Le wallet du marchand est déjà débité : exécutez le virement puis saisissez la référence bancaire, ou rejetez-le (remboursement automatique).</p>
       </div>
       <div class="actions">
         <ExportButton filename="reglements-bancaires" :columns="EXP_COLS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>

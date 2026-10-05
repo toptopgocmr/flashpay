@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h1>Pays &amp; change</h1>
-        <p>Pays et opérateurs couverts, partenaire de paiement qui gère chaque flux (PEEX, WacePay), ouverture des corridors et taux de change.</p>
       </div>
       <div class="actions"><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>
@@ -13,78 +12,101 @@
     <!-- Toast toujours visible, même quand la page est défilée -->
     <div v-if="toast" class="fp-toast" :class="toast.kind" @click="toast = null">{{ toast.text }}</div>
 
-    <!-- Partenaires de paiement : qui gère quels flux -->
+    <!-- Partenaires de paiement -->
     <div class="partners mb">
       <div v-for="p in partners" :key="p.key" class="partner-card" :class="'p-' + p.key">
         <div class="pc-head">
           <span class="pbadge" :class="'p-' + p.key">{{ p.name }}</span>
-          <span class="status" :class="p.ready ? 'ok' : 'warn'">{{ p.ready ? 'Connecté' : 'Non configuré' }} · {{ p.mode }}</span>
+          <span class="status" :class="p.ready ? 'ok' : 'warn'">{{ p.ready ? 'Connecté' : 'Non configuré' }}</span>
+          <span class="mode-tag">{{ p.mode }}</span>
+          <button class="btn-link pc-link" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
         </div>
         <div class="pc-flows">
-          <div><span>Collecte</span><b>{{ p.flows.includes('collect') ? n(p.collect_countries) + ' pays' : 'Non proposée' }}</b></div>
+          <div><span>Collecte</span><b>{{ p.flows.includes('collect') ? n(p.collect_countries) + ' pays' : '—' }}</b></div>
           <div><span>Versement</span><b>{{ n(p.payout_countries) }} pays</b></div>
+          <template v-if="p.key === 'digitwace'">
+            <div :title="p.card ? '' : 'FLASHPAY_CARD_DRIVER=wacepay'"><span>Cartes</span><b :class="p.card ? 't-ok' : 't-off'">{{ p.card ? 'Actives' : 'Inactives' }}</b></div>
+            <div :title="p.bank_debit ? '' : 'FLASHPAY_BANK_DEBIT_DRIVER=wacepay'"><span>Banque</span><b :class="p.bank_debit ? 't-ok' : 't-off'">{{ p.bank_debit ? 'Actif' : 'Inactif' }}</b></div>
+          </template>
         </div>
-        <div v-if="p.key === 'digitwace'" class="wsvc">
-          <span :class="p.card ? 'on' : 'off'">{{ p.card ? '✓' : '—' }} Cartes Visa / Mastercard</span>
-          <span :class="p.bank_debit ? 'on' : 'off'">{{ p.bank_debit ? '✓' : '—' }} Comptes bancaires</span>
-          <small v-if="!p.card || !p.bank_debit">Activer : FLASHPAY_CARD_DRIVER=wacepay · FLASHPAY_BANK_DEBIT_DRIVER=wacepay</small>
-        </div>
-        <div v-if="p.key === 'digitwace'" class="coverage">
-          <span v-if="p.coverage_countries">Couverture WacePay : <b>{{ p.coverage_countries }} pays</b> · collecte {{ p.coverage_payin }} · versement {{ p.coverage_payout }}<br /><small>Synchronisée {{ dt(p.coverage_synced_at) || '—' }}</small></span>
-          <span v-else class="t-warn">Couverture pas encore synchronisée</span>
-          <button class="btn-normal" :disabled="syncing" @click="syncWacepay">{{ syncing ? 'Synchronisation…' : 'Synchroniser la couverture WacePay' }}</button>
-        </div>
-        <div v-if="p.key === 'digitwace' && p.ready" class="wbal">
-          <div class="wbal-head"><span>Soldes WacePay</span>
-            <button class="btn-link" :disabled="wBalLoading" @click="loadWaceBalances(true)">{{ wBalLoading ? '…' : 'Actualiser' }}</button></div>
-          <div v-if="wBal && !wBal.ok" class="wbal-err">
-            <b>Impossible de lire les soldes : WacePay ne répond pas à FlashPay.</b>
+
+        <template v-if="p.key === 'digitwace'">
+          <div class="pc-row">
+            <div class="pc-row-main">
+              <span class="pc-k">Couverture</span>
+              <b v-if="p.coverage_countries">{{ p.coverage_countries }} pays <small>· collecte {{ p.coverage_payin }} · versement {{ p.coverage_payout }}</small></b>
+              <b v-else class="t-warn">Non synchronisée</b>
+              <small v-if="p.coverage_synced_at" class="pc-date">{{ dt(p.coverage_synced_at) }}</small>
+            </div>
+            <button class="btn-normal sm" :disabled="syncing" @click="syncWacepay">{{ syncing ? 'Synchronisation…' : 'Synchroniser' }}</button>
+          </div>
+
+          <div v-if="p.ready" class="pc-row">
+            <div class="pc-row-main">
+              <span class="pc-k">Soldes</span>
+              <span v-for="a in wBal?.accounts || []" :key="a.currency + a.label" class="bal-chip" :class="{ low: a.low }" :title="'Disponible ' + n(a.available) + ' · engagé ' + n(a.reserved)">
+                <b>{{ n(a.balance) }} {{ a.currency }}</b>
+              </span>
+              <span v-if="wBal?.ok && !wBal.accounts.length" class="pc-muted">Aucun mouvement</span>
+              <span v-if="wBal && !wBal.ok" class="t-err">Indisponible</span>
+              <span v-if="!wBal" class="pc-muted">…</span>
+            </div>
+            <button class="btn-normal sm" :disabled="wBalLoading" @click="loadWaceBalances(true)">{{ wBalLoading ? '…' : 'Actualiser' }}</button>
+          </div>
+
+          <div v-if="p.ready && wBal && !wBal.ok" class="pc-alert">
             <div class="why">{{ wBal.error }}</div>
-            <ul v-if="wBal.configured !== false">
-              <li>Environnement : <b>{{ wBal.sandbox ? 'Sandbox' : 'Production' }}</b> — adresse appelée : <code>{{ wBal.base_url || '—' }}</code><br /><small>Elle doit correspondre aux clés saisies (clés sandbox ↔ URL sandbox).</small></li>
-              <li>IP sortante actuelle du serveur : <code>{{ wBal.server_ip || 'inconnue' }}</code><br /><small>Elle doit figurer dans WacePay › Developers › IP Whitelist avec le statut « Active » (pas « Blocked »).</small></li>
-            </ul>
+            <dl v-if="wBal.configured !== false" class="kv2">
+              <dt>Environnement</dt><dd>{{ wBal.sandbox ? 'Sandbox' : 'Production' }}</dd>
+              <dt>URL</dt><dd><code>{{ wBal.base_url || '—' }}</code></dd>
+              <dt>IP serveur</dt><dd><code>{{ wBal.server_ip || '—' }}</code></dd>
+            </dl>
             <div class="diag-btns">
-              <button class="btn-normal" :disabled="diagBusy" @click="diagnose">{{ diagBusy ? 'Test en cours…' : 'Diagnostiquer la connexion' }}</button>
-              <button class="btn-primary" :disabled="discBusy" @click="discover">{{ discBusy ? 'Recherche en cours (jusqu\'à 2 min)…' : 'Corriger automatiquement' }}</button>
+              <button class="btn-normal sm" :disabled="diagBusy" @click="diagnose">{{ diagBusy ? 'Test…' : 'Diagnostiquer' }}</button>
+              <button class="btn-normal sm" :disabled="discBusy" @click="discover">{{ discBusy ? 'Recherche… (2 min max)' : 'Détecter l\'adresse' }}</button>
             </div>
           </div>
+          <div v-else-if="p.ready" class="diag-btns">
+            <button class="btn-link" :disabled="diagBusy" @click="diagnose">{{ diagBusy ? 'Test…' : 'Diagnostiquer la connexion' }}</button>
+          </div>
+
+          <div v-if="diag" class="diag">
+            <div class="diag-h" :class="diag.token_ok ? 'ok' : 'ko'">{{ diag.token_ok ? '✓ Connexion réussie' : '✕ Connexion refusée' }} <small>{{ diag.http ? 'HTTP ' + diag.http : 'pas de réponse' }} · {{ diag.ms }} ms</small>
+              <button class="btn-link close" title="Fermer" @click="diag = null">✕</button></div>
+            <dl class="kv2">
+              <dt>API</dt><dd>{{ diag.api === 'partner' ? 'Partenaire' : 'Business' }}</dd>
+              <dt>Adresse</dt><dd><code>{{ diag.login_url }}</code></dd>
+              <dt>IP serveur</dt><dd><code>{{ diag.server_ip || '?' }}</code></dd>
+              <dt>Clés</dt><dd>{{ diag.public_key || '⚠ publique absente' }} · {{ diag.private_key ? 'privée ✓' : '⚠ privée absente' }}</dd>
+              <template v-if="diag.token_ok && diag.api === 'partner'">
+                <dt>Services collecte</dt><dd>{{ diag.services_payin ?? '✕' }}<small v-if="diag.services_payin_error" class="t-err"> {{ diag.services_payin_error }}</small></dd>
+                <dt>Services versement</dt><dd>{{ diag.services_payout ?? '✕' }}<small v-if="diag.services_payout_error" class="t-err"> {{ diag.services_payout_error }}</small></dd>
+              </template>
+              <template v-if="!diag.token_ok">
+                <dt>Réponse</dt><dd>{{ diag.message }}<br v-if="diag.body" /><small class="mono">{{ diag.body }}</small></dd>
+                <template v-if="diag.server"><dt>Serveur</dt><dd>{{ diag.server }}<span v-if="diag.cf_ray"> · {{ diag.cf_ray }}</span></dd></template>
+              </template>
+              <template v-if="diag.override"><dt>Adresse détectée</dt><dd><code>{{ diag.override.base_url }}{{ diag.override.login_path }}</code> <button class="btn-link" @click="resetDiscover">Oublier</button></dd></template>
+            </dl>
+          </div>
           <div v-if="disc" class="diag">
-            <div class="diag-h" :class="disc.found ? 'ok' : 'ko'">{{ disc.found ? '✓ ' : '✕ ' }}{{ disc.message }} <small>({{ disc.attempts.length }} essais · {{ disc.seconds }} s)</small></div>
-            <div v-if="disc.found" class="small">Pour la garder après un redéploiement, mettez aussi dans Railway : <code>DIGITWACE_BASE_URL={{ disc.found.base_url }}</code> · <code>DIGITWACE_PATH_LOGIN={{ disc.found.login_path }}</code> · <code>DIGITWACE_FIELD_PUBLIC_KEY={{ disc.found.login_fields.public_key }}</code> · <code>DIGITWACE_FIELD_PRIVATE_KEY={{ disc.found.login_fields.private_key }}</code></div>
-            <details><summary>Détail des essais</summary>
+            <div class="diag-h" :class="disc.found ? 'ok' : 'ko'">{{ disc.found ? '✓ ' : '✕ ' }}{{ disc.message }} <small>{{ disc.attempts.length }} essais · {{ disc.seconds }} s</small>
+              <button class="btn-link close" title="Fermer" @click="disc = null">✕</button></div>
+            <div v-if="disc.found" class="env-codes"><code>DIGITWACE_BASE_URL={{ disc.found.base_url }}</code></div>
+            <details><summary>Essais</summary>
               <table class="disc-t"><tr v-for="(a, i) in disc.attempts" :key="i" :class="{ good: a.token_ok }"><td class="mono">{{ a.url }}</td><td>{{ a.fields || '' }}</td><td>{{ a.http ?? '—' }}</td><td>{{ a.note || a.body }}</td></tr></table>
             </details>
           </div>
-          <div v-if="diag" class="diag">
-            <div class="diag-h" :class="diag.token_ok ? 'ok' : 'ko'">{{ diag.token_ok ? '✓ Connexion WacePay réussie' : '✕ Connexion refusée' }} <small>({{ diag.http ? 'HTTP ' + diag.http : 'pas de réponse' }} · {{ diag.ms }} ms)</small></div>
-            <dl>
-              <dt>Adresse appelée</dt><dd><code>{{ diag.login_url }}</code> <small>(IP {{ diag.host_ip || '?' }})</small></dd>
-              <dt>IP du serveur FlashPay</dt><dd><code>{{ diag.server_ip || '?' }}</code></dd>
-              <dt>Clé publique</dt><dd>{{ diag.public_key || '⚠ absente' }}</dd>
-              <dt>Clé privée</dt><dd>{{ diag.private_key || '⚠ absente' }}</dd>
-              <dt>Champs envoyés</dt><dd><code>{{ diag.login_fields.join(' + ') }}</code></dd>
-              <dt>Serveur</dt><dd>{{ diag.server || '—' }}<span v-if="diag.cf_ray"> · Cloudflare {{ diag.cf_ray }}</span></dd>
-              <dt>Réponse</dt><dd>{{ diag.message }}<br /><small class="mono">{{ diag.body || '(vide)' }}</small></dd>
-              <template v-if="diag.override"><dt>Adresse détectée</dt><dd>{{ diag.override.base_url }}{{ diag.override.login_path }} <button class="btn-link" @click="resetDiscover">Oublier</button></dd></template>
-            </dl>
-          </div>
-          <div v-for="a in wBal?.accounts || []" :key="a.currency + a.label" class="wbal-row">
-            <span>{{ a.label }}</span>
-            <b>{{ n(a.balance) }} {{ a.currency }}</b>
-            <small>Disponible {{ n(a.available) }} · engagé {{ n(a.reserved) }}<span v-if="a.low" class="t-warn"> · solde bas</span></small>
-          </div>
-          <div v-if="wBal?.ok && !wBal.accounts.length" class="small">Aucun solde renvoyé par WacePay.</div>
-        </div>
-        <small class="mono" :title="'URL de notification (webhook) à déclarer chez ' + p.name">Webhook : {{ p.webhook }}</small>
-        <button class="btn-link" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
+        </template>
+
+        <div class="pc-foot" :title="p.webhook"><span class="pc-k">Webhook</span><code>{{ p.webhook }}</code></div>
       </div>
     </div>
 
     <div class="kpis mb">
       <button class="kpi" :class="{ on: tab === 'corridors' }" @click="tab = 'corridors'"><span>Pays couverts</span><b>{{ n(kpi.countries) }}</b><small>{{ n(kpi.operators) }} opérateurs</small></button>
-      <button class="kpi" :class="{ on: tab === 'corridors' && flt.open === 'collect' }" @click="tab = 'corridors'; flt.open = flt.open === 'collect' ? '' : 'collect'"><span><i class="dot ok"></i>Collecte ouverte</span><b>{{ n(kpi.collect) }} <small>/ {{ n(kpi.countries) }}</small></b><small>Recevoir depuis le mobile money</small></button>
-      <button class="kpi" :class="{ on: tab === 'corridors' && flt.open === 'payout' }" @click="tab = 'corridors'; flt.open = flt.open === 'payout' ? '' : 'payout'"><span><i class="dot ok"></i>Versement ouvert</span><b>{{ n(kpi.payout) }} <small>/ {{ n(kpi.countries) }}</small></b><small>Envoyer vers le mobile money</small></button>
+      <button class="kpi" :class="{ on: tab === 'corridors' && flt.open === 'collect' }" @click="tab = 'corridors'; flt.open = flt.open === 'collect' ? '' : 'collect'"><span><i class="dot ok"></i>Collecte ouverte</span><b>{{ n(kpi.collect) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
+      <button class="kpi" :class="{ on: tab === 'corridors' && flt.open === 'payout' }" @click="tab = 'corridors'; flt.open = flt.open === 'payout' ? '' : 'payout'"><span><i class="dot ok"></i>Versement ouvert</span><b>{{ n(kpi.payout) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
       <button class="kpi" :class="{ on: tab === 'rates' }" @click="tab = 'rates'"><span>Taux de change</span><b>{{ n(kpi.rates) }}</b><small :class="{ 't-warn': kpi.stale_rates }">{{ kpi.stale_rates ? kpi.stale_rates + ' à mettre à jour' : 'À jour' }}</small></button>
     </div>
 
@@ -95,9 +117,6 @@
 
     <!-- ================= Corridors ================= -->
     <template v-if="tab === 'corridors'">
-      <div class="flash info">
-        <div>Ouvrez ou fermez la <strong>collecte</strong> et le <strong>versement</strong> par pays, et choisissez le <strong>partenaire</strong> qui gère chaque flux : la collecte (mobile money → FlashPay) passe par <strong>PEEX</strong> ; le versement (FlashPay → mobile money) par <strong>PEEX</strong> ou <strong>WacePay</strong>. Un corridor n'est réellement actif que s'il est aussi ouvert chez le partenaire{{ sandbox ? ' (PEEX en mode sandbox)' : '' }}.</div>
-      </div>
       <div class="toolbar mb">
         <div class="search">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg>
@@ -151,9 +170,9 @@
                       <option value="disbursement">disbursement</option><option value="remittance">remittance</option>
                     </select>
                   </div>
-                  <div v-if="(c.payout_partner === 'digitwace' || c.collect_partner === 'digitwace') && !partnerReady('digitwace')" class="t-warn small">⚠ WacePay non configuré : opérations refusées</div>
+                  <div v-if="(c.payout_partner === 'digitwace' || c.collect_partner === 'digitwace') && !partnerReady('digitwace')" class="t-warn small">⚠ WacePay non configuré</div>
                   <div v-if="(c.payout_partner === 'digitwace' && !waceOk(c, 'payout')) || (c.collect_partner === 'digitwace' && !waceOk(c, 'payin'))" class="t-warn small">
-                    ⚠ WacePay n'est pas confirmé sur ce pays ({{ c.wacepay ? 'service absent' : 'couverture non synchronisée' }}) : repassez sur PEEX tant que la couverture n'est pas synchronisée.
+                    ⚠ WacePay non confirmé ici ({{ c.wacepay ? 'service absent' : 'couverture non synchronisée' }})
                   </div>
                   <div v-if="rowErr[c.country]" class="row-err">{{ rowErr[c.country] }}</div>
                 </td>
@@ -171,7 +190,7 @@
     <template v-else>
       <div class="layout mb">
         <section class="container conv">
-          <div class="container-head"><div><h3>Convertisseur</h3><p>Montant reçu par le bénéficiaire</p></div></div>
+          <div class="container-head"><div><h3>Convertisseur</h3></div></div>
           <div class="container-body conv-body">
             <div><label class="field">Montant envoyé</label>
             <div class="row"><input v-model.number="conv.amount" type="number" min="1" /><select v-model="conv.from"><option v-for="c in currencies" :key="c">{{ c }}</option></select></div>
@@ -189,7 +208,7 @@
         </section>
         <section class="container">
           <div class="container-head">
-            <div><h3>Taux de change</h3><p>XAF ↔ XOF : parité fixe 1 : 1. 1 base = taux × devise cible ; la marge FlashPay est déduite du montant reçu.</p></div>
+            <div><h3>Taux de change</h3></div>
           </div>
           <div class="container-body flush" style="overflow-x:auto;">
             <table>
@@ -407,16 +426,38 @@ onMounted(load)
 .c { text-align: center; }
 .op { display: inline-block; border: 1px solid var(--border-strong); border-radius: 12px; padding: 0 8px; margin: 2px 4px 2px 0; font-size: 12px; white-space: nowrap; }
 .changed { font-size: 11px; font-weight: 600; color: var(--warn); background: var(--warn-bg); border-radius: 99px; padding: 1px 7px; margin-left: 6px; }
-.partners { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 12px; }
-.partners > *, .partner-card > *, .pc-flows > div { min-width: 0; }
-.partner-card { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid #1e3a8a; border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); display: grid; gap: 8px; }
-.partner-card.p-digitwace { border-left-color: #ea7a17; }
-.pc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pc-flows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.pc-flows div { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; display: grid; }
-.pc-flows span { font-size: 12px; color: var(--text-2); }
-.partner-card small { font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.partner-card .btn-link { justify-self: start; padding: 0; }
+.partners { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 12px; align-items: start; }
+.partners > *, .partner-card > *, .pc-flows > div, .pc-row-main, .kv2 > * { min-width: 0; }
+.partner-card { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid #1e3a8a; border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); display: grid; gap: 10px; align-content: start; overflow: hidden; }
+.partner-card.p-digitwace { border-top-color: #ea7a17; }
+.pc-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pc-head .status { white-space: nowrap; }
+.mode-tag { font-size: 11px; font-weight: 600; color: var(--text-2); background: var(--surface-2); border-radius: 99px; padding: 2px 8px; white-space: nowrap; }
+.pc-link { margin-left: auto; padding: 0; font-size: 12.5px; white-space: nowrap; }
+.pc-flows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.p-digitwace .pc-flows div { padding: 5px 10px; }
+.pc-flows div { background: var(--surface-2); border-radius: 8px; padding: 6px 10px; display: grid; }
+.pc-flows span { font-size: 11.5px; color: var(--text-2); }
+.pc-flows b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-ok { color: #15803d; } .t-off { color: var(--text-2); font-weight: 600; } .t-err { color: #b91c1c; font-weight: 600; }
+.pc-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-top: 1px dashed var(--border); font-size: 13px; }
+.pc-row-main { display: flex; align-items: baseline; gap: 6px 8px; flex-wrap: wrap; flex: 1; }
+.pc-row-main small { font-weight: 500; color: var(--text-2); font-size: 11.5px; }
+.pc-k { font-size: 11.5px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; min-width: 78px; }
+.pc-date { color: var(--text-2); font-size: 11.5px; }
+.pc-muted { color: var(--text-2); font-size: 12.5px; }
+.bal-chip { background: #ecfdf5; color: #065f46; border-radius: 6px; padding: 1px 8px; white-space: nowrap; }
+.bal-chip.low { background: #fef3c7; color: #92400e; }
+.btn-normal.sm { padding: 4px 10px; font-size: 12.5px; }
+.pc-alert { background: #fef2f2; border: 1px solid #fecaca; color: #7f1d1d; border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.4; display: grid; gap: 6px; }
+.pc-alert .why { overflow-wrap: anywhere; }
+.kv2 { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 10px; margin: 0; font-size: 12.5px; }
+.kv2 dt { color: var(--text-2); white-space: nowrap; } .kv2 dd { margin: 0; overflow-wrap: anywhere; }
+.kv2 code, .pc-foot code, .env-codes code { background: rgba(255,255,255,.7); border: 1px solid var(--border); padding: 0 4px; border-radius: 4px; font-size: 11.5px; word-break: break-all; }
+.pc-foot { display: flex; align-items: center; gap: 8px; border-top: 1px dashed var(--border); padding-top: 8px; min-width: 0; }
+.pc-foot code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; min-width: 0; flex: 1; }
+.env-codes { margin-bottom: 4px; }
+.diag-h .close { float: right; padding: 0 2px; color: var(--text-2); }
 .pbadge { font-weight: 800; font-size: 13px; border-radius: 99px; padding: 3px 10px; color: #fff; background: #1e3a8a; }
 .pbadge.p-digitwace { background: #ea7a17; }
 .partner-cell { min-width: 230px; }
@@ -465,11 +506,11 @@ tr.add td { background: var(--surface-2); }
 .wsvc .on { color: #15803d; font-weight: 700; }
 .wsvc .off { color: var(--text-2); }
 .wsvc small { flex-basis: 100%; color: var(--text-2); font-size: 11px; }
-.diag { margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; background: #fff; }
+.diag { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; background: #fff; min-width: 0; }
 .diag-h { font-weight: 800; margin-bottom: 6px; } .diag-h.ok { color: #15803d; } .diag-h.ko { color: #b91c1c; }
-.diag dl { display: grid; grid-template-columns: 140px 1fr; gap: 4px 10px; margin: 0; }
-.diag dt { color: var(--text-2); } .diag dd { margin: 0; word-break: break-all; }
-.diag-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.diag dt { color: var(--text-2); } .diag dd { margin: 0; overflow-wrap: anywhere; }
+.diag-h small { font-weight: 500; color: var(--text-2); }
+.diag-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .disc-t { width: 100%; font-size: 11px; margin-top: 6px; border-collapse: collapse; }
 .disc-t td { border-top: 1px solid var(--border); padding: 3px 4px; vertical-align: top; word-break: break-all; }
 .disc-t tr.good td { background: #dcfce7; font-weight: 700; }

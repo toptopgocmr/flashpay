@@ -1,7 +1,7 @@
 <template>
   <div v-if="t">
     <div class="page-header">
-      <div><h1 class="mono" style="font-size:22px;">{{ t.reference }}</h1><p>Détail de la transaction, écritures comptables et suivi support.</p></div>
+      <div><h1 class="mono" style="font-size:22px;">{{ t.reference }}</h1></div>
       <div class="actions"><button class="btn-normal" @click="showRefund = true">Rembourser via PEEX</button><router-link class="btn-normal" to="/transactions">‹ Transactions</router-link></div>
       <PeexRefund v-if="showRefund" :transaction-id="Number(route.params.id)" @close="showRefund = false" />
     </div>

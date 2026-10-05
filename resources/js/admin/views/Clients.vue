@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h1>Clients</h1>
-        <p>Tous les comptes clients FlashPay : fiche, wallet, KYC, activation, historique.</p>
       </div>
       <div class="actions">
         <ExportButton filename="clients" :columns="EXP_COLS" :fetch="expFetch" />

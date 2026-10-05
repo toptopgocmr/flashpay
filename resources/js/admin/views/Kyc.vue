@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Validation KYC</h1><p>Pièces envoyées par les clients, agents et marchands. Palier 1 : pièce d'identité validée · Palier 2 : pièce + selfie avec la pièce, obligatoire (KYC complet, international) — la photo de profil ne remplace pas le selfie. Pièces reçues de l'app v2 : photo de profil, pièce recto / verso, et pour les marchands RCCM + photo de la boutique. La validation relève automatiquement les plafonds (§12).</p></div>
+      <div><h1>Validation KYC</h1></div>
       <div class="actions">
         <ExportButton filename="kyc" :columns="EXP_COLS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>

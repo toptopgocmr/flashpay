@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Approvisionnements agents</h1><p>Demandes de float soumises par les agents (dépôt cash, virement). Une fois validée, le wallet de l'agent est crédité depuis la trésorerie FlashPay (§3.1.2, §3.4.3). Les demandes adressées à un super-agent sont traitées par celui-ci.</p></div>
+      <div><h1>Approvisionnements agents</h1></div>
       <div class="actions">
         <ExportButton filename="approvisionnements" :columns="EXP_COLS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>

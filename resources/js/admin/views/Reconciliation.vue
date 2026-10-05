@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Réconciliation</h1><p>Contrôle automatique toutes les heures (§13.1) : équilibre du ledger, cohérence solde wallet ↔ écritures, opérations bloquées chez l'opérateur (« en cours de vérification »), écritures orphelines PEEX.</p></div>
+      <div><h1>Réconciliation</h1></div>
       <div class="actions"><button class="btn" :disabled="busy" @click="run">Lancer maintenant</button></div>
     </div>
     <div ref="detailTop" class="detail-head mb" v-if="last">

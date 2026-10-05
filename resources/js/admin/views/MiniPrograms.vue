@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Mini-programmes</h1><p>Mini-applications de marchands partenaires affichées dans la zone Services de l'app (§3.5.3). Le paiement s'appuie sur l'API e-commerce (canal « mini_program »).</p></div>
+      <div><h1>Mini-programmes</h1></div>
       <div class="actions"><button class="btn" @click="edit = { category: 'recharge', status: 'pending', sort: 100 }">Ajouter</button></div>
     </div>
     <section class="container">

@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Litiges & support</h1><p>Contestations de transactions (§13.2) et tickets d'assistance (§16) avec délais cibles. L'arbitrage d'un litige (remboursement ou rejet) est tracé dans le journal d'audit.</p></div>
+      <div><h1>Litiges & support</h1></div>
       <div class="actions">
         <ExportButton :filename="tab === 'disputes' ? 'contestations' : 'tickets-support'" :columns="tab === 'disputes' ? EXP_DISPUTES : EXP_TICKETS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>

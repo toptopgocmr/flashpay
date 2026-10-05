@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Commissions agents</h1><p>Barème par type d'opération et palier de montant (§3.1.7). Type <b>fixe</b> (montant), <b>%</b> du montant, ou <b>part des frais</b> payés par le client. La règle au palier le plus élevé applicable l'emporte.</p></div>
+      <div><h1>Commissions agents</h1></div>
       <div class="actions"><button class="btn" @click="edit = { operation: 'cash_in', min_amount: 0, max_amount: null, type: 'fixed', value: 0, active: true }">Ajouter une règle</button></div>
     </div>
     <section class="container">

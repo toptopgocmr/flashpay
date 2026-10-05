@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Journal d'audit</h1><p>Trace immuable et chaînée (sha256) des actions sensibles : interventions sur wallets, KYC, approvisionnements, remboursements, litiges, paramètres, clés API (§4.5, §5 Auditabilité).</p></div>
+      <div><h1>Journal d'audit</h1></div>
       <div class="actions">
         <ExportButton filename="journal-audit" :columns="EXP_COLS" :fetch="expFetch" /><button class="btn-normal" @click="verify">Vérifier l'intégrité</button></div>
     </div>
