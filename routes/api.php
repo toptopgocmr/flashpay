@@ -431,6 +431,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/settings/channels', [AdminOpsController::class, 'updateChannels']);
         Route::get('/settings/partner-fees', [AdminOpsController::class, 'partnerFees']);
         Route::post('/settings/partner-fees', [AdminOpsController::class, 'updatePartnerFees']);
+        Route::get('/settings/partner-fees/defaults', [AdminOpsController::class, 'partnerFeeDefaults']);
         Route::post('/settings/limits', [AdminOpsController::class, 'updateLimits']);
         Route::get('/commission-rules', [AdminOpsController::class, 'commissionRules']);
         Route::post('/commission-rules', [AdminOpsController::class, 'saveCommissionRule']);

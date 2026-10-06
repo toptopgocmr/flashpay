@@ -175,13 +175,23 @@ class AdminOpsController extends Controller
         return response()->json(\App\Support\PartnerFees::rates());
     }
 
+    /** Tarifs contractuels par défaut (ex. offre WacePay), pour le bouton « Rétablir » de la console. */
+    public function partnerFeeDefaults()
+    {
+        return response()->json(\App\Support\PartnerFees::DEFAULTS);
+    }
+
     public function updatePartnerFees(Request $request, PlatformSettings $settings)
     {
-        $v = $request->validate(['rates' => 'required|array', 'rates.*.pct' => 'nullable|numeric|min:0|max:50', 'rates.*.fixed' => 'nullable|integer|min:0|max:1000000']);
-        $current = [];
-        foreach (\App\Support\PartnerFees::RATES as $k => $label) {
-            $current[$k] = ['pct' => (float) ($v['rates'][$k]['pct'] ?? 0), 'fixed' => (int) ($v['rates'][$k]['fixed'] ?? 0)];
-        }
+        $v = $request->validate([
+            'rates' => 'required|array',
+            'rates.*.pct' => 'nullable|numeric|min:0|max:50',
+            'rates.*.fixed' => 'nullable|integer|min:0|max:1000000',
+            'rates.*.countries' => 'nullable|array|max:60',
+            'rates.*.countries.*.pct' => 'nullable|numeric|min:0|max:50',
+            'rates.*.countries.*.fixed' => 'nullable|integer|min:0|max:1000000',
+        ]);
+        $current = \App\Support\PartnerFees::sanitize($v['rates']);
         $settings->set('partner_fees', $current, $request->user()->id);
         Audit::log('settings.partner_fees', null, $current);
         return response()->json(\App\Support\PartnerFees::rates());

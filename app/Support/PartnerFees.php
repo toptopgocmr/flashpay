@@ -7,6 +7,7 @@ use App\Models\PeexRequest;
 use App\Models\Transaction;
 use App\Services\Connectors\PeexConnector;
 use App\Services\Ops\PlatformSettings;
+use App\Services\Peex\PeexCorridors;
 
 /**
  * Coûts partenaires (PEEX, WacePay/Digitwace…) et revenu FlashPay par transaction.
@@ -32,6 +33,24 @@ class PartnerFees
         'card' => 'Carte (autre prestataire)',
     ];
 
+    /**
+     * Tarifs contractuels par défaut (offre WacePay / Digitwace du 06/10/2026 pour CIA Microfinance) :
+     *  - PayIn  : 3,5 % par transaction réussie, tous pays ;
+     *  - PayOut : 1 500 FCFA fixe (Cameroun, Congo, Tchad, RCA), 2,85 % (Gabon), 1,75 % (RDC).
+     * Une ligne `countries` remplace le tarif général pour le pays de l'opération.
+     */
+    public const DEFAULTS = [
+        'digitwace_collect' => ['pct' => 3.5, 'fixed' => 0, 'countries' => []],
+        'digitwace_payout' => ['pct' => 0, 'fixed' => 0, 'countries' => [
+            'CG' => ['pct' => 0, 'fixed' => 1500],
+            'CM' => ['pct' => 0, 'fixed' => 1500],
+            'TD' => ['pct' => 0, 'fixed' => 1500],
+            'CF' => ['pct' => 0, 'fixed' => 1500],
+            'GA' => ['pct' => 2.85, 'fixed' => 0],
+            'CD' => ['pct' => 1.75, 'fixed' => 0],
+        ]],
+    ];
+
     protected const FEE_KEYS = ['fees', 'fee', 'fee_amount', 'feeamount', 'fees_amount', 'feesamount', 'transaction_fee', 'transactionfee',
         'transactionfees', 'transaction_fees', 'total_fees', 'totalfees', 'totalfee', 'commission', 'charges', 'charge', 'frais', 'partner_fee'];
 
@@ -40,13 +59,61 @@ class PartnerFees
         $saved = (array) app(PlatformSettings::class)->get('partner_fees', []);
         $out = [];
         foreach (self::RATES as $k => $label) {
+            $r = $saved[$k] ?? self::DEFAULTS[$k] ?? [];
+            $countries = [];
+            foreach ((array) ($r['countries'] ?? []) as $iso => $c) {
+                $iso = strtoupper((string) $iso);
+                if (preg_match('/^[A-Z]{2}$/', $iso)) {
+                    $countries[$iso] = ['pct' => (float) ($c['pct'] ?? 0), 'fixed' => (int) ($c['fixed'] ?? 0)];
+                }
+            }
+            ksort($countries);
             $out[$k] = [
                 'label' => $label,
-                'pct' => (float) ($saved[$k]['pct'] ?? 0),
-                'fixed' => (int) ($saved[$k]['fixed'] ?? 0),
+                'pct' => (float) ($r['pct'] ?? 0),
+                'fixed' => (int) ($r['fixed'] ?? 0),
+                'countries' => (object) $countries,
             ];
         }
         return $out;
+    }
+
+    /** Normalise les tarifs envoyés par la console (pour l'enregistrement). */
+    public static function sanitize(array $input): array
+    {
+        $out = [];
+        foreach (self::RATES as $k => $label) {
+            $r = (array) ($input[$k] ?? []);
+            $countries = [];
+            foreach ((array) ($r['countries'] ?? []) as $iso => $c) {
+                $iso = strtoupper(trim((string) ($c['country'] ?? $iso)));
+                if (preg_match('/^[A-Z]{2}$/', $iso)) {
+                    $countries[$iso] = ['pct' => min(50, max(0, (float) ($c['pct'] ?? 0))), 'fixed' => min(1000000, max(0, (int) ($c['fixed'] ?? 0)))];
+                }
+            }
+            $out[$k] = [
+                'pct' => min(50, max(0, (float) ($r['pct'] ?? 0))),
+                'fixed' => min(1000000, max(0, (int) ($r['fixed'] ?? 0))),
+                'countries' => $countries,
+            ];
+        }
+        return $out;
+    }
+
+    /** Pays d'un côté de l'opération (in = expéditeur, out = bénéficiaire), sans appel réseau. */
+    protected static function countryOf(Transaction $tx, string $side): ?string
+    {
+        $m = $tx->meta ?? [];
+        $hint = $m[$side === 'in' ? 'source_country' : 'destination_country'] ?? null;
+        $acc = $side === 'in' ? $tx->source_account : $tx->destination_account;
+        if ($acc) {
+            try {
+                return strtoupper((string) (app(PeexCorridors::class)->resolve((string) $acc, $hint)['country'] ?? $hint)) ?: null;
+            } catch (\Throwable) {
+                // numéro non reconnu : on garde l'indication de pays
+            }
+        }
+        return $hint ? strtoupper((string) $hint) : null;
     }
 
     /**
@@ -68,12 +135,12 @@ class PartnerFees
             if ($srcRail === 'peex') {
                 $req = $peex->first(fn ($r) => PeexConnector::legOf((string) $r->track_id) === 'C');
                 $legs[] = self::leg('collect', 'PEEX', 'peex_collect', $req?->track_id ?? $tx->source_external_ref, $req?->status,
-                    (int) $tx->amount + (int) $tx->fee, $tx->currency, self::reported($req, 'peex'), $rates);
+                    (int) $tx->amount + (int) $tx->fee, $tx->currency, self::reported($req, 'peex'), $rates, self::countryOf($tx, 'in'));
             } elseif ($srcRail === 'digitwace' || (in_array($srcRail, ['card', 'bank'], true) && $hosted)) {
                 $req = $wace->first(fn ($r) => in_array($r->operation, ['payin', 'checkout'], true));
                 $key = $srcRail === 'digitwace' ? 'digitwace_collect' : 'digitwace_card';
                 $legs[] = self::leg('collect', 'WacePay', $key, $req?->wace_id ?? $tx->source_external_ref, $req?->status,
-                    (int) $tx->amount + (int) $tx->fee, $tx->currency, self::reported($req, 'wace'), $rates);
+                    (int) $tx->amount + (int) $tx->fee, $tx->currency, self::reported($req, 'wace'), $rates, self::countryOf($tx, 'in'));
             } elseif ($srcRail === 'card') {
                 $legs[] = self::leg('collect', 'Carte', 'card', $tx->source_external_ref, null,
                     (int) $tx->amount + (int) $tx->fee, $tx->currency, null, $rates);
@@ -86,11 +153,11 @@ class PartnerFees
         if ($tx->destination_rail === 'peex') {
             $req = $peex->first(fn ($r) => PeexConnector::legOf((string) $r->track_id) === 'D');
             $legs[] = self::leg('payout', 'PEEX', 'peex_payout', $req?->track_id ?? $tx->destination_external_ref, $req?->status,
-                $out, $outCur, self::reported($req, 'peex'), $rates);
+                $out, $outCur, self::reported($req, 'peex'), $rates, self::countryOf($tx, 'out'));
         } elseif ($tx->destination_rail === 'digitwace') {
             $req = $wace->first(fn ($r) => $r->operation === 'payout');
             $legs[] = self::leg('payout', 'WacePay', 'digitwace_payout', $req?->wace_id ?? $tx->destination_external_ref, $req?->status,
-                $out, $outCur, self::reported($req, 'wace'), $rates);
+                $out, $outCur, self::reported($req, 'wace'), $rates, self::countryOf($tx, 'out'));
         }
 
         // 3. Remboursements PEEX (automatiques ou manuels) : coût supplémentaire
@@ -130,14 +197,19 @@ class PartnerFees
         ];
     }
 
-    protected static function leg(string $kind, string $partner, string $rateKey, ?string $ref, ?string $status, int $amount, string $currency, ?float $reported, array $rates): array
+    protected static function leg(string $kind, string $partner, string $rateKey, ?string $ref, ?string $status, int $amount, string $currency, ?float $reported, array $rates, ?string $country = null): array
     {
         $source = null;
         $fee = null;
+        $r = $rates[$rateKey] ?? null;
+        $byCountry = $r && $country ? (((array) ($r['countries'] ?? []))[$country] ?? null) : null;
+        if ($byCountry) {
+            $r = ['pct' => (float) $byCountry['pct'], 'fixed' => (int) $byCountry['fixed']];
+        }
         if ($reported !== null) {
             $fee = (int) round($reported);
             $source = 'partner';
-        } elseif (($r = $rates[$rateKey] ?? null) && ($r['pct'] > 0 || $r['fixed'] > 0)) {
+        } elseif ($r && ($r['pct'] > 0 || $r['fixed'] > 0)) {
             $fee = (int) round($amount * $r['pct'] / 100) + $r['fixed'];
             $source = 'estimate';
         }
@@ -150,6 +222,8 @@ class PartnerFees
             'amount' => $amount,
             'currency' => $currency,
             'fee' => $fee,
+            'country' => $country,
+            'rate' => $r ? ['pct' => (float) $r['pct'], 'fixed' => (int) $r['fixed'], 'by_country' => (bool) $byCountry] : null,
             'fee_source' => $source, // partner = renvoyé par le partenaire ; estimate = tarif console ; null = inconnu
         ];
     }

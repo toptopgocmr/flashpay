@@ -212,15 +212,28 @@
       </div>
     </Teleport>
 
-    <Modal v-if="showRates" title="Tarifs partenaires" subtitle="Appliqués quand PEEX / WacePay ne renvoient pas leurs frais (affichés « estimé ») ; les frais communiqués par le partenaire restent prioritaires." @close="showRates = false">
-      <div class="rate-grid">
-        <template v-for="(r, k) in rates" :key="k">
-          <label>{{ r.label }}</label>
-          <span><input v-model.number="r.pct" type="number" min="0" max="50" step="0.01" /> %</span>
-          <span>+ <input v-model.number="r.fixed" type="number" min="0" step="1" /> fixe</span>
-        </template>
+    <Modal v-if="showRates" title="Tarifs partenaires" subtitle="Appliqués quand PEEX / WacePay ne renvoient pas leurs frais (affichés « estimé ») ; les frais communiqués par le partenaire restent prioritaires. Un tarif par pays remplace le tarif général pour ce pays." @close="showRates = false">
+      <div class="rate-list">
+        <div v-for="(r, k) in rates" :key="k" class="rate-block">
+          <div class="rate-row">
+            <label>{{ r.label }}</label>
+            <span><input v-model.number="r.pct" type="number" min="0" max="50" step="0.01" /> %</span>
+            <span>+ <input v-model.number="r.fixed" type="number" min="0" step="1" /> fixe</span>
+            <span class="rate-hint">{{ r.countryList.length ? 'autres pays' : 'tous pays' }}</span>
+          </div>
+          <div v-for="(c, i) in r.countryList" :key="i" class="rate-row sub">
+            <select v-model="c.country">
+              <option v-for="(name, iso) in COUNTRIES" :key="iso" :value="iso">{{ name }}</option>
+            </select>
+            <span><input v-model.number="c.pct" type="number" min="0" max="50" step="0.01" /> %</span>
+            <span>+ <input v-model.number="c.fixed" type="number" min="0" step="1" /> fixe</span>
+            <button class="rate-x" title="Retirer ce pays" @click="r.countryList.splice(i, 1)">×</button>
+          </div>
+          <button class="rate-add" @click="r.countryList.push({ country: 'CG', pct: 0, fixed: 0 })">+ Tarif pour un pays</button>
+        </div>
       </div>
       <template #foot>
+        <button class="btn-normal" style="margin-right:auto" title="Remet les tarifs WacePay de l'offre commerciale (PayIn 3,5 % ; PayOut 1 500 FCFA CG/CM/TD/CF, 2,85 % GA, 1,75 % CD)" @click="resetWacepay">Offre WacePay</button>
         <button class="btn-normal" @click="showRates = false">Annuler</button>
         <button class="btn" :disabled="savingRates" @click="saveRates">{{ savingRates ? 'Enregistrement…' : 'Enregistrer' }}</button>
       </template>
@@ -294,16 +307,36 @@ const opName = (side) => {
   const op = (side.operator || '—').replace(/ Mobile Money| Money/g, '').replace('Wallet FlashPay', 'Wallet').replace('Carte Visa / Mastercard', 'Carte')
   return side.country ? `${op} (${side.country})` : op
 }
-const partnerTitle = (t) => (t.costs?.legs || []).map((l) => `${l.partner} ${l.kind === 'collect' ? 'collecte' : l.kind === 'payout' ? 'versement' : 'remboursement'} : ${l.fee === null ? 'non communiqués' : n(l.fee) + ' ' + l.currency + (l.fee_source === 'estimate' ? ' (estimé)' : '')}`).join('\n')
+const partnerTitle = (t) => (t.costs?.legs || []).map((l) => `${l.partner} ${l.kind === 'collect' ? 'collecte' : l.kind === 'payout' ? 'versement' : 'remboursement'}${l.country ? ' (' + l.country + ')' : ''} : ${l.fee === null ? 'non communiqués' : n(l.fee) + ' ' + l.currency + (l.fee_source === 'estimate' ? ' (estimé)' : '')}`).join('\n')
 
 const showRates = ref(false)
 const rates = ref({})
 const savingRates = ref(false)
-watch(showRates, async (v) => { if (v) rates.value = (await api.get('/admin/settings/partner-fees')).data })
+const COUNTRIES = {
+  CG: 'Congo', CM: 'Cameroun', GA: 'Gabon', TD: 'Tchad', CF: 'Centrafrique', GQ: 'Guinée équatoriale', CD: 'RD Congo',
+  SN: 'Sénégal', CI: "Côte d'Ivoire", ML: 'Mali', BF: 'Burkina Faso', BJ: 'Bénin', TG: 'Togo', NE: 'Niger', GW: 'Guinée-Bissau', GN: 'Guinée',
+}
+// Tarifs par pays : objet {ISO: {pct, fixed}} côté API, liste éditable côté console
+const withLists = (data) => Object.fromEntries(Object.entries(data).map(([k, r]) => [k, {
+  ...r, countryList: Object.entries(r.countries || {}).map(([country, c]) => ({ country, pct: c.pct, fixed: c.fixed })),
+}]))
+const toPayload = () => Object.fromEntries(Object.entries(rates.value).map(([k, r]) => [k, {
+  pct: r.pct || 0, fixed: r.fixed || 0, countries: r.countryList.map((c) => ({ country: c.country, pct: c.pct || 0, fixed: c.fixed || 0 })),
+}]))
+async function resetWacepay() {
+  const { data } = await api.get('/admin/settings/partner-fees/defaults')
+  for (const [k, d] of Object.entries(data)) {
+    if (!rates.value[k]) continue
+    rates.value[k].pct = d.pct
+    rates.value[k].fixed = d.fixed
+    rates.value[k].countryList = Object.entries(d.countries || {}).map(([country, c]) => ({ country, pct: c.pct, fixed: c.fixed }))
+  }
+}
+watch(showRates, async (v) => { if (v) rates.value = withLists((await api.get('/admin/settings/partner-fees')).data) })
 async function saveRates() {
   savingRates.value = true
   try {
-    rates.value = (await api.post('/admin/settings/partner-fees', { rates: rates.value })).data
+    rates.value = withLists((await api.post('/admin/settings/partner-fees', { rates: toPayload() })).data)
     showRates.value = false
     await load(meta.value?.current_page || 1)
   } finally { savingRates.value = false }
@@ -547,8 +580,15 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 .chk pre { max-height: 220px; overflow: auto; background: #0f172a; color: #e2e8f0; padding: 8px; border-radius: 8px; font-size: 11px; }
 .reason { margin: 0 0 8px; color: #b91c1c; font-size: 12.5px; }
 .wp-mf { display: flex; justify-content: flex-end; gap: 6px; }
-.rate-grid { display: grid; grid-template-columns: minmax(180px, auto) auto auto; gap: 8px 12px; align-items: center; font-size: 13px; }
-.rate-grid input { width: 80px !important; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
+.rate-list { display: flex; flex-direction: column; gap: 10px; font-size: 13px; max-height: 60vh; overflow: auto; }
+.rate-block { border: 1px solid #eceef2; border-radius: 10px; padding: 8px 10px; }
+.rate-row { display: grid; grid-template-columns: minmax(200px, 1fr) auto auto 90px; gap: 8px 12px; align-items: center; padding: 3px 0; }
+.rate-row.sub { padding-left: 18px; }
+.rate-row.sub select { padding: 5px 6px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
+.rate-row input { width: 80px !important; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
+.rate-hint { color: #9ca3af; font-size: 11.5px; }
+.rate-x { border: 0; background: none; color: #dc2626; font-size: 18px; cursor: pointer; justify-self: start; }
+.rate-add { margin: 4px 0 2px 18px; border: 0; background: none; color: #2563eb; font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
 
 @media (max-width: 1100px) { .wp-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } .wp-filters .wide { grid-column: span 2; } .wp-actions { grid-column: span 3; justify-content: flex-end; } }
 @media (max-width: 900px) { .wp-table table { width: 1040px; } }

@@ -121,7 +121,7 @@
                   <td class="num pos"><b>+{{ n(t.costs.billed) }} {{ t.costs.currency }}</b></td>
                 </tr>
                 <tr v-for="l in t.costs.legs" :key="l.kind + l.reference">
-                  <td>{{ l.label }}</td><td>{{ l.partner }}</td><td class="mono">{{ l.reference || '—' }}</td>
+                  <td>{{ l.label }}<small v-if="l.country">Pays {{ l.country }}<template v-if="l.fee_source === 'estimate' && l.rate"> · tarif {{ l.rate.pct ? l.rate.pct + ' %' : '' }}{{ l.rate.pct && l.rate.fixed ? ' + ' : '' }}{{ l.rate.fixed ? n(l.rate.fixed) + ' fixe' : '' }}</template></small></td><td>{{ l.partner }}</td><td class="mono">{{ l.reference || '—' }}</td>
                   <td><span class="pill sm" :class="pillOf(l.status)">{{ ST[l.status] || '—' }}</span></td>
                   <td class="num">{{ n(l.amount) }} {{ l.currency }}</td>
                   <td class="num neg">
