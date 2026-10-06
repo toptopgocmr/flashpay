@@ -19,6 +19,13 @@ return [
     'device_policy' => env('FLASHPAY_DEVICE_POLICY', 'multi'),
     // Connexion depuis un appareil inconnu : OTP requis
     'otp_on_new_device' => (bool) env('FLASHPAY_OTP_NEW_DEVICE', true),
+    // Comptes de démonstration pour les réviseurs Google Play / Apple : pas d'OTP
+    // « nouvel appareil » (ils ne reçoivent pas nos SMS). Numéros séparés par des virgules.
+    // Garder un solde faible sur ces comptes ; vider la variable après validation.
+    'review_phones' => array_values(array_filter(array_map(
+        fn ($p) => preg_replace('/\D+/', '', $p),
+        explode(',', (string) env('FLASHPAY_REVIEW_PHONES', ''))
+    ))),
     // Confirmation par le client (OTP) d'un dépôt agent saisi par numéro (§3.1.3)
     'cash_in_client_confirmation' => (bool) env('FLASHPAY_CASHIN_CONFIRM', true),
     // E-commerce : clés de production seulement après la recette sandbox (ou validation manuelle)

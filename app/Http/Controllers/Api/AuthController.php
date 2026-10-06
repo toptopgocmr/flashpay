@@ -171,7 +171,8 @@ class AuthController extends Controller
         $devices = app(\App\Services\Security\DeviceService::class);
         if (config('security.otp_on_new_device') && ! empty($validated['device_id'])
             && $devices->hasAnyDevice($user) && ! $devices->isKnown($user, $validated['device_id'])
-            && ! $user->hasAnyRole(['super_admin', 'support'])) {
+            && ! $user->hasAnyRole(['super_admin', 'support'])
+            && ! in_array(preg_replace('/\D+/', '', (string) $user->phone), config('security.review_phones', []), true)) {
             $otp = app(\App\Services\Security\OtpService::class);
             if (empty($validated['otp'])) {
                 $sent = $otp->send($user->phone, 'login_device');
