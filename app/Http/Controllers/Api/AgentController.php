@@ -140,14 +140,14 @@ class AgentController extends Controller
 
     public function journal(Request $request, \App\Services\Agent\AgentLedgerService $ledger)
     {
-        $v = $request->validate(['type' => 'nullable|string|max:30', 'limit' => 'nullable|integer|min:1|max:200']);
+        $v = $request->validate(['type' => 'nullable|string|max:30', 'limit' => 'nullable|integer|min:1|max:300']);
         return response()->json(['data' => $ledger->journal($request->user()->wallet, $v['limit'] ?? 50, $v['type'] ?? null)]);
     }
 
     public function reconciliation(Request $request, \App\Services\Agent\AgentLedgerService $ledger)
     {
         $v = $request->validate(['date' => 'nullable|date']);
-        return response()->json($ledger->reconciliation($request->user()->wallet, \Illuminate\Support\Carbon::parse($v['date'] ?? 'today')));
+        return response()->json($ledger->reconciliation($request->user()->wallet, \Illuminate\Support\Carbon::parse($v['date'] ?? 'today', config('app.display_timezone', 'Africa/Brazzaville'))));
     }
 
     public function commissions(Request $request)

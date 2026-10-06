@@ -87,8 +87,10 @@ class AgentLedgerService
     public function reconciliation(Wallet $w, Carbon $day): array
     {
         $w = $w->fresh();
-        $start = $day->copy()->startOfDay();
-        $end = $day->copy()->addDay()->startOfDay();
+        // Journée locale (Brazzaville) convertie en UTC pour la base
+        $local = $day->copy()->setTimezone(config('app.display_timezone', 'Africa/Brazzaville'));
+        $start = $local->copy()->startOfDay()->utc();
+        $end = $local->copy()->addDay()->startOfDay()->utc();
         $after = LedgerEntry::where('account', "wallet:{$w->id}")->where('created_at', '>=', $end)
             ->selectRaw("COALESCE(SUM(CASE WHEN type='credit' THEN amount ELSE -amount END),0) AS net")->value('net');
         $closing = (int) $w->balance - (int) $after;
@@ -104,7 +106,7 @@ class AgentLedgerService
         $pending = Transaction::whereIn('id', $txIds)->where('status', 'processing')->count();
 
         return [
-            'date' => $start->toDateString(),
+            'date' => $local->toDateString(),
             'currency' => $w->currency,
             'opening_balance' => $opening,
             'credits' => $credits,
@@ -122,7 +124,7 @@ class AgentLedgerService
     protected function label(?Transaction $tx): string
     {
         return match ($tx?->type) {
-            'cash_in' => 'Recharge client',
+            'cash_in' => 'Dépôt client',
             'cash_pickup', 'cash_out' => 'Retrait client',
             'float_topup' => 'Approvisionnement',
             'p2p' => 'Transfert wallet',
