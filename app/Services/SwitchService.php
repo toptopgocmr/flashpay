@@ -120,6 +120,13 @@ class SwitchService
                     $tx->update(['stage' => 'awaiting_source']);
                     return $tx->fresh();
                 }
+                if ($result['status'] === 'failed' && ($fallback = $this->collectFallback($tx, $result))) {
+                    $result = $fallback;
+                    if ($result['status'] === 'pending') {
+                        $tx->update(['stage' => 'awaiting_source']);
+                        return $tx->fresh();
+                    }
+                }
                 if ($result['status'] !== 'successful') {
                     return $this->fail($tx, 'Échec de la collecte (' . $tx->source_rail . ') : ' . $this->reason($result));
                 }
@@ -131,6 +138,31 @@ class SwitchService
         }
 
         return $this->runDestination($tx);
+    }
+
+    /**
+     * Collecte WacePay refusée (rien n'a été prélevé) : on réessaie une fois via PEEX
+     * si PEEX couvre le pays du payeur. Renvoie le résultat PEEX, ou null.
+     */
+    protected function collectFallback(Transaction $tx, array $wace): ?array
+    {
+        if ($tx->source_rail !== 'digitwace' || ! config('flashpay.digitwace.collect_fallback_peex', true) || ! config('flashpay.rails.peex.enabled', false)) {
+            return null;
+        }
+        try {
+            $route = app(\App\Services\Peex\PeexCorridors::class)->resolve((string) $tx->source_account, $tx->meta['source_country'] ?? null);
+            $peexCountry = config('flashpay.corridors.' . $route['country']);
+            if (! $peexCountry || ($peexCountry['collect'] ?? true) === false) {
+                return null; // pays hors PEEX
+            }
+            \Illuminate\Support\Facades\Log::warning('Collecte WacePay refusée : nouvel essai via PEEX', ['reference' => $tx->reference, 'wacepay' => $this->reason($wace)]);
+            $tx->update(['source_rail' => 'peex', 'meta' => ($tx->meta ?? []) + ['wacepay_collect_error' => mb_substr($this->reason($wace), 0, 250)]]);
+            $result = $this->connectorFor('peex')->collect($tx->source_account, $tx->amount + $tx->fee, $tx->currency, $tx->reference);
+            $tx->update(['source_external_ref' => $result['external_ref']]);
+            return $result;
+        } catch (\Throwable $e) {
+            return ['status' => 'failed', 'raw' => ['error' => 'WacePay : ' . $this->reason($wace) . ' ; PEEX : ' . $e->getMessage()]];
+        }
     }
 
     public function onSourceConfirmed(Transaction $tx): Transaction

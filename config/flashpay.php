@@ -46,6 +46,11 @@ return [
         // partner = API Partenaire WacePay (payments/* et payout/*, collection Postman oct. 2026)
         // legacy  = ancienne API Business (sender / beneficiary / wallet / confirm)
         'api' => env('DIGITWACE_API', 'partner'),
+        // E-mail client envoyé à payments/create quand le client n'en a pas
+        'default_email' => env('DIGITWACE_DEFAULT_EMAIL', 'clients@flashpay.cg'),
+        // Collecte WacePay refusée (rien n'est prélevé) : nouvel essai automatique via PEEX
+        // quand PEEX couvre le pays (config/corridors). false = échec direct.
+        'collect_fallback_peex' => (bool) env('DIGITWACE_COLLECT_FALLBACK_PEEX', true),
         // Chemins de l'API Partenaire à surcharger si WacePay les change (sinon valeurs de DigitwaceClient::PARTNER_PATHS)
         'partner_paths' => array_filter([
             'login' => env('DIGITWACE_PARTNER_PATH_LOGIN'),

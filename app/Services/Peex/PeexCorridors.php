@@ -157,7 +157,8 @@ class PeexCorridors
         if (in_array($iso, self::LEADING_ZERO, true)) {
             if ($iso === 'BJ' && strlen($local) === 8) {
                 $local = '01' . $local; // anciens numéros béninois à 8 chiffres
-            } elseif (strlen($local) === $len - 1) {
+            } elseif (strlen($local) === $len - 1 && ! str_starts_with($local, '0')) {
+                // 55521222 -> 055521222 ; mais 05521222 (un chiffre manquant) reste invalide
                 $local = '0' . $local;
             }
         } elseif (strlen($local) === $len + 1 && str_starts_with($local, '0')) {

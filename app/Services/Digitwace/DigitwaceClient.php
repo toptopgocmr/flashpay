@@ -194,6 +194,21 @@ class DigitwaceClient
         return array_is_list($json) ? $json : [];
     }
 
+    /** « MTN (CONGO) », « mtn », « Airtel Money » → MTN / AIRTEL… (code attendu par payments/create). */
+    public static function operatorCode(?string $op): ?string
+    {
+        $op = strtoupper(trim((string) $op));
+        if ($op === '') {
+            return null;
+        }
+        foreach (['MTN', 'ORANGE', 'AIRTEL', 'MOOV', 'WAVE', 'FREE', 'VODACOM', 'M-PESA', 'MPESA', 'TIGO', 'EXPRESSO', 'CAMTEL', 'AFRICELL'] as $o) {
+            if (str_contains($op, $o)) {
+                return $o === 'M-PESA' ? 'MPESA' : $o;
+            }
+        }
+        return trim(preg_replace('/\s*\(.*\)\s*/', '', $op)) ?: null;
+    }
+
     /** Opérateur (MTN, ORANGE…) d'un service synchronisé, pour payments/create. */
     public function operatorFor(string $serviceId): ?string
     {
@@ -381,18 +396,29 @@ class DigitwaceClient
     public function payin(string $reference, string $payerCode, int $amount, string $currency, string $phone, string $name, ?string $country = null, ?string $operator = null, ?string $email = null): array
     {
         if ($this->partner()) {
-            // POST payments/create — wp-subscription-key = id du service de collecte
-            $json = $this->call('post', 'payin', array_filter([
+            // POST payments/create — wp-subscription-key = id du service de collecte.
+            // Doc Digitwace : customer_msisdn est un ENTIER (indicatif + numéro, sans « + »).
+            $digits = preg_replace('/\D/', '', $phone);
+            $body = array_filter([
                 'amount' => $amount,
                 'referenceId' => $reference,
-                'customer_msisdn' => '+' . preg_replace('/\D/', '', $phone),
-                'customer_name' => mb_substr($name, 0, 100),
-                'customer_email' => $email,
+                'customer_msisdn' => (int) $digits,
+                'customer_name' => mb_substr(trim($name) ?: 'Client FlashPay', 0, 100),
+                'customer_email' => $email ?: $this->cfg('default_email'),
                 'currency' => strtoupper($currency),
                 'countryCode' => $country ? strtoupper($country) : null,
-                'operator' => $operator ? strtoupper($operator) : $this->operatorFor($payerCode),
+                'operator' => self::operatorCode($operator) ?? self::operatorCode($this->operatorFor($payerCode)),
                 'callback_url' => $this->callbackUrl(),
-            ], fn ($v) => $v !== null && $v !== ''), [], ['wp-subscription-key' => $payerCode]);
+            ], fn ($v) => $v !== null && $v !== '');
+            try {
+                $json = $this->call('post', 'payin', $body, [], ['wp-subscription-key' => $payerCode]);
+            } catch (DigitwaceException $e) {
+                // Données refusées (400/422) : 2e essai avec le numéro au format « +242… » (texte)
+                if (! in_array($e->httpStatus, [400, 422], true)) {
+                    throw $e;
+                }
+                $json = $this->call('post', 'payin', ['customer_msisdn' => '+' . $digits] + $body, [], ['wp-subscription-key' => $payerCode]);
+            }
 
             return [
                 'status' => self::normalize(data_get($json, 'data.status') ?? 'pending'),
@@ -540,15 +566,31 @@ class DigitwaceClient
         $json = $res->json() ?? [];
         $code = $this->codeOf($json);
 
-        Log::info('WacePay ' . strtoupper($method) . ' ' . $endpoint, [
+        $failed = ! $res->successful() || ($code !== null && $code !== self::OK);
+        Log::log($failed ? 'warning' : 'info', 'WacePay ' . strtoupper($method) . ' ' . $endpoint, array_filter([
             'http' => $res->status(), 'code' => $code, 'ref' => $data['referenceId'] ?? $headers['referenceId'] ?? $headers['X-Reference-Id'] ?? $data[$this->cfg('fields.transaction.reference')] ?? null,
-        ]);
+            // En cas d'échec : réponse complète de WacePay + champs envoyés (sans valeurs sensibles)
+            'body' => $failed ? mb_substr((string) $res->body(), 0, 1500) : null,
+            'sent' => $failed && $method !== 'get' ? self::redact($data) : null,
+        ], fn ($v) => $v !== null));
 
-        if (! $res->successful() || ($code !== null && $code !== self::OK)) {
+        if ($failed) {
             throw new DigitwaceException('WacePay : ' . $this->errorText($json, $res->status()), $code, $res->status(), $json);
         }
 
         return $json;
+    }
+
+    /** Champs envoyés, numéros masqués (journaux). */
+    public static function redact(array $data): array
+    {
+        foreach ($data as $k => $v) {
+            if (is_scalar($v) && preg_match('/msisdn|phone|wallet|number|email/i', (string) $k)) {
+                $v = (string) $v;
+                $data[$k] = mb_strlen($v) > 6 ? mb_substr($v, 0, 5) . str_repeat('•', mb_strlen($v) - 7) . mb_substr($v, -2) : '•••';
+            }
+        }
+        return $data;
     }
 
     protected function http()
