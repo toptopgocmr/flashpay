@@ -32,7 +32,7 @@
       </div>
       <div class="wp-card">
         <span class="ic fee"><svg viewBox="0 0 24 24"><path d="M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 2.6 4.5 3 4.5 1.3 4.5 3-2 3-4.5 3-4.5-1.3-4.5-3"/></svg></span>
-        <div><small>Frais facturés</small><b>{{ n(S.billed) }} <i>{{ cur }}</i></b><em>Partenaires −{{ n(S.partner_fees) }} · Marge <span :class="S.margin < 0 ? 'neg' : 'pos'">{{ n(S.margin) }}</span></em></div>
+        <div><small>Frais facturés</small><b>{{ n(S.billed) }} <i>{{ cur }}</i></b><em :title="`Frais partenaires −${n(S.partner_fees)} · Gain FlashPay ${n(S.margin)}`">Partenaires −{{ n(S.partner_fees) }} · Gain <span :class="S.margin < 0 ? 'neg' : 'pos'">{{ n(S.margin) }}</span></em></div>
       </div>
       <div class="wp-card">
         <span class="ic rate"><svg viewBox="0 0 24 24"><path d="M6 18L18 6"/><circle cx="7.5" cy="7.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></svg></span>
@@ -93,11 +93,11 @@
       <div class="wp-table">
         <table>
           <colgroup>
-            <col style="width:3%"><col style="width:14%"><col style="width:13%"><col style="width:13%"><col style="width:9%"><col style="width:7%"><col style="width:7%">
-            <col style="width:8%"><col style="width:11%"><col style="width:9%"><col style="width:6%">
+            <col style="width:3%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:8%"><col style="width:6%"><col style="width:8%"><col style="width:7%">
+            <col style="width:7%"><col style="width:10%"><col style="width:9%"><col style="width:6%">
           </colgroup>
           <thead>
-            <tr><th class="c-chk" @click.stop><input type="checkbox" :checked="allChecked" :indeterminate.prop="selected.size > 0 && !allChecked" title="Tout cocher (page)" @change="toggleAll" /></th><th>ID</th><th>Expéditeur</th><th>Bénéficiaire</th><th class="num">Montant</th><th class="num">Frais</th><th class="num" title="Frais prélevés par la passerelle (WacePay / PEEX)">Frais pass.</th><th>Passerelle</th><th>Opérateurs</th><th>Date</th><th></th></tr>
+            <tr><th class="c-chk" @click.stop><input type="checkbox" :checked="allChecked" :indeterminate.prop="selected.size > 0 && !allChecked" title="Tout cocher (page)" @change="toggleAll" /></th><th>ID</th><th>Expéditeur</th><th>Bénéficiaire</th><th class="num">Montant</th><th class="num">Frais</th><th class="num" title="Frais prélevés par les partenaires (WacePay / PEEX) ; « ~ » = estimé avec les tarifs partenaires">Frais part.</th><th class="num" title="Gain FlashPay = frais facturés − frais partenaires">Gain FP</th><th>Passerelle</th><th>Opérateurs</th><th>Date</th><th></th></tr>
           </thead>
           <tbody>
             <tr v-for="t in transactions" :key="t.id" :class="{ sel: selected.has(t.id) }" @click="detail = t">
@@ -108,9 +108,12 @@
               <td class="num"><b>{{ money(t.amount, t.currency) }}</b></td>
               <td class="num">{{ money(t.fee + (t.merchant_fee || 0), t.currency) }}</td>
               <td class="num" :title="partnerTitle(t)">
-                <span v-if="t.costs?.partner_total" class="neg">{{ money(t.costs.partner_total, t.currency) }}</span>
+                <span v-if="t.costs?.partner_total" class="neg"><small v-if="isEstimate(t)" class="est">~</small>{{ money(t.costs.partner_total, t.currency) }}</span>
                 <span v-else-if="t.costs?.legs?.some((l) => l.fee === null && l.status !== 'failed')" class="unk" title="Frais non communiqués par la passerelle">?</span>
                 <span v-else class="muted">0</span>
+              </td>
+              <td class="num" :title="t.status === 'successful' ? 'Facturé ' + money(t.costs?.billed, t.currency) + ' − partenaires ' + money(t.costs?.partner_total, t.currency) : 'Opération non réussie : aucun frais conservé'">
+                <b v-if="t.costs" :class="t.costs.margin < 0 ? 'neg' : t.costs.margin > 0 ? 'pos' : 'muted'">{{ money(t.costs.margin, t.currency) }}</b>
               </td>
               <td class="c-svc">
                 <em v-for="p in gateways(t)" :key="p" :class="'p-' + p.toLowerCase()">{{ p }}</em>
@@ -123,7 +126,7 @@
                 <button title="Reçu (imprimer / PDF)" @click="openReceipt(t.id)"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4"/></svg></button>
               </td>
             </tr>
-            <tr v-if="!loading && !transactions.length"><td colspan="11" class="empty">Aucune transaction pour ces filtres.</td></tr>
+            <tr v-if="!loading && !transactions.length"><td colspan="12" class="empty">Aucune transaction pour ces filtres.</td></tr>
           </tbody>
         </table>
       </div>
@@ -171,11 +174,12 @@
             <div class="kv"><span>Montant</span><b>{{ money(detail.amount, detail.currency) }}</b></div>
             <div class="kv"><span>Frais facturés (FlashPay)</span><b>{{ money(detail.costs?.billed ?? detail.fee, detail.currency) }}</b></div>
             <div class="kv" v-for="l in detail.costs?.legs || []" :key="l.kind + l.reference">
-              <span>Frais {{ l.partner }} · {{ l.kind === 'collect' ? 'collecte' : l.kind === 'payout' ? 'versement' : 'remboursement' }}<small v-if="l.reference" class="mono"> {{ l.reference }}</small></span>
+              <span>Frais {{ l.partner }} · {{ l.kind === 'collect' ? 'collecte' : l.kind === 'payout' ? 'versement' : 'remboursement' }}<small v-if="l.country"> ({{ l.country }})</small><small v-if="l.reference" class="mono"> {{ l.reference }}</small></span>
               <b class="neg" v-if="l.fee !== null">−{{ money(l.fee, l.currency) }}<small v-if="l.fee_source === 'estimate'"> (estimé)</small></b>
               <b class="unk" v-else>non communiqués</b>
             </div>
-            <div class="kv"><span>Marge FlashPay</span><b :class="(detail.costs?.margin ?? 0) < 0 ? 'neg' : 'pos'">{{ money(detail.costs?.margin ?? 0, detail.currency) }}</b></div>
+            <div class="kv tot"><span>Total frais partenaires</span><b class="neg">−{{ money(detail.costs?.partner_total ?? 0, detail.currency) }}<small v-if="isEstimate(detail)"> (estimé)</small></b></div>
+            <div class="kv tot"><span>Gain FlashPay</span><b :class="(detail.costs?.margin ?? 0) < 0 ? 'neg' : 'pos'">{{ money(detail.costs?.margin ?? 0, detail.currency) }}</b></div>
             <div class="kv"><span>Net reçu par le bénéficiaire</span><b class="net">{{ money(netOf(detail), detail.destination_currency || detail.currency) }}</b></div>
           </div>
 
@@ -307,6 +311,8 @@ const opName = (side) => {
   const op = (side.operator || '—').replace(/ Mobile Money| Money/g, '').replace('Wallet FlashPay', 'Wallet').replace('Carte Visa / Mastercard', 'Carte')
   return side.country ? `${op} (${side.country})` : op
 }
+const isEstimate = (t) => (t.costs?.legs || []).some((l) => l.fee_source === 'estimate' && l.status !== 'failed')
+const legsTxt = (t, f) => (t.costs?.legs || []).map(f).filter(Boolean).join(' | ')
 const partnerTitle = (t) => (t.costs?.legs || []).map((l) => `${l.partner} ${l.kind === 'collect' ? 'collecte' : l.kind === 'payout' ? 'versement' : 'remboursement'}${l.country ? ' (' + l.country + ')' : ''} : ${l.fee === null ? 'non communiqués' : n(l.fee) + ' ' + l.currency + (l.fee_source === 'estimate' ? ' (estimé)' : '')}`).join('\n')
 
 const showRates = ref(false)
@@ -452,27 +458,43 @@ async function load(page = 1) {
 watch(() => route.query, () => { syncFromRoute(); load() }, { immediate: true })
 
 // --- Export de la liste (tous les résultats filtrés)
-const legFee = (t, p) => (t.costs?.legs || []).filter((l) => l.partner === p).reduce((a, l) => a + (l.fee || 0), 0)
+const legFee = (t, p) => (t.costs?.legs || []).filter((l) => l.partner === p).reduce((a, l) => a + (l.fee_tx ?? l.fee ?? 0), 0)
+const legKind = (l) => (l.kind === 'collect' ? 'collecte' : l.kind === 'payout' ? 'versement' : 'remboursement')
 const EXP_COLS = [
+  { label: 'ID interne', value: (t) => t.id },
   { label: 'Référence', value: (t) => t.reference },
+  { label: 'Statut', value: (t) => STATUS[t.status] || t.status },
+  { label: 'Étape', value: (t) => t.stage },
   { label: 'Opération', value: (t) => t.journal?.label },
+  { label: 'Type', value: (t) => t.type },
   { label: 'Canal', value: (t) => t.channel_label },
   { label: 'Expéditeur', value: (t) => t.sender?.name },
   { label: 'Compte expéditeur', value: (t) => t.sender?.account || t.source_rail },
+  { label: 'Moyen débité', value: (t) => t.source_rail },
+  { label: 'Opérateur débité', value: (t) => opName(t.gateway?.in) },
   { label: 'Bénéficiaire', value: (t) => t.beneficiary?.name },
   { label: 'Compte bénéficiaire', value: (t) => t.beneficiary?.account || t.destination_rail },
+  { label: 'Moyen crédité', value: (t) => t.destination_rail },
+  { label: 'Opérateur crédité', value: (t) => opName(t.gateway?.out) },
   { label: 'Service', value: (t) => svc(t) },
-  { label: 'Partenaire', value: (t) => partnerOf(t) || 'Interne FlashPay' },
+  { label: 'Passerelle', value: (t) => gateways(t).join(' + ') || 'Interne FlashPay' },
   { label: 'Track ID PEEX', value: (t) => (t.gateway?.track_ids || []).join(' ') },
+  { label: 'Réf. externe source', value: (t) => t.source_external_ref },
+  { label: 'Réf. externe destination', value: (t) => t.destination_external_ref },
   { label: 'Montant', value: (t) => t.amount },
   { label: 'Devise', value: (t) => t.currency },
-  { label: 'Frais facturés', value: (t) => t.costs?.billed ?? t.fee },
+  { label: 'Frais client', value: (t) => t.fee || 0 },
+  { label: 'Commission marchand', value: (t) => t.merchant_fee || 0 },
+  { label: 'Frais facturés FlashPay', value: (t) => t.costs?.billed ?? t.fee },
   { label: 'Frais PEEX', value: (t) => legFee(t, 'PEEX') },
   { label: 'Frais WacePay', value: (t) => legFee(t, 'WacePay') },
-  { label: 'Marge FlashPay', value: (t) => t.costs?.margin ?? '' },
+  { label: 'Frais partenaires (total)', value: (t) => t.costs?.partner_total ?? 0 },
+  { label: 'Origine frais partenaires', value: (t) => (!t.costs?.legs?.length ? 'Aucun (interne)' : isEstimate(t) ? 'Estimé (tarifs partenaires)' : t.costs.complete ? 'Communiqué par le partenaire' : 'Partiel') },
+  { label: 'Détail frais partenaires', value: (t) => legsTxt(t, (l) => `${l.partner} ${legKind(l)}${l.country ? ' ' + l.country : ''} : ${l.fee === null ? 'n.c.' : l.fee + ' ' + l.currency}${l.fee_source === 'estimate' ? ' (estimé)' : ''}`) },
+  { label: 'Gain FlashPay', value: (t) => t.costs?.margin ?? '' },
+  { label: 'Montant reçu', value: (t) => t.destination_amount ?? t.amount },
   { label: 'Net bénéficiaire', value: (t) => netOf(t) },
   { label: 'Devise reçue', value: (t) => t.destination_currency || t.currency },
-  { label: 'Statut', value: (t) => STATUS[t.status] || t.status },
   { label: 'Motif échec', value: (t) => t.failure_reason },
   { label: 'Date', value: (t) => fmtDate(t.created_at) },
   { label: 'Finalisée le', value: (t) => fmtDate(t.completed_at) },
@@ -538,6 +560,8 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 .wp-table tbody tr:hover td { background: #f9fafb; }
 .num { text-align: right; }
 .muted { color: var(--t3); }
+.est { color: var(--t3); font-size: 10px; margin-right: 1px; }
+.kv.tot { border-top: 1px dashed var(--line); margin-top: 2px; padding-top: 7px; }
 .net { color: #16a34a; } .pos { color: #16a34a; } .neg { color: #dc2626; } .unk { color: #b45309; }
 .c-code b, .c-who b { display: block; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: 12.5px; }
 .c-code b { font-size: 12px; letter-spacing: .2px; }

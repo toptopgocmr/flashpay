@@ -85,7 +85,7 @@
         <div><small>Montant</small><b>{{ money(t.amount, t.currency) }}</b></div>
         <div><small>Frais client</small><b>{{ money((t.fee || 0) + (t.merchant_fee || 0), t.currency) }}</b></div>
         <div v-if="t.costs"><small>Frais partenaires</small><b class="neg">−{{ money(t.costs.partner_total || 0, t.currency) }}</b></div>
-        <div v-if="t.costs"><small>Marge FlashPay</small><b :class="t.costs.margin < 0 ? 'neg' : 'pos'">{{ money(t.costs.margin, t.currency) }}</b></div>
+        <div v-if="t.costs"><small>Gain FlashPay</small><b :class="t.costs.margin < 0 ? 'neg' : 'pos'">{{ money(t.costs.margin, t.currency) }}</b></div>
         <div><small>Net bénéficiaire</small><b class="pos">{{ money(net, t.destination_currency || t.currency) }}</b></div>
       </div>
 
@@ -132,7 +132,7 @@
               </tbody>
               <tfoot>
                 <tr>
-                  <td colspan="5"><b>Marge FlashPay</b> <small>= facturé − frais partenaires</small></td>
+                  <td colspan="5"><b>Gain FlashPay</b> <small>= facturé − frais partenaires</small></td>
                   <td class="num" :class="t.costs.margin < 0 ? 'neg' : 'pos'"><b>{{ n(t.costs.margin) }} {{ t.costs.currency }}</b></td>
                 </tr>
               </tfoot>
