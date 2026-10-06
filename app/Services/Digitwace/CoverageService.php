@@ -48,7 +48,7 @@ class CoverageService
             }
             $row = $this->normalize($p);
             if (! $row['country'] || ! $row['payer_code']) {
-                $unknown[] = (string) ($p['country'] ?? $p['countryCode'] ?? $p['__country'] ?? json_encode($p));
+                $unknown[] = self::pick($p, ['name', 'country', 'countryCode', '__country']) ?? mb_substr(json_encode($p), 0, 80);
                 continue;
             }
             WacepayCoverage::updateOrCreate(
@@ -70,11 +70,49 @@ class CoverageService
         return ['payers' => count($flat), 'countries' => count($seen), 'added' => $added, 'skipped' => $skipped, 'unknown' => array_values(array_unique($unknown))];
     }
 
+    /** Première valeur texte trouvée (les objets {code, name…} sont lus à l'intérieur). */
+    public static function pick(array $p, array $keys): ?string
+    {
+        foreach ($keys as $k) {
+            $v = data_get($p, $k);
+            if (is_array($v)) {
+                $v = collect(['code', 'iso2', 'isoCode', 'countryCode', 'alpha2', 'name', 'label', 'value'])
+                    ->map(fn ($kk) => $v[$kk] ?? null)->first(fn ($x) => is_scalar($x) && $x !== '');
+            }
+            if (is_scalar($v) && (string) $v !== '' && ! is_bool($v)) {
+                return (string) $v;
+            }
+        }
+        return null;
+    }
+
+    /** Pays ISO2 d'un service / payeur WacePay (code, objet pays, ou « MTN (CONGO) » / « Congo (CG) »). */
+    public static function countryOf(array $p): ?string
+    {
+        foreach (['countryCode', 'country_code', 'iso2', 'countryIso', 'iso', '__country', 'country', 'countryName', 'country_name'] as $k) {
+            $v = self::pick($p, [$k]);
+            if ($v && ($iso = CountryReference::iso2(trim(preg_replace('/\s*\(.*\)\s*/', '', $v))) ?? (preg_match('/\(([A-Z]{2})\)/i', $v, $m) ? strtoupper($m[1]) : null))) {
+                return $iso;
+            }
+        }
+        foreach (['name', 'serviceName', 'label', 'description'] as $k) {
+            $v = self::pick($p, [$k]);
+            if ($v && preg_match('/\(([^)]+)\)/', $v, $m)) {
+                $inner = trim($m[1]);
+                $iso = strlen($inner) === 2 ? strtoupper($inner) : CountryReference::iso2($inner);
+                if ($iso) {
+                    return $iso;
+                }
+            }
+        }
+        return null;
+    }
+
     /** Champs WacePay (noms variables) → ligne de couverture. */
     public function normalize(array $p): array
     {
-        $get = fn (array $keys) => collect($keys)->map(fn ($k) => data_get($p, $k))->first(fn ($v) => $v !== null && $v !== '');
-        $country = CountryReference::iso2($get(['countryCode', 'country_code', 'iso2', 'countryIso', 'iso', 'country', '__country', 'country.code', 'country.iso2']));
+        $get = fn (array $keys) => self::pick($p, $keys);
+        $country = self::countryOf($p);
         $type = strtolower((string) $get(['type', 'payerType', 'payer_type', 'method', 'paymentMethod', 'category']));
         $method = match (true) {
             str_contains($type, 'bank') || str_contains($type, 'banque') => 'bank',
@@ -83,8 +121,16 @@ class CoverageService
         };
 
         // Services : drapeaux explicites ou liste de types de transactions
-        $services = strtoupper(json_encode($get(['services', 'operations', 'transactionTypes', 'transaction_types', 'products', 'flows']) ?? ''));
-        $flag = fn (array $keys) => ($v = $get($keys)) === null ? null : filter_var($v, FILTER_VALIDATE_BOOLEAN);
+        $services = strtoupper((string) json_encode(collect(['services', 'operations', 'transactionTypes', 'transaction_types', 'products', 'flows'])->map(fn ($k) => data_get($p, $k))->first(fn ($v) => $v !== null && $v !== '') ?? ''));
+        $flag = function (array $keys) use ($p) {
+            foreach ($keys as $k) {
+                $v = data_get($p, $k);
+                if (is_bool($v) || is_scalar($v)) {
+                    return filter_var($v, FILTER_VALIDATE_BOOLEAN);
+                }
+            }
+            return null;
+        };
         $payin = $flag(['payin', 'payIn', 'isPayin', 'canPayin', 'collection', 'collect'])
             ?? (str_contains($services, 'PAYIN') || str_contains($services, 'COLLECT') ? true : null);
         $payout = $flag(['payout', 'payOut', 'isPayout', 'canPayout', 'disbursement', 'remittance'])

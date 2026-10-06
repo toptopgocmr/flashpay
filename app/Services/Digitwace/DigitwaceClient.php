@@ -157,18 +157,21 @@ class DigitwaceClient
                 if (! is_array($svc)) {
                     continue;
                 }
-                $id = $svc['id'] ?? $svc['_id'] ?? $svc['serviceId'] ?? $svc['subscriptionId'] ?? $svc['subscriptionKey'] ?? $svc['code'] ?? null;
+                $id = CoverageService::pick($svc, ['id', '_id', 'serviceId', 'service_id', 'subscriptionId', 'subscriptionKey', 'uuid']);
                 if ($id === null || $id === '') {
                     continue;
                 }
-                $iso = CountryReference::iso2(collect(['countryCode', 'country_code', 'iso2', 'country.code', 'country.iso2', 'country.countryCode', 'country'])
-                    ->map(fn ($k) => data_get($svc, $k))->first(fn ($v) => is_string($v) && $v !== ''));
+                $iso = CoverageService::countryOf($svc);
                 if ($country && $iso && $iso !== strtoupper($country)) {
                     continue;
                 }
                 $k = (string) $id;
                 $prev = $out[$k] ?? null;
-                $out[$k] = ($prev ?? $svc) + ['payerCode' => $k, 'countryCode' => $iso];
+                $out[$k] = ['payerCode' => $k, 'countryCode' => $iso,
+                    'payerName' => CoverageService::pick($svc, ['name', 'serviceName', 'label', 'operator']),
+                    'operatorCode' => CoverageService::pick($svc, ['operator', 'operatorCode', 'provider', 'network', 'paymentMethod']),
+                    'currency' => CoverageService::pick($svc, ['currency', 'currencyCode', 'country.currency']),
+                    'type' => 'wallet'] + ($prev ?? []) + ['raw_service' => $svc];
                 $out[$k]['payin'] = ($prev['payin'] ?? false) || $flow === 'payin';
                 $out[$k]['payout'] = ($prev['payout'] ?? false) || $flow === 'payout';
             }

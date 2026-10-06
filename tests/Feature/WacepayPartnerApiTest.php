@@ -138,4 +138,38 @@ class WacepayPartnerApiTest extends TestCase
         $this->assertSame('failed', $f['status']);
         $this->assertStringContainsString('Insufficient', $f['message']);
     }
+
+    public function test_sync_with_nested_service_objects(): void
+    {
+        Http::fake(function ($req) {
+            $u = $req->url();
+            return match (true) {
+                str_ends_with($u, 'payments/get-token') => Http::response(['token' => 'TOK']),
+                str_ends_with($u, 'payments/services') => Http::response(['data' => [
+                    ['id' => '08f9e464', 'name' => 'MTN (CONGO)', 'operator' => ['code' => 'MTN', 'name' => 'MTN'], 'rate' => 2, 'isActive' => true],
+                    ['id' => '4ccafdec', 'name' => 'Airtel Money (GABON)', 'description' => 'Airtel payment', 'country' => ['name' => 'Gabon', 'code' => 'GA'], 'currency' => ['code' => 'XAF']],
+                ]]),
+                str_ends_with($u, 'payout/services') => Http::response(['data' => [
+                    ['id' => '758772c5', 'name' => 'Airtel Money', 'operator' => 'AIRTEL', 'country' => 'Congo (CG)', 'fees' => 0, 'minimum' => 100, 'maximum' => 500000, 'status' => 'Active'],
+                    ['id' => '416b6112', 'name' => 'Orange', 'operator' => 'ORANGE', 'country' => ['name' => 'Cameroun', 'iso2' => 'CM']],
+                ]]),
+                default => Http::response([], 404),
+            };
+        });
+        $admin = User::create(['full_name' => 'Super', 'phone' => '242069990079', 'password' => bcrypt('x'), 'status' => 'active']);
+        $admin->assignRole('super_admin');
+        $r = $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors-sync/wacepay')->assertOk()->json();
+        $this->assertSame(3, $r['countries'], json_encode($r));
+        $this->assertSame([], $r['unknown']);
+        $cov = \App\Models\WacepayCoverage::orderBy('payer_code')->get()->keyBy('payer_code');
+        $this->assertSame('CG', $cov['08f9e464']->country);
+        $this->assertTrue((bool) $cov['08f9e464']->payin);
+        $this->assertSame('GA', $cov['4ccafdec']->country);
+        $this->assertSame('CG', $cov['758772c5']->country);
+        $this->assertTrue((bool) $cov['758772c5']->payout);
+        $this->assertSame('CM', $cov['416b6112']->country);
+        $this->assertSame('MTN', app(\App\Services\Digitwace\DigitwaceClient::class)->operatorFor('08f9e464'));
+        $svc = $this->getJson('/api/admin/wacepay/services')->assertOk()->json('services');
+        $this->assertSame('AIRTEL', collect($svc)->firstWhere('id', '758772c5')['operator']);
+    }
 }

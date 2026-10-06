@@ -63,15 +63,16 @@ class WacepayAdminController extends Controller
         } catch (DigitwaceException $e) {
             return response()->json(['message' => $e->getMessage()], 502);
         }
+        $P = fn (array $s, array $k) => \App\Services\Digitwace\CoverageService::pick($s, $k);
         $out = collect($rows)->filter(fn ($s) => is_array($s))->map(fn ($s) => [
-            'id' => (string) ($s['payerCode'] ?? $s['id'] ?? ''),
-            'name' => (string) ($s['name'] ?? $s['serviceName'] ?? $s['label'] ?? $s['payerName'] ?? ''),
-            'country' => $s['countryCode'] ?? null,
-            'currency' => is_scalar($s['currency'] ?? null) ? strtoupper((string) $s['currency']) : null,
-            'operator' => is_scalar($s['operator'] ?? null) ? strtoupper((string) $s['operator']) : null,
+            'id' => (string) $P($s, ['payerCode', 'id']),
+            'name' => (string) $P($s, ['payerName', 'name', 'serviceName', 'label']),
+            'country' => $s['countryCode'] ?? \App\Services\Digitwace\CoverageService::countryOf($s),
+            'currency' => ($c = $P($s, ['currency', 'currencyCode'])) ? strtoupper(substr($c, 0, 3)) : null,
+            'operator' => ($o = $P($s, ['operatorCode', 'operator'])) ? strtoupper($o) : null,
             'payin' => (bool) ($s['payin'] ?? false),
             'payout' => (bool) ($s['payout'] ?? false),
-            'status' => is_scalar($s['status'] ?? null) ? (string) $s['status'] : null,
+            'status' => $P($s['raw_service'] ?? $s, ['status']),
         ])->values();
         Cache::put('wacepay:services', $out->all(), now()->addHours(6));
 

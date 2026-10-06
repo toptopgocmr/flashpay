@@ -85,6 +85,35 @@ class CountryReference
     ];
 
     /** Code pays WacePay (ISO2, ISO3 ou nom) → ISO2. */
+    /** Noms courants (fr / en) des pays du catalogue FlashPay. */
+    public const NAMES = [
+        'CONGO' => 'CG', 'CONGO-BRAZZAVILLE' => 'CG', 'CONGO BRAZZAVILLE' => 'CG', 'REPUBLIC OF CONGO' => 'CG', 'REPUBLIQUE DU CONGO' => 'CG', 'CONGO REPUBLIC' => 'CG',
+        'RD CONGO' => 'CD', 'RDC' => 'CD', 'DRC' => 'CD', 'CONGO RDC' => 'CD', 'CONGO-KINSHASA' => 'CD', 'CONGO KINSHASA' => 'CD', 'DEMOCRATIC REPUBLIC OF CONGO' => 'CD', 'DEMOCRATIC REPUBLIC OF THE CONGO' => 'CD', 'REPUBLIQUE DEMOCRATIQUE DU CONGO' => 'CD',
+        'CAMEROUN' => 'CM', 'CAMEROON' => 'CM', 'GABON' => 'GA', 'TCHAD' => 'TD', 'CHAD' => 'TD',
+        'CENTRAFRIQUE' => 'CF', 'CENTRAL AFRICAN REPUBLIC' => 'CF', 'REPUBLIQUE CENTRAFRICAINE' => 'CF',
+        'GUINEE EQUATORIALE' => 'GQ', 'EQUATORIAL GUINEA' => 'GQ', 'SENEGAL' => 'SN', "COTE D'IVOIRE" => 'CI', 'COTE DIVOIRE' => 'CI', 'IVORY COAST' => 'CI',
+        'MALI' => 'ML', 'BURKINA FASO' => 'BF', 'BURKINA' => 'BF', 'BENIN' => 'BJ', 'TOGO' => 'TG', 'NIGER' => 'NE',
+        'GUINEE-BISSAU' => 'GW', 'GUINEE BISSAU' => 'GW', 'GUINEA-BISSAU' => 'GW', 'GUINEA BISSAU' => 'GW', 'GUINEE' => 'GN', 'GUINEA' => 'GN',
+    ];
+
+    public static function fromName(?string $name): ?string
+    {
+        $n = trim((string) $name);
+        if ($n === '') {
+            return null;
+        }
+        $n = strtoupper(preg_replace('/\s+/', ' ', str_replace(['’', '`'], "'", iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $n) ?: $n)));
+        if (isset(self::NAMES[$n])) {
+            return self::NAMES[$n];
+        }
+        foreach (self::COUNTRIES as $iso => $row) {
+            if (strtoupper(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $row[0]) ?: $row[0]) === $n) {
+                return $iso;
+            }
+        }
+        return null;
+    }
+
     public static function iso2(?string $code): ?string
     {
         $c = strtoupper(trim((string) $code));
@@ -104,12 +133,7 @@ class CountryReference
                 }
             }
         }
-        foreach (self::COUNTRIES as $iso => $row) {
-            if (mb_strtoupper($row[0]) === mb_strtoupper(trim((string) $code))) {
-                return $iso;
-            }
-        }
-        return null;
+        return self::fromName($code);
     }
 
     /** Drapeau emoji à partir du code ISO2. */

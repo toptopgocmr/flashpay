@@ -24,10 +24,10 @@
           </div>
           <div class="gw-rows">
             <div class="gw-row"><span class="gw-dot" :class="{ off: !p.flows.includes('collect') }"></span>
-              <div class="gw-main"><b>Collecte</b></div>
+              <div class="gw-main"><b>Collecte</b><small v-if="p.key === 'digitwace' && p.coverage_countries">{{ p.coverage_payin }} pays disponibles · choisir WacePay dans la liste des pays</small></div>
               <div class="gw-end"><b>{{ p.flows.includes('collect') ? n(p.collect_countries) + ' pays' : '—' }}</b></div></div>
             <div class="gw-row"><span class="gw-dot" :class="{ off: !p.payout_countries }"></span>
-              <div class="gw-main"><b>Versement</b></div>
+              <div class="gw-main"><b>Versement</b><small v-if="p.key === 'digitwace' && p.coverage_countries">{{ p.coverage_payout }} pays disponibles</small></div>
               <div class="gw-end"><b>{{ n(p.payout_countries) }} pays</b></div></div>
             <template v-if="p.key === 'digitwace'">
               <div class="gw-row"><span class="gw-dot" :class="{ off: !p.coverage_countries }"></span>
