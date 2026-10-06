@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Chat support</h1></div>
+      <div><h1>Chat support</h1><p>Messages, notes vocales et appels des clients avec le support FlashPay.</p></div>
       <div class="actions"><button class="btn-normal" @click="loadList">Actualiser</button></div>
     </div>
     <div class="sc-grid">

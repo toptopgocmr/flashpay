@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <div>
-        <h1>Grille tarifaire</h1>
+        <h1>Grille tarifaire</h1><p>Frais facturés par opération, par zone (national, régional, international) et par palier.</p>
       </div>
       <div class="actions">
         <button class="btn-normal" @click="load">Actualiser</button>
@@ -164,6 +164,7 @@
 </template>
 
 <script setup>
+import { confirmBox } from '../utils/ui'
 import IconAction from '../components/IconAction.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
@@ -263,7 +264,7 @@ async function toggle(t, active) {
   try { await api.post(`/admin/tariffs/${t.id}/active`, { active }); t.active = active; await load() } catch (e) { error.value = e.response?.data?.message || e.message }
 }
 async function remove(t) {
-  if (!window.confirm(`Supprimer ce palier (${operations.value[t.operation_type]}, ${scopeLabel[t.scope]}) ?`)) return
+  if (!(await confirmBox(`${operations.value[t.operation_type]} · ${scopeLabel[t.scope]}`, { title: 'Supprimer ce palier de frais ?', confirmLabel: 'Supprimer', danger: true }))) return
   await api.delete(`/admin/tariffs/${t.id}`)
   msg.value = 'Palier supprimé.'
   await load()

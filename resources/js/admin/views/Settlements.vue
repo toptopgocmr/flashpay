@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <div>
-        <h1>Règlements marchands</h1>
+        <h1>Règlements marchands</h1><p>Virements bancaires et versements mobile money demandés par les marchands, à exécuter et confirmer.</p>
       </div>
       <div class="actions">
         <ExportButton filename="reglements-bancaires" :columns="EXP_COLS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>

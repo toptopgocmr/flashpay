@@ -248,6 +248,7 @@
 </template>
 
 <script setup>
+import { confirmBox, toast } from '../utils/ui'
 import PeexRefund from '../components/PeexRefund.vue'
 import ExportButton from '../components/ExportButton.vue'
 import Modal from '../components/Modal.vue'
@@ -424,9 +425,9 @@ function toggleAll() {
   else transactions.value.forEach((t) => s.add(t.id))
   selected.value = s
 }
-function printReceipts() {
+async function printReceipts() {
   const ids = selected.value.size ? [...selected.value] : transactions.value.map((t) => t.id)
-  if (ids.length > 100 && !window.confirm('Seuls les 100 premiers reçus seront imprimés. Continuer ?')) return
+  if (ids.length > 100 && !(await confirmBox('Seuls les 100 premiers reçus seront imprimés.', { title: 'Imprimer les reçus', confirmLabel: 'Continuer' }))) return
   openReceipts(ids)
 }
 function quickStatus(s) {
@@ -449,7 +450,7 @@ async function load(page = 1) {
     if (detail.value) detail.value = data.data.find((x) => x.id === detail.value.id) || detail.value
     refreshedAt.value = new Date().toLocaleTimeString('fr-FR')
   } catch (e) {
-    window.alert(e.response?.data?.message || 'Impossible de charger les transactions.')
+    if (e.response && e.response.status < 500) toast(e.response.data?.message || 'Impossible de charger les transactions.', 'err')
   } finally {
     loading.value = false
   }

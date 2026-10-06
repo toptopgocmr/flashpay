@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <div>
-        <h1>Caissiers</h1>
+        <h1>Caissiers</h1><p>Caissiers des marchands : encaissements du jour et total, révocation ou réactivation.</p>
       </div>
       <div class="actions">
         <ExportButton filename="caissiers" :columns="EXP_COLS" :fetch="expFetch" />

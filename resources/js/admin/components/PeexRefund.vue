@@ -107,6 +107,7 @@
 </template>
 
 <script setup>
+import { confirmBox } from '../utils/ui'
 import { computed, onMounted, reactive, ref } from 'vue'
 import Modal from './Modal.vue'
 import api from '../services/api'
@@ -167,7 +168,7 @@ async function load() {
 async function submit() {
   error.value = ''; ok.value = ''
   const to = f.api === 'bank' ? 'IBAN ' + f.bank_iban : f.mobile_phone
-  if (!confirm(`Envoyer ${money(f.amount, f.api === 'disbursement' ? f.currency : f.from_currency)} à ${f.first_name} ${f.last_name} (${to}) via PEEX ?`)) return
+  if (!(await confirmBox(`${money(f.amount, f.api === 'disbursement' ? f.currency : f.from_currency)} à ${f.first_name} ${f.last_name} (${to}).`, { title: 'Envoyer le remboursement via PEEX ?', confirmLabel: 'Envoyer' }))) return
   busy.value = true
   try {
     const body = { ...payload.value, api: f.api, reason: f.reason, aml_cft: f.aml_cft }

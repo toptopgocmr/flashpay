@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Centre de notifications</h1></div>
+      <div><h1>Centre de notifications</h1><p>Alertes de la plateforme : KYC, float, fraude, incidents de passerelle et paiements finalisés.</p></div>
       <div class="actions">
         <ExportButton filename="notifications" :columns="EXP_COLS" :fetch="expFetch" />
         <button class="btn-normal" :disabled="loading" @click="load">{{ loading ? 'Actualisation…' : 'Actualiser' }}</button>

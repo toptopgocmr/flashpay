@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <div>
-        <h1>Marchands</h1>
+        <h1>Marchands</h1><p>Comptes marchands : validation, points de vente, caissiers et règlements.</p>
       </div>
       <div class="actions">
         <ExportButton filename="marchands" :columns="EXP_COLS" :fetch="expFetch" />

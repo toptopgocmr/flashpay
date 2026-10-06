@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Litiges & support</h1></div>
+      <div><h1>Litiges & support</h1><p>Contestations et tickets des utilisateurs, avec leurs délais de traitement.</p></div>
       <div class="actions">
         <ExportButton :filename="tab === 'disputes' ? 'contestations' : 'tickets-support'" :columns="tab === 'disputes' ? EXP_DISPUTES : EXP_TICKETS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>

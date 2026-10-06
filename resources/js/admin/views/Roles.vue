@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <div>
-        <h1>Rôles & habilitations</h1>
+        <h1>Rôles & habilitations</h1><p>Droits de chaque profil dans l'application et dans la console.</p>
       </div>
       <div class="actions">
         <button class="btn-normal" @click="load">Actualiser</button>

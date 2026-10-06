@@ -6,6 +6,7 @@
 </template>
 
 <script setup>
+import { toast } from '../utils/ui'
 // Export de liste : récupère TOUTES les lignes correspondant aux filtres (toutes les pages), puis télécharge un fichier Excel (.xlsx), avec repli CSV.
 import { ref } from 'vue'
 import { downloadCsv, downloadXlsx } from '../utils/export'
@@ -25,7 +26,7 @@ async function run() {
   try {
     const rows = await props.fetch((p, last) => { progress.value = last > 1 ? `${p}/${last}` : '' })
     if (!rows.length) {
-      alert('Aucune ligne à exporter pour ces filtres.')
+      toast('Aucune ligne à exporter pour ces filtres.', 'info')
       return
     }
     try {
@@ -35,7 +36,7 @@ async function run() {
       downloadCsv(props.filename, props.columns, rows)
     }
   } catch (e) {
-    alert('Export impossible : ' + (e.response?.data?.message || e.message))
+    toast('Export impossible : ' + (e.response?.data?.message || e.message), 'err')
   } finally {
     busy.value = false
   }

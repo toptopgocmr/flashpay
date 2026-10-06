@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Approvisionnements agents</h1></div>
+      <div><h1>Approvisionnements agents</h1><p>Demandes de float des agents : vérifiez la preuve de paiement puis approuvez ou refusez.</p></div>
       <div class="actions">
         <ExportButton filename="approvisionnements" :columns="EXP_COLS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>

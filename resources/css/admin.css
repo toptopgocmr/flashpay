@@ -505,3 +505,15 @@ button.gw-stat { cursor: pointer; } button.gw-stat:hover { border-color: var(--b
   .side-open-btn { display: inline-flex; }
   .main, .shell.collapsed .main { margin-left: 0; padding: 60px 14px 40px; }
 }
+
+/* ------------------------------------------------ Finitions communes (oct. 2026) */
+.page-header { margin-bottom: 18px; }
+.page-header p { font-size: 13.5px; line-height: 1.5; }
+.container-head h3 .counter { font-size: 13px; }
+.container-foot.st-foot, .container-foot:has(.btn) { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
+tbody tr { transition: background .12s; }
+.empty { display: grid; gap: 4px; justify-items: center; }
+.empty strong { margin-bottom: 0; }
+.btn:focus-visible, .btn-normal:focus-visible, .btn-link:focus-visible, button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.card h3:first-child, .container-head h3 { letter-spacing: -.005em; }
+.flash { align-items: center; }

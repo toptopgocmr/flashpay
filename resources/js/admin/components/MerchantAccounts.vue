@@ -47,6 +47,7 @@
 </template>
 
 <script setup>
+import { confirmBox } from '../utils/ui'
 import IconAction from './IconAction.vue'
 import { onMounted, reactive, ref } from 'vue'
 import Modal from './Modal.vue'
@@ -82,7 +83,7 @@ async function run(fn, ok) {
 const add = () => run(() => api.post(base, Object.fromEntries(Object.entries(f).filter(([, v]) => v !== ''))), 'Canal ajouté.')
   .then(() => { if (!error.value) Object.assign(f, { phone: '', bank_name: '', account_holder: '', account_number: '', swift: '', is_default: false }) })
 const setDefault = (a) => run(() => api.post(`${base}/${a.id}/default`))
-const remove = (a) => { if (confirm(`Supprimer « ${a.type_label} » ?`)) run(() => api.delete(`${base}/${a.id}`)) }
+const remove = async (a) => { if (await confirmBox('Les règlements ne pourront plus être envoyés vers ce compte.', { title: `Supprimer « ${a.type_label} » ?`, confirmLabel: 'Supprimer', danger: true })) run(() => api.delete(`${base}/${a.id}`)) }
 
 onMounted(load)
 </script>

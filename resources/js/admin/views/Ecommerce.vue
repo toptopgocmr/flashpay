@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>E-commerce & API</h1></div>
+      <div><h1>E-commerce & API</h1><p>Intégrations des marchands en ligne : clés API, payment intents et webhooks.</p></div>
       <div class="actions">
         <a class="btn-normal" href="/docs/api-ecommerce" target="_blank">Documentation API</a>
         <ExportButton label="Exporter les intégrations" filename="integrations-ecommerce" :columns="EXP_COLS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>
@@ -93,6 +93,7 @@
 </template>
 
 <script setup>
+import { confirmBox, promptBox } from '../utils/ui'
 import ExportButton from '../components/ExportButton.vue'
 import { fetchAllPages, fmtDate, fmtPhone } from '../utils/export'
 import IconAction from '../components/IconAction.vue'
@@ -111,13 +112,18 @@ async function load() {
 }
 async function openDetail(r) { detail.value = (await api.get(`/admin/ecommerce/integrations/${r.merchant_id}`)).data }
 async function validate(r, action) {
-  const note = prompt(action === 'validate' ? 'Note (ex. intégration vérifiée avec le développeur du marchand)' : 'Motif de l\'annulation') ?? ''
+  const note = await promptBox(action === 'validate' ? 'Note (facultative)' : 'Motif de l\'annulation', {
+    title: action === 'validate' ? 'Valider l\'intégration' : 'Annuler la validation',
+    placeholder: action === 'validate' ? 'Ex. intégration vérifiée avec le développeur du marchand' : '',
+    required: action !== 'validate', danger: action !== 'validate',
+  })
+  if (note === null) return
   await api.post(`/admin/ecommerce/integrations/${r.merchant_id}`, { action, note })
   detail.value = null
   load()
 }
 async function revoke(k) {
-  if (!confirm(`Révoquer la clé ${k.public_key} de ${k.merchant} ? Les appels API seront refusés immédiatement.`)) return
+  if (!(await confirmBox(`Les appels API avec ${k.public_key} seront refusés immédiatement.`, { title: `Révoquer la clé de ${k.merchant} ?`, confirmLabel: 'Révoquer', danger: true }))) return
   await api.post(`/admin/api-keys/${k.id}/revoke`)
   load()
 }

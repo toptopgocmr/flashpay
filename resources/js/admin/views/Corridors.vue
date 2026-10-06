@@ -226,6 +226,7 @@
 </template>
 
 <script setup>
+import { confirmBox } from '../utils/ui'
 import IconAction from '../components/IconAction.vue'
 import GwHead from '../components/GwHead.vue'
 import GwField from '../components/GwField.vue'
@@ -332,9 +333,9 @@ const rowErr = reactive({})
 const custom = reactive({})
 // Passerelle du pays : la même pour tous les flux, sinon « Mixte » (réglage par flux)
 const gw = (c) => (c.collect_partner === c.payout_partner ? c.collect_partner : 'mixed')
-function setGateway(c, partner) {
+async function setGateway(c, partner) {
   if (partner === gw(c)) return
-  if (!confirm(`Confier TOUS les flux de ${c.name} à ${partnerName(partner)} ?\n\nCollecte, versements, vérifications de compte et contrôles de solde passeront par ${partnerName(partner)}. Les opérations en cours restent chez l'ancien partenaire.`)) return load()
+  if (!(await confirmBox(`Collecte, versements, vérifications de compte et contrôles de solde passeront par ${partnerName(partner)}. Les opérations en cours restent chez l'ancien partenaire.`, { title: `Confier tous les flux de ${c.name} à ${partnerName(partner)} ?`, confirmLabel: 'Confier les flux' }))) return load()
   run(() => api.post(`/admin/corridors/${c.country}`, { partner }), c.country)
 }
 let toastTimer = null
@@ -360,11 +361,11 @@ async function run(fn, country = null) {
     await load()
   }
 }
-function update(c, patch) {
-  if (patch.payout === false && !confirm(`Fermer les versements vers ${c.name} ? Les envois vers ce pays seront refusés.`)) return load()
-  if (patch.collect === false && !confirm(`Fermer la collecte depuis ${c.name} ?`)) return load()
+async function update(c, patch) {
+  if (patch.payout === false && !(await confirmBox('Les envois vers ce pays seront refusés.', { title: `Fermer les versements vers ${c.name} ?`, confirmLabel: 'Fermer', danger: true }))) return load()
+  if (patch.collect === false && !(await confirmBox('Les recharges et paiements depuis ce pays seront refusés.', { title: `Fermer la collecte depuis ${c.name} ?`, confirmLabel: 'Fermer', danger: true }))) return load()
   if (patch.payout_partner && patch.payout_partner !== c.payout_partner
-    && !confirm(`Confier les versements vers ${c.name} à ${partnerName(patch.payout_partner)} (au lieu de ${partnerName(c.payout_partner)}) ?\n\nLes nouveaux envois vers ce pays passeront par ce partenaire ; les opérations en cours restent chez l'ancien.`)) return load()
+    && !(await confirmBox(`Les nouveaux envois vers ce pays passeront par ${partnerName(patch.payout_partner)} (au lieu de ${partnerName(c.payout_partner)}) ; les opérations en cours restent chez l'ancien.`, { title: `Changer le partenaire de versement de ${c.name} ?`, confirmLabel: 'Changer' }))) return load()
   run(() => api.post(`/admin/corridors/${c.country}`, patch), c.country)
 }
 const reset = (c) => run(() => api.delete(`/admin/corridors/${c.country}`))
@@ -378,7 +379,7 @@ async function saveRate(r, isNew = false) {
   if (isNew && !error.value) Object.assign(add, { quote: '', rate: null })
 }
 const toggleRate = (r, active) => run(() => api.post(`/admin/fx-rates/${r.id}/active`, { active }))
-const removeRate = (r) => { if (confirm(`Supprimer le taux ${r.base} → ${r.quote} ?`)) run(() => api.delete(`/admin/fx-rates/${r.id}`)) }
+const removeRate = async (r) => { if (await confirmBox('Les conversions utiliseront le taux par défaut ou seront refusées.', { title: `Supprimer le taux ${r.base} → ${r.quote} ?`, confirmLabel: 'Supprimer', danger: true })) run(() => api.delete(`/admin/fx-rates/${r.id}`)) }
 
 onMounted(load)
 </script>

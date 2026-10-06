@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Validation KYC</h1></div>
+      <div><h1>Validation KYC</h1><p>Pièces d'identité, selfies et documents marchands à vérifier ; la validation relève les paliers et les plafonds.</p></div>
       <div class="actions">
         <ExportButton filename="kyc" :columns="EXP_COLS" :fetch="expFetch" /><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>

@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Mini-programmes</h1></div>
+      <div><h1>Mini-programmes</h1><p>Services de partenaires intégrés à l'application (recharges, billetterie, services publics) : publication et suspension.</p></div>
       <div class="actions"><button class="btn" @click="edit = { category: 'recharge', status: 'pending', sort: 100 }">Ajouter</button></div>
     </div>
     <section class="container">
@@ -9,7 +9,7 @@
         <thead><tr><th>Nom</th><th>Marchand</th><th>Catégorie</th><th>URL</th><th>Statut</th><th></th></tr></thead>
         <tbody><tr v-for="m in list" :key="m.id">
           <td><strong>{{ m.name }}</strong><br /><small>{{ m.description }}</small></td><td>{{ m.merchant?.business_name }}</td><td>{{ CAT[m.category] }}</td>
-          <td class="mono" style="font-size:12px">{{ m.entry_url }}</td>
+          <td class="mono" style="font-size:12px"><a :href="m.entry_url" target="_blank" rel="noopener">{{ m.entry_url }}</a></td>
           <td><span class="status" :class="m.status === 'approved' ? 'ok' : m.status === 'suspended' ? 'err' : 'pending'">{{ STATUS[m.status] }}</span></td>
           <td class="actions-cell"><IconAction icon="edit" label="Modifier" @click="edit = { ...m }" /></td>
         </tr></tbody>
@@ -35,6 +35,7 @@
 </template>
 
 <script setup>
+import { toast } from '../utils/ui'
 import IconAction from '../components/IconAction.vue'
 import { onMounted, ref } from 'vue'
 import api from '../services/api'
@@ -49,7 +50,7 @@ const error = ref('')
 async function load() { list.value = (await api.get('/admin/mini-programs')).data }
 async function save() {
   error.value = ''
-  try { await api.post('/admin/mini-programs', edit.value); edit.value = null; load() } catch (e) { error.value = errMsg(e) }
+  try { await api.post('/admin/mini-programs', edit.value); toast('Mini-programme enregistré.'); edit.value = null; load() } catch (e) { error.value = errMsg(e) }
 }
 onMounted(load)
 </script>

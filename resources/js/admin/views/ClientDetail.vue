@@ -117,6 +117,7 @@
 </template>
 
 <script setup>
+import { confirmBox, promptBox } from '../utils/ui'
 import IconAction from '../components/IconAction.vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -161,14 +162,14 @@ async function load() {
 async function act(fn) {
   try { const { data: r } = await fn(); msg.value = { type: 'info', text: r.message }; await load() } catch (e) { msg.value = { type: 'err', text: e.response?.data?.message || e.message } }
 }
-function unblock() {
-  const reason = prompt('Motif du déblocage (ex. : identité vérifiée en agence, pièce n°…)')
+async function unblock() {
+  const reason = await promptBox('Motif du déblocage', { title: 'Débloquer le compte', placeholder: 'Ex. : identité vérifiée en agence, pièce n°…', required: true, confirmLabel: 'Débloquer' })
   if (!reason) return
   act(() => api.post(`/admin/users/${c.value.id}/unblock`, { reason }))
 }
 const kyc = (decision) => act(() => api.post(`/admin/clients/${c.value.id}/kyc`, { decision }))
-function freeze(frozen) {
-  if (frozen && !confirm('Geler le wallet ? Le client ne pourra plus envoyer, payer ni retirer.')) return
+async function freeze(frozen) {
+  if (frozen && !(await confirmBox('Le client ne pourra plus envoyer, payer ni retirer.', { title: 'Geler le wallet ?', confirmLabel: 'Geler', danger: true }))) return
   act(() => api.post(`/admin/wallets/${c.value.id}/status`, { frozen }))
 }
 

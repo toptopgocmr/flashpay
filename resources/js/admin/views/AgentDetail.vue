@@ -112,6 +112,7 @@
 </template>
 
 <script setup>
+import { confirmBox } from '../utils/ui'
 import IconAction from '../components/IconAction.vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -166,12 +167,12 @@ async function load() {
 async function act(fn, ok) {
   try { const { data: r } = await fn(); msg.value = { type: 'info', text: r?.message || ok }; await load() } catch (e) { msg.value = { type: 'err', text: e.response?.data?.message || e.message } }
 }
-function decide(decision) {
-  if (decision === 'rejected' && !confirm("Suspendre l'agrément de cet agent ?")) return
+async function decide(decision) {
+  if (decision === 'rejected' && !(await confirmBox("L'agent ne pourra plus faire de dépôts ni de retraits tant que l'agrément est suspendu.", { title: "Suspendre l'agrément ?", confirmLabel: 'Suspendre', danger: true }))) return
   act(() => api.post(`/admin/agents/${a.value.id}/validate`, { decision }), decision === 'approved' ? 'Agrément validé.' : 'Agrément suspendu.')
 }
-function freeze(frozen) {
-  if (frozen && !confirm('Geler le float de cet agent ?')) return
+async function freeze(frozen) {
+  if (frozen && !(await confirmBox('Le float sera bloqué : aucune opération ne sera possible jusqu\'au dégel.', { title: 'Geler le float de cet agent ?', confirmLabel: 'Geler', danger: true }))) return
   act(() => api.post(`/admin/wallets/${a.value.user_id}/status`, { frozen }))
 }
 async function fund() {

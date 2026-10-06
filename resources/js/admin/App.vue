@@ -152,6 +152,7 @@
       <router-view />
     </main>
     <SupportCallBar />
+    <UiHost />
   </div>
 </template>
 
@@ -162,6 +163,7 @@ import { useAuthStore } from './stores/auth'
 import api from './services/api'
 import Flag from './components/Flag.vue'
 import SupportCallBar from './components/SupportCallBar.vue'
+import UiHost from './components/UiHost.vue'
 import { playNotificationSound, unlockAudio } from './utils/sound'
 
 const route = useRoute()
@@ -287,7 +289,7 @@ function announce(n) {
 }
 async function loadBadges() {
   try {
-    const { data } = await api.get('/admin/badges')
+    const { data } = await api.get('/admin/badges', { silent: true })
     badges.value = data
     const n = data.last_notification
     const unread = Number(data.notifications || 0)

@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <div>
-        <h1>Agents</h1>
+        <h1>Agents</h1><p>Réseau d'agents : super-agents, agents et sous-agents, float, agrément et commissions.</p>
       </div>
       <div class="actions">
         <ExportButton filename="agents" :columns="EXP_COLS" :fetch="expFetch" />

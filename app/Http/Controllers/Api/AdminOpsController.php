@@ -77,7 +77,9 @@ class AdminOpsController extends Controller
     {
         $q = FraudAlert::with('user:id,full_name,phone,blocked_until,risk_score', 'transaction:id,reference,amount,currency')->latest();
         $q->where('status', $request->input('status', 'open'));
-        return response()->json($q->paginate(30));
+        // Compteurs par statut pour les onglets
+        $counts = FraudAlert::selectRaw('status, COUNT(*) AS n')->groupBy('status')->pluck('n', 'status');
+        return response()->json($q->paginate(30)->toArray() + ['counts' => $counts]);
     }
 
     public function reviewFraudAlert(Request $request, FraudAlert $alert)

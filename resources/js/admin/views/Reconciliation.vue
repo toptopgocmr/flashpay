@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Réconciliation</h1></div>
+      <div><h1>Réconciliation</h1><p>Contrôle du grand livre : soldes, écritures orphelines et écarts avec les passerelles.</p></div>
       <div class="actions"><button class="btn" :disabled="busy" @click="run">Lancer maintenant</button></div>
     </div>
     <div ref="detailTop" class="detail-head mb" v-if="last">

@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Supervision des échanges</h1></div>
+      <div><h1>Supervision des échanges</h1><p>Supervision de toutes les discussions et appels entre utilisateurs (conformité).</p></div>
       <div class="actions"><button class="btn-normal" @click="load(1)">Actualiser</button></div>
     </div>
     <div class="tabs mb">

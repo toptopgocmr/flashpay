@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <div>
-        <h1>Clients</h1>
+        <h1>Clients</h1><p>Comptes clients : fiche, wallet, KYC, activation et opérations.</p>
       </div>
       <div class="actions">
         <ExportButton filename="clients" :columns="EXP_COLS" :fetch="expFetch" />
@@ -97,6 +97,7 @@
 </template>
 
 <script setup>
+import { confirmBox } from '../utils/ui'
 import ExportButton from '../components/ExportButton.vue'
 import { fetchAllPages, fmtDate, fmtPhone } from '../utils/export'
 import IconAction from '../components/IconAction.vue'
@@ -167,7 +168,7 @@ async function load(page = 1) {
 }
 
 async function bulk(active) {
-  if (!confirm(`${active ? 'Activer' : 'Désactiver'} ${selected.value.length} client(s) ?`)) return
+  if (!(await confirmBox(active ? 'Les clients sélectionnés pourront à nouveau se connecter et faire des opérations.' : 'Les clients sélectionnés ne pourront plus se connecter.', { title: `${active ? 'Activer' : 'Désactiver'} ${selected.value.length} client(s) ?`, confirmLabel: active ? 'Activer' : 'Désactiver', danger: !active }))) return
   busy.value = true
   try {
     const { data } = await api.post('/admin/accounts/bulk-status', { active, ids: selected.value })

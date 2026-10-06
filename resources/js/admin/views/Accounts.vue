@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <div>
-        <h1>Comptes utilisateurs</h1>
+        <h1>Comptes utilisateurs</h1><p>Tous les comptes de la plateforme : activation, désactivation et réinitialisation d'accès.</p>
       </div>
       <div class="actions">
         <ExportButton filename="comptes-utilisateurs" :columns="EXP_COLS" :fetch="expFetch" />

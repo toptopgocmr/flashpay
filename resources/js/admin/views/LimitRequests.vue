@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <div><h1>Demandes de plafonds</h1></div>
+      <div><h1>Demandes de plafonds</h1><p>Demandes de relèvement de plafonds envoyées depuis l'app, avec leur justificatif.</p></div>
       <div class="actions"><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>
     <div class="tabs mb">
