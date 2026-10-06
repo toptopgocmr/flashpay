@@ -120,7 +120,77 @@ class PeexFlowService
 
     public function cardDeposit(User $user, int $amount, array $meta = []): Transaction
     {
+        // Seule une carte liée au profil peut créditer le wallet
+        $card = $this->linkedCard($user, $meta);
+        if ($card) {
+            $meta += [
+                'linked_account_id' => $card->id,
+                'expected_card_last4' => $card->card_last4,
+                'card_last4' => $card->card_last4,
+                'card_brand' => $card->card_brand,
+            ];
+        }
+        unset($meta['skip_linked_check']);
         return $this->execute($user, $this->quoteCardDeposit($user, $amount), 'cash_in', $meta);
+    }
+
+    /**
+     * Règle « comptes liés » : le wallet ne peut être crédité (recharge) que depuis
+     * un compte mobile money ou une carte LIÉS au profil du client. Le numéro du
+     * titulaire (celui de son compte FlashPay) est accepté comme compte lié.
+     * Exemptés : tests de la console (meta « test ») et comptes internes (super admin).
+     */
+    protected function linkedCheckExempt(User $user, array $opt): bool
+    {
+        return ! empty($opt['test']) || ! empty($opt['skip_linked_check'])
+            || (method_exists($user, 'hasRole') && $user->hasRole('super_admin'));
+    }
+
+    protected function linkedMobile(User $user, string $phone, array $opt): ?\App\Models\LinkedAccount
+    {
+        if ($this->linkedCheckExempt($user, $opt + ($opt['meta'] ?? []))) {
+            return null;
+        }
+        $digits = fn ($p) => preg_replace('/\D/', '', (string) $p);
+        $norm = function ($p, $hint = null) use ($digits) {
+            try {
+                return $digits($this->corridors->resolve((string) $p, $hint)['phone'] ?? $p);
+            } catch (\Throwable) {
+                return $digits($p);
+            }
+        };
+        $wanted = $norm($phone, $opt['source_country'] ?? null);
+        $linked = $user->linkedAccounts()->where('type', 'mobile_money')->get();
+        foreach ($linked as $acc) {
+            if ($wanted !== '' && $norm($acc->phone, $acc->country) === $wanted) {
+                return $acc;
+            }
+        }
+        if ($user->phone && $norm($user->phone) === $wanted) {
+            return null; // numéro du titulaire du compte FlashPay
+        }
+        throw new PeexException('Recharge refusée : le numéro ' . ($phone ?: '?') . ' n\'est pas un compte mobile money lié à votre profil. '
+            . 'Ajoutez-le dans Profil › Comptes liés (code PIN demandé), puis réessayez.');
+    }
+
+    protected function linkedCard(User $user, array $meta): ?\App\Models\LinkedAccount
+    {
+        if ($this->linkedCheckExempt($user, $meta)) {
+            return null;
+        }
+        $cards = $user->linkedAccounts()->where('type', 'card')->get();
+        if ($cards->isEmpty()) {
+            throw new PeexException('Recharge par carte impossible : aucune carte n\'est liée à votre profil. '
+                . 'Ajoutez votre carte Visa ou Mastercard dans Profil › Comptes liés, puis réessayez.');
+        }
+        if (! empty($meta['linked_account_id'])) {
+            $card = $cards->firstWhere('id', (int) $meta['linked_account_id']);
+            if (! $card) {
+                throw new PeexException('Cette carte n\'est pas liée à votre profil.');
+            }
+            return $card;
+        }
+        return $cards->firstWhere('is_default', true) ?? $cards->first();
     }
 
     /** Recharge du wallet depuis un compte bancaire (prélèvement validé sur la page de la banque / WacePay). */
@@ -184,7 +254,11 @@ class PeexFlowService
 
     public function deposit(User $user, string $phone, int $amount, array $opt = []): Transaction
     {
-        return $this->execute($user, $this->quoteDeposit($user, $phone, $amount, $opt), 'cash_in', $opt['meta'] ?? []);
+        // Seul un compte mobile money lié (ou le numéro du titulaire) peut créditer le wallet
+        $linked = $this->linkedMobile($user, $phone, $opt);
+        $meta = ($opt['meta'] ?? []) + array_filter(['linked_account_id' => $linked?->id]);
+        unset($meta['skip_linked_check']);
+        return $this->execute($user, $this->quoteDeposit($user, $phone, $amount, $opt), 'cash_in', $meta);
     }
 
     public function withdraw(User $user, string $phone, int $amount, array $opt = []): Transaction

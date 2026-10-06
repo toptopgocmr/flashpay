@@ -47,6 +47,11 @@ class CardCheckoutController extends Controller
             ! preg_match('/^\d{3,4}$/', (string) $request->input('cvc')) => 'Code CVC invalide.',
             default => null,
         };
+        // Seule la carte liée au profil peut créditer le wallet
+        $expected = (string) ($this->cards->pending($token)->meta['expected_card_last4'] ?? '');
+        if (! $error && $expected !== '' && substr($number, -4) !== $expected) {
+            $error = "Utilisez la carte liée à votre profil (•••• {$expected}). Pour une autre carte, ajoutez-la d'abord dans Profil › Comptes liés.";
+        }
         if ($error) {
             return response($this->page($this->cards->pending($token), $token, $error), 422);
         }

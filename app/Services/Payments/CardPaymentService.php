@@ -113,6 +113,21 @@ class CardPaymentService
         }
 
         $tx = $tx->fresh();
+
+        // Règle « comptes liés » : la carte payée doit être la carte liée au profil.
+        // Le paiement est déjà encaissé par la passerelle : on crédite, mais on signale
+        // tout écart à l'équipe (contrôle anti-fraude).
+        $expected = (string) ($tx->meta['expected_card_last4'] ?? '');
+        $used = $maskedCard && preg_match('/(\d{4})\D*$/', $maskedCard, $mm) ? $mm[1] : null;
+        if ($ok && $expected !== '' && $used !== null && $used !== $expected) {
+            $tx->update(['meta' => array_merge($tx->meta ?? [], ['card_mismatch' => true, 'card_used_last4' => $used])]);
+            try {
+                app(\App\Services\Notifications\NotificationService::class)->toAdmins('fraud',
+                    "Recharge {$tx->reference} : carte •••• {$used} utilisée au lieu de la carte liée •••• {$expected}", null, ['severity' => 'warning']);
+            } catch (\Throwable) {
+            }
+        }
+
         return $ok
             ? $this->switch->onSourceConfirmed($tx)
             : $this->switch->onSourceFailed($tx, $reason ?: 'Paiement par carte refusé');

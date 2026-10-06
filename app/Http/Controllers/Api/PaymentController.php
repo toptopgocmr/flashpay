@@ -86,9 +86,10 @@ class PaymentController extends Controller
             'phone' => 'nullable|string|max:25',
             'amount' => 'required|integer|min:10',
             'source_country' => 'nullable|string|size:2',
+            'linked_account_id' => 'nullable|integer',
         ]);
         $tx = match ($v['method'] ?? 'mobile_money') {
-            'card' => $this->flows->cardDeposit($request->user(), $v['amount']),
+            'card' => $this->flows->cardDeposit($request->user(), $v['amount'], array_filter(['linked_account_id' => $v['linked_account_id'] ?? null])),
             'bank' => $this->flows->bankDeposit($request->user(), $v['amount']),
             default => $this->flows->deposit($request->user(), $v['phone'] ?? $request->user()->phone, $v['amount'], $v),
         };
