@@ -38,12 +38,20 @@ class MerchantController extends Controller
             ->where('status', 'successful')
             ->sum(\Illuminate\Support\Facades\DB::raw($net));
 
+        $todayCommission = (int) Transaction::where('destination_wallet_id', $walletId)
+            ->where('status', 'successful')->whereDate('created_at', today())->sum('merchant_fee');
+        $pending = Transaction::where('destination_wallet_id', $walletId)->where('status', 'processing')->count();
+
         return response()->json([
             'merchant' => $merchant,
             'wallet' => $request->user()->wallet,
             'today_collected' => $today,
             'today_count' => $todayCount,
+            'today_commission' => $todayCommission,
+            'pending_count' => $pending,
             'total_collected' => $totalCollected,
+            'cashiers_count' => \App\Models\MerchantCashier::where('merchant_id', $merchant?->id)->where('status', 'active')->count(),
+            'outlets_count' => $merchant?->outlets()->count() ?? 0,
         ]);
     }
 
@@ -139,14 +147,23 @@ class MerchantController extends Controller
         ]);
     }
 
+    /**
+     * Historique des ventes : filtres (from, to, q, status, cashier_id, outlet_id),
+     * totaux de la sélection et détail de chaque vente (reçu, caissier, net).
+     */
     public function collections(Request $request)
     {
-        $walletId = $request->user()->wallet->id;
+        $request->validate([
+            'from' => 'nullable|date', 'to' => 'nullable|date', 'q' => 'nullable|string|max:60',
+            'status' => 'nullable|in:successful,processing,failed,reversed',
+            'cashier_id' => 'nullable|integer', 'outlet_id' => 'nullable|integer',
+        ]);
+        $user = $request->user();
+        $q = \App\Support\MerchantSales::filter(Transaction::where('destination_wallet_id', $user->wallet->id), $request);
+        $summary = \App\Support\MerchantSales::summary($q);
+        $page = $q->with('sourceWallet.user:id,full_name,phone')->latest()->paginate(20)->withQueryString();
+        \App\Support\MerchantSales::rows($page, (int) $user->merchant?->id);
 
-        $collections = Transaction::where('destination_wallet_id', $walletId)
-            ->latest()
-            ->paginate(20);
-
-        return response()->json($collections);
+        return response()->json($page->toArray() + ['summary' => $summary]);
     }
 }

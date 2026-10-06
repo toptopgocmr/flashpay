@@ -90,9 +90,15 @@ class MerchantToolsController extends Controller
     {
         $c = $request->user()->cashier;
         abort_unless($c && $c->status === 'active', 403, 'Accès caissier révoqué.');
-        $txs = Transaction::where('destination_wallet_id', $c->merchant->user->wallet->id)
-            ->where('meta->cashier_id', $c->id)->latest()->paginate(30);
+        $request->validate(['from' => 'nullable|date', 'to' => 'nullable|date', 'q' => 'nullable|string|max:60', 'status' => 'nullable|in:successful,processing,failed,reversed']);
+        $q = \App\Support\MerchantSales::filter(Transaction::where('destination_wallet_id', $c->merchant->user->wallet->id)
+            ->where('meta->cashier_id', $c->id), $request);
+        $summary = \App\Support\MerchantSales::summary($q);
+        $txs = $q->with('sourceWallet.user:id,full_name,phone')->latest()->paginate(30)->withQueryString();
+        \App\Support\MerchantSales::rows($txs, (int) $c->merchant_id);
         return response()->json($txs->toArray() + [
+            'summary' => $summary,
+            'currency' => $c->merchant->user->wallet->currency ?? 'XAF',
             'today' => (int) Transaction::where('destination_wallet_id', $c->merchant->user->wallet->id)->where('meta->cashier_id', $c->id)
                 ->where('status', 'successful')->whereDate('created_at', today())->sum('amount'),
             'today_count' => Transaction::where('destination_wallet_id', $c->merchant->user->wallet->id)->where('meta->cashier_id', $c->id)

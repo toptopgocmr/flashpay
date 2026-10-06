@@ -15,7 +15,10 @@ class ReceiptController extends Controller
 {
     public function link(Request $request, Transaction $transaction)
     {
-        abort_unless($transaction->concerns($request->user()), 404);
+        // Caissier : reçus des encaissements qu'il a lui-même réalisés
+        $cashier = $request->user()->cashier;
+        $byCashier = $cashier && (int) ($transaction->meta['cashier_id'] ?? 0) === (int) $cashier->id;
+        abort_unless($byCashier || $transaction->concerns($request->user()), 404);
 
         return response()->json([
             'url' => URL::temporarySignedRoute('receipt.show', now()->addDays(7), ['transaction' => $transaction->reference]),
