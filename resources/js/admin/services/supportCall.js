@@ -25,6 +25,9 @@ let incomingOffer = null
 let audioCtx = null
 const seen = new Set()
 
+// SDP : chaque ligne doit finir par CRLF, la dernière aussi (sinon « Failed to parse SessionDescription »).
+const sdp = (t) => String(t || '').split(/\r\n|\r|\n/).map((l) => l.trim()).filter(Boolean).join('\r\n') + '\r\n'
+
 async function iceServers() {
   try {
     const { data } = await api.get('/support/chat/calls/config')
@@ -66,7 +69,7 @@ async function preparePeer() {
       remoteAudio = new Audio()
       remoteAudio.autoplay = true
     }
-    remoteAudio.srcObject = e.streams[0]
+    remoteAudio.srcObject = e.streams?.[0] || new MediaStream([e.track])
     remoteAudio.play().catch(() => {})
   }
   pc.onconnectionstatechange = () => {
@@ -129,7 +132,11 @@ function watchStatus() {
         if (call.phase === 'calling' && data.answer && !answered) {
           answered = true
           call.phase = 'connecting'
-          await pc?.setRemoteDescription({ type: 'answer', sdp: data.answer })
+          try {
+            await pc?.setRemoteDescription({ type: 'answer', sdp: sdp(data.answer) })
+          } catch (err) {
+            hangup('Connexion audio impossible : ' + (err?.message || 'réponse invalide').slice(0, 120))
+          }
         }
         return
       }
@@ -173,11 +180,11 @@ export async function accept() {
   call.phase = 'connecting'
   try {
     await preparePeer()
-    await pc.setRemoteDescription({ type: 'offer', sdp: incomingOffer })
+    await pc.setRemoteDescription({ type: 'offer', sdp: sdp(incomingOffer) })
     const answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
     await gathered()
-    await api.post(`/support/chat/calls/${call.id}/accept`, { answer: pc.localDescription.sdp })
+    await api.post(`/support/chat/calls/${call.id}/accept`, { answer: sdp(pc.localDescription.sdp) })
     watchStatus()
   } catch (e) {
     const msg = e?.response?.status === 409 ? 'Appel déjà pris par un collègue ou terminé.' : micError(e)
@@ -201,7 +208,7 @@ export async function startCall(conversationId, name) {
     const offer = await pc.createOffer({ offerToReceiveAudio: true })
     await pc.setLocalDescription(offer)
     await gathered()
-    const { data } = await api.post(`/support/chat/${conversationId}/calls`, { offer: pc.localDescription.sdp })
+    const { data } = await api.post(`/support/chat/${conversationId}/calls`, { offer: sdp(pc.localDescription.sdp) })
     call.id = data.id
     watchStatus()
   } catch (e) {

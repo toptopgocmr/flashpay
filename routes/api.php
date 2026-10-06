@@ -369,6 +369,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/digitwace/diagnose', [PricingAdminController::class, 'diagnoseWacepay'])->middleware('throttle:10,1');
         Route::post('/digitwace/discover', [PricingAdminController::class, 'discoverWacepay'])->middleware('throttle:3,1');
         Route::delete('/digitwace/discover', [PricingAdminController::class, 'resetWacepayEndpoint']);
+        Route::get('/wacepay/overview', [\App\Http\Controllers\Api\WacepayAdminController::class, 'overview']);
+        Route::get('/wacepay/services', [\App\Http\Controllers\Api\WacepayAdminController::class, 'services'])->middleware('throttle:20,1');
+        Route::post('/wacepay/test-payin', [\App\Http\Controllers\Api\WacepayAdminController::class, 'testPayin'])->middleware('throttle:10,1');
+        Route::post('/wacepay/test-payout', [\App\Http\Controllers\Api\WacepayAdminController::class, 'testPayout'])->middleware('throttle:10,1');
+        Route::post('/wacepay/requests/{digitwaceRequest}/refresh', [\App\Http\Controllers\Api\WacepayAdminController::class, 'refresh'])->whereNumber('digitwaceRequest');
         Route::delete('/corridors/{iso}', [PricingAdminController::class, 'resetCorridor'])->where('iso', '[A-Za-z]{2}');
         Route::post('/fx-rates/{rate}/active', [PricingAdminController::class, 'toggleRate']);
         Route::delete('/fx-rates/{rate}', [PricingAdminController::class, 'deleteRate']);

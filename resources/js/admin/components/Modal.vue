@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div class="modal-backdrop" @mousedown.self="$emit('close')">
-      <div class="modal" role="dialog" :aria-label="title">
+      <div class="modal" :class="{ wide }" role="dialog" :aria-label="title">
         <div class="modal-head">
           <div><h3>{{ title }}</h3><p v-if="subtitle">{{ subtitle }}</p></div>
           <button class="icon-btn" title="Fermer" @click="$emit('close')">
@@ -16,13 +16,14 @@
 </template>
 
 <script setup>
-defineProps({ title: String, subtitle: String })
+defineProps({ title: String, subtitle: String, wide: Boolean })
 defineEmits(['close'])
 </script>
 
 <style>
 .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 8vh 16px 16px; overflow-y: auto; }
 .modal { background: #fff; border-radius: 14px; width: 100%; max-width: 560px; box-shadow: var(--shadow-lg); border: 1px solid var(--border); }
+.modal.wide { max-width: 880px; }
 .modal-head { display: flex; justify-content: space-between; gap: 12px; padding: 18px 20px 12px; border-bottom: 1px solid var(--border); }
 .modal-head h3 { margin: 0; font-size: 17px; }
 .modal-head p { margin: 4px 0 0; color: var(--text-2); font-size: 13px; }

@@ -17,6 +17,7 @@ const routes = [
   { path: '/users', component: () => import('../views/Users.vue') },
   { path: '/accounts', component: () => import('../views/Accounts.vue') },
   { path: '/peex', component: () => import('../views/PeexSandbox.vue') },
+  { path: '/wacepay', component: () => import('../views/WacepayGateway.vue') },
   { path: '/corridors', component: () => import('../views/Corridors.vue') },
   // Cahier des charges v1.5
   { path: '/notifications', component: () => import('../views/Notifications.vue') },

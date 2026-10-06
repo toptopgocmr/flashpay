@@ -38,7 +38,8 @@ return [
     'digitwace' => [
         'enabled' => (bool) env('DIGITWACE_ENABLED', false),
         // Doc : https://docs.digitwace.com — API PayIn : https://payinws.wacepay.com/api/v1
-        'base_url' => env('DIGITWACE_BASE_URL', 'https://payinws.wacepay.com/api/v1/'),
+        // API Partenaire : sandbox https://sandbox-payinws.wacepay.io/api/v1/ (tableau de bord sandbox-payin.wacepay.io)
+        'base_url' => env('DIGITWACE_BASE_URL', env('DIGITWACE_SANDBOX', true) ? 'https://sandbox-payinws.wacepay.io/api/v1/' : 'https://payinws.wacepay.io/api/v1/'),
         // basic = GET get-token + Authorization: Basic base64(public_key:private_key) (doc PayIn)
         // login = POST login avec les clés dans le corps (API Business)
         'auth_mode' => env('DIGITWACE_AUTH_MODE', 'basic'),
@@ -216,6 +217,11 @@ return [
         'turn_url' => env('WEBRTC_TURN_URL', 'turn:openrelay.metered.ca:80,turn:openrelay.metered.ca:443,turn:openrelay.metered.ca:443?transport=tcp'),
         'turn_username' => env('WEBRTC_TURN_USERNAME', 'openrelayproject'),
         'turn_password' => env('WEBRTC_TURN_PASSWORD', 'openrelayproject'),
+        // Relais TURN « clé en main » (recommandé en production) : identifiants temporaires générés par le serveur
+        'cloudflare_key_id' => env('WEBRTC_CLOUDFLARE_TURN_KEY_ID'),
+        'cloudflare_token' => env('WEBRTC_CLOUDFLARE_TURN_TOKEN'),
+        'metered_domain' => env('WEBRTC_METERED_DOMAIN'),
+        'metered_api_key' => env('WEBRTC_METERED_API_KEY'),
     ],
 
     // Chat traduit automatiquement (chacun lit dans sa langue, comme Alibaba).

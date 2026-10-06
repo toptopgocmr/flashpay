@@ -94,4 +94,48 @@ class WacepayPartnerApiTest extends TestCase
         $this->assertEquals(249000, $b['accounts'][0]['balance']);
         $this->assertSame('XOF', $b['accounts'][0]['currency']);
     }
+
+    public function test_wacepay_gateway_console(): void
+    {
+        $sent = [];
+        Http::fake(function ($req) use (&$sent) {
+            $u = $req->url();
+            $sent[] = $req;
+            return match (true) {
+                str_ends_with($u, 'payments/get-token') => Http::response(['token' => 'TOK']),
+                str_ends_with($u, 'payments/services') => Http::response(['data' => [['id' => 'svc-in', 'name' => 'MTN CM', 'countryCode' => 'CM', 'currency' => 'XAF', 'operator' => 'MTN']]]),
+                str_ends_with($u, 'payout/services') => Http::response(['data' => [['id' => 'svc-out', 'name' => 'Orange CM', 'countryCode' => 'CM']]]),
+                str_ends_with($u, 'payments/create') => Http::response(['data' => ['referenceId' => $req['referenceId'], 'status' => 'PENDING']]),
+                str_ends_with($u, 'payments/check-status') => Http::response(['data' => ['status' => 'SUCCESS']]),
+                str_ends_with($u, 'payout/execute') => Http::response(['message' => 'Insufficient balance'], 400),
+                default => Http::response([], 404),
+            };
+        });
+        $admin = User::create(['full_name' => 'Super', 'phone' => '242069990078', 'password' => bcrypt('x'), 'status' => 'active']);
+        $admin->assignRole('super_admin');
+        $this->actingAs($admin, 'sanctum');
+
+        $o = $this->getJson('/api/admin/wacepay/overview')->assertOk()->json();
+        $this->assertTrue($o['configured']);
+        $this->assertSame('partner', $o['api']);
+        $this->assertStringNotContainsString('"priv"', json_encode($o));
+
+        $svc = $this->getJson('/api/admin/wacepay/services')->assertOk()->json('services');
+        $this->assertCount(2, $svc);
+        $this->assertTrue(collect($svc)->firstWhere('id', 'svc-in')['payin']);
+
+        $r = $this->postJson('/api/admin/wacepay/test-payin', ['service_id' => 'svc-in', 'amount' => 100, 'phone' => '+237695562570', 'currency' => 'XAF', 'country' => 'CM'])->assertCreated()->json('request');
+        $this->assertSame('pending', $r['status']);
+        $this->assertTrue($r['test']);
+        $create = collect($sent)->first(fn ($q) => str_ends_with($q->url(), 'payments/create'));
+        $this->assertSame('svc-in', $create->header('wp-subscription-key')[0]);
+        $this->assertSame('MTN', $create['operator']);
+
+        $ref = $this->postJson("/api/admin/wacepay/requests/{$r['id']}/refresh")->assertOk()->json('request');
+        $this->assertSame('successful', $ref['status']);
+
+        $f = $this->postJson('/api/admin/wacepay/test-payout', ['service_id' => 'svc-out', 'amount' => 50, 'phone' => '+237691234567'])->assertCreated()->json('request');
+        $this->assertSame('failed', $f['status']);
+        $this->assertStringContainsString('Insufficient', $f['message']);
+    }
 }

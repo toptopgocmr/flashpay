@@ -57,7 +57,14 @@ class ManualRefundService
             }
             $currency = strtoupper($d['currency'] ?? $tx->currency ?? 'XAF');
 
-            if ($d['channel'] === 'mobile') {
+            if (! empty($d['api'])) {
+                // Formulaire officiel PEEX : champs envoyés tels quels
+                $currency = strtoupper($d['currency'] ?? $d['from_currency'] ?? $currency);
+                $d['channel'] = $d['api'] === 'bank' ? 'bank' : 'mobile';
+                $d['beneficiary_name'] = trim(($d['first_name'] ?? '') . ' ' . ($d['last_name'] ?? ''));
+                $d['phone'] = $d['mobile_phone'] ?? null;
+                $res = $this->connector->manualPeexRefund($tx, $d['api'], $d + ['currency' => $currency, 'from_currency' => $d['from_currency'] ?? $currency]);
+            } elseif ($d['channel'] === 'mobile') {
                 $res = $this->connector->manualMobileRefund($tx, $d['phone'], $amount, $currency, [
                     'beneficiary' => $d['beneficiary_name'],
                     'sender' => 'FlashPay Remboursement',

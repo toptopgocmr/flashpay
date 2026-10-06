@@ -1,120 +1,77 @@
 <template>
-  <div>
-    <div class="page-header">
-      <div>
-        <h1>Pays &amp; change</h1>
-      </div>
+  <div class="gw-page">
+    <div class="gw-top">
+      <div class="gw-top-left"><h1>Pays &amp; change</h1></div>
       <div class="actions"><button class="btn-normal" @click="load">Actualiser</button></div>
     </div>
 
-    <div v-if="error" class="flash err"><div>{{ error }}</div></div>
-    <div v-if="msg" class="flash info"><div>{{ msg }}</div></div>
+    <div v-if="error" class="gw-note err">{{ error }}</div>
+    <div v-if="msg" class="gw-note ok">{{ msg }}</div>
     <!-- Toast toujours visible, même quand la page est défilée -->
     <div v-if="toast" class="fp-toast" :class="toast.kind" @click="toast = null">{{ toast.text }}</div>
 
     <!-- Partenaires de paiement -->
-    <div class="partners mb">
-      <div v-for="p in partners" :key="p.key" class="partner-card" :class="'p-' + p.key">
-        <div class="pc-head">
-          <span class="pbadge" :class="'p-' + p.key">{{ p.name }}</span>
-          <span class="status" :class="p.ready ? 'ok' : 'warn'">{{ p.ready ? 'Connecté' : 'Non configuré' }}</span>
-          <span class="mode-tag">{{ p.mode }}</span>
-          <button class="btn-link pc-link" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
+    <section class="gw-section">
+      <GwHead icon="partners" title="Partenaires de paiement" :count="partners.length || null" />
+      <div class="gw-cols">
+        <div v-for="p in partners" :key="p.key" class="gw-card pc" :class="'p-' + p.key">
+          <div class="gw-card-h">
+            <span class="pbadge" :class="'p-' + p.key">{{ p.name }}</span>
+            <div class="side">
+              <span class="gw-pill" :class="p.ready ? 'ok' : 'warn'">{{ p.ready ? 'Connecté' : 'Non configuré' }}</span>
+              <span class="gw-pill" :class="/sandbox/i.test(p.mode) ? 'info' : 'muted'">{{ p.mode }}</span>
+            </div>
+          </div>
+          <div class="gw-rows">
+            <div class="gw-row"><span class="gw-dot" :class="{ off: !p.flows.includes('collect') }"></span>
+              <div class="gw-main"><b>Collecte</b></div>
+              <div class="gw-end"><b>{{ p.flows.includes('collect') ? n(p.collect_countries) + ' pays' : '—' }}</b></div></div>
+            <div class="gw-row"><span class="gw-dot" :class="{ off: !p.payout_countries }"></span>
+              <div class="gw-main"><b>Versement</b></div>
+              <div class="gw-end"><b>{{ n(p.payout_countries) }} pays</b></div></div>
+            <template v-if="p.key === 'digitwace'">
+              <div class="gw-row"><span class="gw-dot" :class="{ off: !p.coverage_countries }"></span>
+                <div class="gw-main"><b>Couverture</b><small>{{ p.coverage_countries ? `collecte ${p.coverage_payin} · versement ${p.coverage_payout}` + (p.coverage_synced_at ? ' · ' + dt(p.coverage_synced_at) : '') : 'Non synchronisée' }}</small></div>
+                <div class="gw-end"><b v-if="p.coverage_countries">{{ p.coverage_countries }} pays</b>
+                  <button class="btn-normal sm" :disabled="syncing" @click="syncWacepay">{{ syncing ? '…' : 'Synchroniser' }}</button></div></div>
+              <div class="gw-row"><span class="gw-dot" :class="wBal?.ok ? '' : (wBal ? 'err' : 'wait')"></span>
+                <div class="gw-main"><b>Solde</b><small v-if="wBal && !wBal.ok" class="t-err">{{ wBal.error }}</small></div>
+                <div class="gw-end">
+                  <span v-for="a in wBal?.accounts || []" :key="a.currency + a.label" class="gw-pill" :class="a.low ? 'warn' : 'ok'">{{ n(a.balance) }} {{ a.currency }}</span>
+                  <span v-if="wBal?.ok && !wBal.accounts.length" class="gw-pill muted">0</span>
+                  <span v-if="!wBal" class="gw-pill muted">…</span>
+                </div></div>
+              <div class="gw-row"><span class="gw-dot" :class="{ off: !p.card && !p.bank_debit }"></span>
+                <div class="gw-main"><b>Cartes · Banque</b></div>
+                <div class="gw-end"><span class="gw-pill" :class="p.card ? 'ok' : 'muted'">Cartes</span><span class="gw-pill" :class="p.bank_debit ? 'ok' : 'muted'">Banque</span></div></div>
+            </template>
+          </div>
+          <div class="gw-card-b pc-bottom">
+            <GwField :value="p.webhook" />
+            <div class="pc-actions">
+              <button class="btn-normal sm" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
+              <router-link class="btn-normal sm" :to="p.key === 'digitwace' ? '/wacepay' : '/peex'">Ouvrir la passerelle</router-link>
+            </div>
+          </div>
         </div>
-        <div class="pc-flows">
-          <div><span>Collecte</span><b>{{ p.flows.includes('collect') ? n(p.collect_countries) + ' pays' : '—' }}</b></div>
-          <div><span>Versement</span><b>{{ n(p.payout_countries) }} pays</b></div>
-          <template v-if="p.key === 'digitwace'">
-            <div :title="p.card ? '' : 'FLASHPAY_CARD_DRIVER=wacepay'"><span>Cartes</span><b :class="p.card ? 't-ok' : 't-off'">{{ p.card ? 'Actives' : 'Inactives' }}</b></div>
-            <div :title="p.bank_debit ? '' : 'FLASHPAY_BANK_DEBIT_DRIVER=wacepay'"><span>Banque</span><b :class="p.bank_debit ? 't-ok' : 't-off'">{{ p.bank_debit ? 'Actif' : 'Inactif' }}</b></div>
-          </template>
-        </div>
-
-        <template v-if="p.key === 'digitwace'">
-          <div class="pc-row">
-            <div class="pc-row-main">
-              <span class="pc-k">Couverture</span>
-              <b v-if="p.coverage_countries">{{ p.coverage_countries }} pays <small>· collecte {{ p.coverage_payin }} · versement {{ p.coverage_payout }}</small></b>
-              <b v-else class="t-warn">Non synchronisée</b>
-              <small v-if="p.coverage_synced_at" class="pc-date">{{ dt(p.coverage_synced_at) }}</small>
-            </div>
-            <button class="btn-normal sm" :disabled="syncing" @click="syncWacepay">{{ syncing ? 'Synchronisation…' : 'Synchroniser' }}</button>
-          </div>
-
-          <div v-if="p.ready" class="pc-row">
-            <div class="pc-row-main">
-              <span class="pc-k">Soldes</span>
-              <span v-for="a in wBal?.accounts || []" :key="a.currency + a.label" class="bal-chip" :class="{ low: a.low }" :title="'Disponible ' + n(a.available) + ' · engagé ' + n(a.reserved)">
-                <b>{{ n(a.balance) }} {{ a.currency }}</b>
-              </span>
-              <span v-if="wBal?.ok && !wBal.accounts.length" class="pc-muted">Aucun mouvement</span>
-              <span v-if="wBal && !wBal.ok" class="t-err">Indisponible</span>
-              <span v-if="!wBal" class="pc-muted">…</span>
-            </div>
-            <button class="btn-normal sm" :disabled="wBalLoading" @click="loadWaceBalances(true)">{{ wBalLoading ? '…' : 'Actualiser' }}</button>
-          </div>
-
-          <div v-if="p.ready && wBal && !wBal.ok" class="pc-alert">
-            <div class="why">{{ wBal.error }}</div>
-            <dl v-if="wBal.configured !== false" class="kv2">
-              <dt>Environnement</dt><dd>{{ wBal.sandbox ? 'Sandbox' : 'Production' }}</dd>
-              <dt>URL</dt><dd><code>{{ wBal.base_url || '—' }}</code></dd>
-              <dt>IP serveur</dt><dd><code>{{ wBal.server_ip || '—' }}</code></dd>
-            </dl>
-            <div class="diag-btns">
-              <button class="btn-normal sm" :disabled="diagBusy" @click="diagnose">{{ diagBusy ? 'Test…' : 'Diagnostiquer' }}</button>
-              <button class="btn-normal sm" :disabled="discBusy" @click="discover">{{ discBusy ? 'Recherche… (2 min max)' : 'Détecter l\'adresse' }}</button>
-            </div>
-          </div>
-          <div v-else-if="p.ready" class="diag-btns">
-            <button class="btn-link" :disabled="diagBusy" @click="diagnose">{{ diagBusy ? 'Test…' : 'Diagnostiquer la connexion' }}</button>
-          </div>
-
-          <div v-if="diag" class="diag">
-            <div class="diag-h" :class="diag.token_ok ? 'ok' : 'ko'">{{ diag.token_ok ? '✓ Connexion réussie' : '✕ Connexion refusée' }} <small>{{ diag.http ? 'HTTP ' + diag.http : 'pas de réponse' }} · {{ diag.ms }} ms</small>
-              <button class="btn-link close" title="Fermer" @click="diag = null">✕</button></div>
-            <dl class="kv2">
-              <dt>API</dt><dd>{{ diag.api === 'partner' ? 'Partenaire' : 'Business' }}</dd>
-              <dt>Adresse</dt><dd><code>{{ diag.login_url }}</code></dd>
-              <dt>IP serveur</dt><dd><code>{{ diag.server_ip || '?' }}</code></dd>
-              <dt>Clés</dt><dd>{{ diag.public_key || '⚠ publique absente' }} · {{ diag.private_key ? 'privée ✓' : '⚠ privée absente' }}</dd>
-              <template v-if="diag.token_ok && diag.api === 'partner'">
-                <dt>Services collecte</dt><dd>{{ diag.services_payin ?? '✕' }}<small v-if="diag.services_payin_error" class="t-err"> {{ diag.services_payin_error }}</small></dd>
-                <dt>Services versement</dt><dd>{{ diag.services_payout ?? '✕' }}<small v-if="diag.services_payout_error" class="t-err"> {{ diag.services_payout_error }}</small></dd>
-              </template>
-              <template v-if="!diag.token_ok">
-                <dt>Réponse</dt><dd>{{ diag.message }}<br v-if="diag.body" /><small class="mono">{{ diag.body }}</small></dd>
-                <template v-if="diag.server"><dt>Serveur</dt><dd>{{ diag.server }}<span v-if="diag.cf_ray"> · {{ diag.cf_ray }}</span></dd></template>
-              </template>
-              <template v-if="diag.override"><dt>Adresse détectée</dt><dd><code>{{ diag.override.base_url }}{{ diag.override.login_path }}</code> <button class="btn-link" @click="resetDiscover">Oublier</button></dd></template>
-            </dl>
-          </div>
-          <div v-if="disc" class="diag">
-            <div class="diag-h" :class="disc.found ? 'ok' : 'ko'">{{ disc.found ? '✓ ' : '✕ ' }}{{ disc.message }} <small>{{ disc.attempts.length }} essais · {{ disc.seconds }} s</small>
-              <button class="btn-link close" title="Fermer" @click="disc = null">✕</button></div>
-            <div v-if="disc.found" class="env-codes"><code>DIGITWACE_BASE_URL={{ disc.found.base_url }}</code></div>
-            <details><summary>Essais</summary>
-              <table class="disc-t"><tr v-for="(a, i) in disc.attempts" :key="i" :class="{ good: a.token_ok }"><td class="mono">{{ a.url }}</td><td>{{ a.fields || '' }}</td><td>{{ a.http ?? '—' }}</td><td>{{ a.note || a.body }}</td></tr></table>
-            </details>
-          </div>
-        </template>
-
-        <div class="pc-foot" :title="p.webhook"><span class="pc-k">Webhook</span><code>{{ p.webhook }}</code></div>
       </div>
+    </section>
+
+    <div class="gw-stats">
+      <button class="gw-stat" :class="{ on: tab === 'corridors' && !flt.open }" @click="tab = 'corridors'; flt.open = ''"><span>Pays couverts</span><b>{{ n(kpi.countries) }}</b><small>{{ n(kpi.operators) }} opérateurs</small></button>
+      <button class="gw-stat" :class="{ on: tab === 'corridors' && flt.open === 'collect' }" @click="tab = 'corridors'; flt.open = flt.open === 'collect' ? '' : 'collect'"><span>Collecte ouverte</span><b>{{ n(kpi.collect) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
+      <button class="gw-stat" :class="{ on: tab === 'corridors' && flt.open === 'payout' }" @click="tab = 'corridors'; flt.open = flt.open === 'payout' ? '' : 'payout'"><span>Versement ouvert</span><b>{{ n(kpi.payout) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
+      <button class="gw-stat" :class="{ on: tab === 'rates' }" @click="tab = 'rates'"><span>Taux de change</span><b>{{ n(kpi.rates) }}</b><small :class="{ 't-warn': kpi.stale_rates }">{{ kpi.stale_rates ? kpi.stale_rates + ' à mettre à jour' : 'À jour' }}</small></button>
     </div>
 
-    <div class="kpis mb">
-      <button class="kpi" :class="{ on: tab === 'corridors' }" @click="tab = 'corridors'"><span>Pays couverts</span><b>{{ n(kpi.countries) }}</b><small>{{ n(kpi.operators) }} opérateurs</small></button>
-      <button class="kpi" :class="{ on: tab === 'corridors' && flt.open === 'collect' }" @click="tab = 'corridors'; flt.open = flt.open === 'collect' ? '' : 'collect'"><span><i class="dot ok"></i>Collecte ouverte</span><b>{{ n(kpi.collect) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
-      <button class="kpi" :class="{ on: tab === 'corridors' && flt.open === 'payout' }" @click="tab = 'corridors'; flt.open = flt.open === 'payout' ? '' : 'payout'"><span><i class="dot ok"></i>Versement ouvert</span><b>{{ n(kpi.payout) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
-      <button class="kpi" :class="{ on: tab === 'rates' }" @click="tab = 'rates'"><span>Taux de change</span><b>{{ n(kpi.rates) }}</b><small :class="{ 't-warn': kpi.stale_rates }">{{ kpi.stale_rates ? kpi.stale_rates + ' à mettre à jour' : 'À jour' }}</small></button>
-    </div>
-
-    <div class="tabs-bar mb">
-      <button :class="{ on: tab === 'corridors' }" @click="tab = 'corridors'">Pays &amp; corridors</button>
-      <button :class="{ on: tab === 'rates' }" @click="tab = 'rates'">Taux de change</button>
-    </div>
-
+    <section class="gw-section">
+    <GwHead :icon="tab === 'rates' ? 'swap' : 'globe'" :title="tab === 'rates' ? 'Taux de change' : 'Pays & corridors'">
+      <div class="seg">
+        <button :class="{ on: tab === 'corridors' }" @click="tab = 'corridors'">Pays</button>
+        <button :class="{ on: tab === 'rates' }" @click="tab = 'rates'">Taux</button>
+      </div>
+    </GwHead>
+    <div>
     <!-- ================= Corridors ================= -->
     <template v-if="tab === 'corridors'">
       <div class="toolbar mb">
@@ -130,7 +87,7 @@
         <select v-model="flt.open"><option value="">Tous les statuts</option><option value="collect">Collecte ouverte</option><option value="payout">Versement ouvert</option><option value="closed">Fermés</option><option value="changed">Modifiés dans la console</option></select>
       </div>
 
-      <section class="container mb" v-for="(list, zone) in byZone" :key="zone">
+      <section class="container gw-card mb" v-for="(list, zone) in byZone" :key="zone">
         <div class="container-head">
           <div><h3>{{ zoneLabel[zone] || zone }} <span class="counter">({{ list.length }} pays · {{ zones[zone] }})</span></h3></div>
         </div>
@@ -189,7 +146,7 @@
     <!-- ================= Taux de change ================= -->
     <template v-else>
       <div class="layout mb">
-        <section class="container conv">
+        <section class="container gw-card conv">
           <div class="container-head"><div><h3>Convertisseur</h3></div></div>
           <div class="container-body conv-body">
             <div><label class="field">Montant envoyé</label>
@@ -206,9 +163,9 @@
             </div>
           </div>
         </section>
-        <section class="container">
+        <section class="container gw-card">
           <div class="container-head">
-            <div><h3>Taux de change</h3></div>
+            <div><h3>Paires</h3></div>
           </div>
           <div class="container-body flush" style="overflow-x:auto;">
             <table>
@@ -252,11 +209,15 @@
 
       </div>
     </template>
+    </div>
+    </section>
   </div>
 </template>
 
 <script setup>
 import IconAction from '../components/IconAction.vue'
+import GwHead from '../components/GwHead.vue'
+import GwField from '../components/GwField.vue'
 import Flag from '../components/Flag.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
@@ -426,6 +387,17 @@ onMounted(load)
 .c { text-align: center; }
 .op { display: inline-block; border: 1px solid var(--border-strong); border-radius: 12px; padding: 0 8px; margin: 2px 4px 2px 0; font-size: 12px; white-space: nowrap; }
 .changed { font-size: 11px; font-weight: 600; color: var(--warn); background: var(--warn-bg); border-radius: 99px; padding: 1px 7px; margin-left: 6px; }
+.pc .gw-card-h { align-items: center; }
+.pc-bottom { gap: 10px; }
+.pc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.pc .gw-row { padding: 11px 20px; }
+.pc .gw-row .gw-end b { font-size: 15px; }
+.seg { display: inline-flex; background: #f1f5f9; border-radius: 9px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 7px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; }
+.seg button.on { background: #fff; color: var(--text); box-shadow: var(--shadow); }
+.gw-stat.on { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(30,58,138,.1); }
+.gw-stat b small { font-size: 14px; color: var(--text-2); font-weight: 500; }
+.gw-card.container { padding: 0; border-radius: 14px; }
 .partners { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 12px; align-items: start; }
 .partners > *, .partner-card > *, .pc-flows > div, .pc-row-main, .kv2 > * { min-width: 0; }
 .partner-card { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid #1e3a8a; border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); display: grid; gap: 10px; align-content: start; overflow: hidden; }

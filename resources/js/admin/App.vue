@@ -197,6 +197,7 @@ const groups = [
   ] },
   { name: 'Intégrations', icon: 'gateway', links: [
     { to: '/peex', label: 'Passerelle PEEX', desc: 'Collecte, décaissement, tests sandbox', icon: 'gateway' },
+    { to: '/wacepay', label: 'Passerelle WacePay', desc: 'API Digitwace : clés, IP, services, tests', icon: 'gateway' },
     { to: '/ecommerce', label: 'E-commerce & API', desc: 'Clés API, payment intents, webhooks', icon: 'code', badge: 'webhooks' },
     { to: '/mini-programs', label: 'Mini-programmes', desc: 'Services partenaires dans l\'app', icon: 'grid' },
   ] },

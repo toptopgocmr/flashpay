@@ -87,4 +87,48 @@ class PeexManualRefundTest extends TestCase
         $this->assertContains($tx->reference . '-M1', $list['gateway']['track_ids']);
         $this->assertSame(0, $list['refundable']);
     }
+
+    public function test_official_peex_form_sends_exact_fields(): void
+    {
+        $sent = [];
+        Http::fake(function ($req) use (&$sent) {
+            $sent[] = [$req->url(), $req->data()];
+            return Http::response(['request' => ['id' => 11, 'status' => 'new', 'track_id' => $req->data()['track_id'] ?? 'x']], 200);
+        });
+        $admin = $this->admin();
+        $tx = $this->failedTx();
+
+        $info = $this->actingAs($admin, 'sanctum')->getJson("/api/admin/transactions/{$tx->id}/refunds")->assertOk()->json();
+        $this->assertSame('BASILE', $info['peex']['first_name']);
+        $this->assertSame(1010, $info['peex']['amount']);
+
+        $base = ['amount' => 400, 'reason' => 'Versement échoué', 'sender_first_name' => 'FlashPay', 'sender_last_name' => 'Remboursement',
+            'sender_mobile_phone' => '+242060000000', 'first_name' => 'Basile', 'last_name' => 'Ngassaki', 'purpose' => 'REFUND', 'fund_origin' => 'SALARY'];
+
+        // Remittance : aml_cft obligatoire
+        $this->actingAs($admin, 'sanctum')->postJson("/api/admin/transactions/{$tx->id}/refunds", $base + ['api' => 'remittance', 'mobile_phone' => '067601919',
+            'from_currency' => 'XAF', 'fxrate' => 1, 'sender_country' => 'CG', 'to_country' => 'CG'])
+            ->assertStatus(422)->assertJsonValidationErrors(['aml_cft']);
+
+        $r = $this->actingAs($admin, 'sanctum')->postJson("/api/admin/transactions/{$tx->id}/refunds", $base + ['api' => 'remittance', 'mobile_phone' => '067601919',
+            'from_currency' => 'XAF', 'to_currency' => 'XAF', 'fxrate' => 1, 'aml_cft' => true, 'sender_country' => 'CG', 'to_country' => 'CG', 'sender_city' => 'Brazzaville'])
+            ->assertCreated()->json();
+        [$url, $body] = end($sent);
+        $this->assertStringEndsWith('clients/request_payment', $url);
+        $this->assertSame($tx->reference . '-M1', $r['track_id']);
+        $this->assertSame('+242067601919', $body['mobile_phone']);
+        $this->assertSame(1, $body['aml_cft']);
+        $this->assertSame('Basile', $body['first_name']);
+        $this->assertSame('REFUND', $body['purpose']);
+        $this->assertSame('Brazzaville', $body['sender_city']);
+
+        // Disbursement : currency + country
+        $this->actingAs($admin, 'sanctum')->postJson("/api/admin/transactions/{$tx->id}/refunds", $base + ['api' => 'disbursement', 'amount' => 100,
+            'mobile_phone' => '067601919', 'currency' => 'XAF', 'country' => 'CG'])->assertCreated();
+        [$url, $body] = end($sent);
+        $this->assertStringEndsWith('disbursement/request_payment', $url);
+        $this->assertSame('CG', $body['country']);
+        $this->assertSame('XAF', $body['currency']);
+        $this->assertArrayNotHasKey('aml_cft', $body);
+    }
 }

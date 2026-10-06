@@ -650,6 +650,7 @@ class DigitwaceClient
         $msg = is_array($msg) ? json_encode($msg, JSON_UNESCAPED_UNICODE) : (string) $msg;
         $msg = mb_substr(strip_tags($msg), 0, 200);
         $hint = match (true) {
+            str_contains(strtolower($msg), 'whitelist') => 'IP du serveur pas encore autorisée chez WacePay : vérifiez Developers › IP Whitelist et que DIGITWACE_BASE_URL pointe bien sur la même plateforme (sandbox-payinws.wacepay.io pour la sandbox)',
             $code === '4001' => 'accès refusé — vérifiez que l\'IP du serveur est autorisée (IP Whitelist)',
             $code === '3002' => 'compte ou solde WacePay inactif',
             in_array($code, ['3015', '3016'], true) => 'référence invalide ou déjà utilisée',
@@ -716,6 +717,7 @@ class DigitwaceClient
             [(string) config('flashpay.digitwace.base_url')],
             explode(',', (string) config('flashpay.digitwace.discover_bases', '')),
             [
+                'https://sandbox-payinws.wacepay.io/api/v1/', 'https://payinws.wacepay.io/api/v1/',
                 'https://sandbox.wacepay.com/api/v1/', 'https://api.wacepay.com/api/v1/',
                 'https://payinws.wacepay.com/api/v1/', 'https://payinws.wacepay.com/api/',
                 'https://api.wacepay.com/api/v1/', 'https://api.wacepay.com/api/', 'https://api.wacepay.com/v1/', 'https://api.wacepay.com/',
@@ -725,7 +727,7 @@ class DigitwaceClient
             ]
         )), function ($b) {
             $h = strtolower((string) parse_url($b, PHP_URL_HOST));
-            return str_starts_with($b, 'https://') && ($h === 'wacepay.com' || str_ends_with($h, '.wacepay.com'));
+            return str_starts_with($b, 'https://') && (in_array($h, ['wacepay.com', 'wacepay.io'], true) || str_ends_with($h, '.wacepay.com') || str_ends_with($h, '.wacepay.io'));
         })));
         $paths = array_values(array_unique(array_filter([
             (string) config('flashpay.digitwace.paths.login'),

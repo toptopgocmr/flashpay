@@ -38,12 +38,17 @@ class AdminRefundController extends Controller
                 'country' => $meta['source_country'] ?? 'CG',
                 'currency' => $transaction->currency,
             ],
+            // Formulaire officiel PEEX : valeurs pré-remplies
+            'peex' => self::peexDefaults($transaction, $p, $meta, $mobileRail),
             'refunds' => ManualRefundService::requestsOf($transaction)->map(fn ($r) => $this->refunds->present($r))->values(),
         ]);
     }
 
     public function store(Request $request, Transaction $transaction)
     {
+        if ($request->filled('api')) {
+            return $this->storePeex($request, $transaction);
+        }
         $v = $request->validate([
             'channel' => 'required|in:mobile,bank',
             'amount' => 'required|integer|min:1',
@@ -80,6 +85,83 @@ class AdminRefundController extends Controller
         };
 
         return response()->json(['message' => $msg] + $res, $res['status'] === 'failed' ? 422 : 201);
+    }
+
+    /** Formulaire officiel PEEX (disbursement/request_payment, clients/request_payment, clients/request_bank_payment). */
+    protected function storePeex(Request $request, Transaction $transaction)
+    {
+        $api = $request->input('api');
+        $remit = in_array($api, ['remittance', 'bank'], true);
+        $v = $request->validate([
+            'api' => 'required|in:disbursement,remittance,bank',
+            'amount' => 'required|integer|min:1',
+            'reason' => 'required|string|max:190',
+            'sender_first_name' => 'required|string|max:60',
+            'sender_last_name' => 'required|string|max:60',
+            'sender_mobile_phone' => 'required|string|max:20',
+            'first_name' => 'required|string|max:60',
+            'last_name' => 'required|string|max:60',
+            'purpose' => 'required|string|max:120',
+            'fund_origin' => 'required|string|max:120',
+            'mobile_phone' => ($api === 'bank' ? 'nullable' : 'required') . '|string|max:20',
+            // disbursement
+            'currency' => ($api === 'disbursement' ? 'required' : 'nullable') . '|string|size:3',
+            'country' => ($api === 'disbursement' ? 'required' : 'nullable') . '|string|size:2',
+            // remittance / bank
+            'from_currency' => ($remit ? 'required' : 'nullable') . '|string|size:3',
+            'to_currency' => 'nullable|string|size:3',
+            'fxrate' => ($remit ? 'required' : 'nullable') . '|numeric|gt:0',
+            'aml_cft' => ($remit ? 'accepted' : 'nullable'),
+            'sender_country' => ($remit ? 'required' : 'nullable') . '|string|size:2',
+            'to_country' => ($remit ? 'required' : 'nullable') . '|string|size:2',
+            'email' => 'nullable|email|max:120',
+            'sender_email' => 'nullable|email|max:120',
+            'sender_city' => 'nullable|string|max:80',
+            // bank
+            'bank_name' => 'nullable|string|max:120',
+            'bank_address' => ($api === 'bank' ? 'required' : 'nullable') . '|string|max:190',
+            'bank_iban' => ($api === 'bank' ? 'required' : 'nullable') . '|string|max:40',
+            'bank_swift' => ($api === 'bank' ? 'required' : 'nullable') . '|string|min:6|max:11',
+        ], [
+            'aml_cft.accepted' => 'Cochez la confirmation LCB-FT (aml_cft = 1) exigée par PEEX.',
+        ]);
+
+        $res = $this->refunds->refund($transaction, $v, $request->user());
+        $msg = match ($res['status']) {
+            'failed' => 'Remboursement refusé par PEEX : ' . ($res['error'] ?? 'erreur'),
+            'successful' => "Remboursement effectué ({$res['track_id']}).",
+            default => "Remboursement envoyé à PEEX ({$res['track_id']}) : en cours de traitement.",
+        };
+
+        return response()->json(['message' => $msg] + $res, $res['status'] === 'failed' ? 422 : 201);
+    }
+
+    protected static function peexDefaults(Transaction $tx, array $p, array $meta, bool $mobileRail): array
+    {
+        $country = strtoupper($meta['source_country'] ?? 'CG');
+        $name = trim((string) ($meta['payer_verified_name'] ?? $p['sender_name'] ?? ''));
+        $parts = preg_split('/\s+/', $name) ?: [];
+        $first = array_shift($parts) ?: '';
+        $sender = (string) config('flashpay.peex.sender_name', 'FlashPay Remboursement');
+        $sp = preg_split('/\s+/', trim($sender)) ?: ['FlashPay'];
+        $payoutApi = null;
+        try {
+            $payoutApi = app(\App\Services\Peex\PeexCorridors::class)->country($country)['payout_api'] ?? null;
+        } catch (\Throwable) {
+        }
+
+        return [
+            'api' => $payoutApi === 'remittance' ? 'remittance' : 'disbursement',
+            'amount' => ManualRefundService::refundableOf($tx),
+            'currency' => $tx->currency ?: 'XAF', 'from_currency' => $tx->currency ?: 'XAF', 'to_currency' => $tx->currency ?: 'XAF', 'fxrate' => 1,
+            'sender_first_name' => array_shift($sp) ?: 'FlashPay', 'sender_last_name' => implode(' ', $sp) ?: 'Remboursement',
+            'sender_mobile_phone' => (string) config('flashpay.peex.sender_phone', ''),
+            'sender_country' => (string) config('flashpay.peex.sender_country', 'CG'), 'sender_email' => (string) config('mail.from.address', ''), 'sender_city' => 'Brazzaville',
+            'first_name' => $first, 'last_name' => implode(' ', $parts),
+            'mobile_phone' => $mobileRail ? TransactionPresenter::phone($tx->source_account) : ($p['sender_phone'] ?? ''),
+            'country' => $country, 'to_country' => $country,
+            'purpose' => 'FAMILY', 'fund_origin' => in_array($fo = strtoupper((string) config('flashpay.peex.default_fund_origin', 'SALARY')), ['SALARY', 'SALES_AND_BUSINESS_DEVELOPMENT', 'INVESTMENT'], true) ? $fo : 'SALARY',
+        ];
     }
 
     /** Relance la vérification du statut auprès de PEEX. */

@@ -29,6 +29,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Page de checkout e-commerce (formulaire sans session, protégé par OTP + PIN)
         $middleware->validateCsrfTokens(except: ['checkout/*']);
 
+        // SDP WebRTC des appels : la fin de ligne (CRLF) finale est obligatoire pour le navigateur
+        $middleware->trimStrings(except: ['offer', 'answer']);
+
         $middleware->api(prepend: [
             \Illuminate\Http\Middleware\HandleCors::class,
         ]);

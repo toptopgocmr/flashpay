@@ -1,29 +1,57 @@
 <template>
-  <div>
-    <h2>PEEX — {{ overview?.sandbox ? 'Sandbox' : 'Production' }}</h2>
+  <div class="gw-page">
+    <div class="gw-top">
+      <div class="gw-top-left">
+        <h1>Passerelle PEEX</h1>
+        <div class="gw-pills" v-if="overview">
+          <span class="gw-pill" :class="overview.sandbox ? 'info' : 'accent'">{{ overview.sandbox ? 'Sandbox' : 'Production' }}</span>
+        </div>
+      </div>
+      <div class="actions"><button class="btn-normal" :disabled="loadingOverview" @click="loadOverview(); loadRequests()">{{ loadingOverview ? 'Connexion…' : 'Actualiser' }}</button></div>
+    </div>
 
     <!-- Comptes PEEX -->
-    <div class="grid grid-3" style="margin-bottom:24px;">
-      <div class="card" v-for="(acc, key) in overview?.accounts || {}" :key="key" v-go="'#peex-requests'" title="Voir les demandes PEEX">
-        <div class="stat-label">{{ labels[key] }}</div>
-        <template v-if="acc.ok">
-          <div class="stat-value">{{ formatXaf(acc.data.collect_solde ?? acc.data.disbursement_solde ?? acc.data.solde) }}</div>
-          <div class="stat-label">{{ acc.data.name }} · {{ acc.data.is_activated ? 'activé' : 'inactif' }}</div>
-          <div class="stat-label mono" style="word-break:break-all;">callback : {{ acc.data.callback_url || 'non défini' }}</div>
-        </template>
-        <div v-else style="color:#b91c1c; font-size:13px;">{{ acc.error }}</div>
-      </div>
-    </div>
-    <p v-if="loadingOverview" class="stat-label">Connexion à PEEX…</p>
-
-    <!-- Diagnostic PEEX (erreurs 503, 403, injoignable…) -->
-    <div class="card" style="margin-bottom:24px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-        <div>
-          <h3 style="margin:0;">Diagnostic PEEX</h3>
+    <section class="gw-section">
+      <GwHead icon="wallet" title="Comptes PEEX" />
+      <div class="gw-acc">
+        <div class="gw-card" v-for="(acc, key) in overview?.accounts || {}" :key="key">
+          <div class="gw-card-h">
+            <div class="t"><h3>{{ labels[key] }}</h3><p v-if="acc.ok">{{ acc.data.name }}</p></div>
+            <div class="side"><span class="gw-pill" :class="acc.ok ? (acc.data.is_activated ? 'ok' : 'warn') : 'err'">{{ acc.ok ? (acc.data.is_activated ? 'Activé' : 'Inactif') : 'Erreur' }}</span></div>
+          </div>
+          <div class="gw-card-b">
+            <template v-if="acc.ok">
+              <div class="acc-bal" v-go="'#peex-requests'">{{ formatXaf(acc.data.collect_solde ?? acc.data.disbursement_solde ?? acc.data.solde) }}</div>
+              <GwField :value="acc.data.callback_url" placeholder="Callback non défini" />
+            </template>
+            <div v-else class="gw-note err">{{ acc.error }}</div>
+          </div>
         </div>
-        <button class="btn" :disabled="diagLoading" @click="runDiagnostic">{{ diagLoading ? 'Test en cours…' : 'Lancer le diagnostic' }}</button>
+        <div v-if="!overview && loadingOverview" class="gw-card"><div class="gw-empty">Connexion à PEEX…</div></div>
       </div>
+    </section>
+
+    <div class="gw-cols">
+      <!-- IP & callbacks -->
+      <section class="gw-section" v-if="overview">
+        <GwHead icon="shield" title="IP & callbacks" />
+        <div class="gw-card">
+          <div class="gw-card-h"><div class="t"><h3>IP du serveur FlashPay</h3><p>À faire autoriser par PEEX</p></div></div>
+          <div class="gw-card-b"><GwField :value="overview.server_ip" placeholder="Inconnue" /></div>
+        </div>
+        <div class="gw-card">
+          <div class="gw-card-h"><div class="t"><h3>Callbacks</h3><p>URL de notification par service</p></div></div>
+          <div class="gw-card-b">
+            <div v-for="(url, k) in overview.callback_urls" :key="k" class="cb-row"><span class="cb-k">{{ k }}</span><GwField :value="url" /></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Diagnostic PEEX (erreurs 503, 403, injoignable…) -->
+      <section class="gw-section">
+      <GwHead icon="pulse" title="Diagnostic" />
+    <div class="gw-card"><div class="gw-card-b">
+      <button class="gw-btn block" :disabled="diagLoading" @click="runDiagnostic">{{ diagLoading ? 'Test en cours…' : 'Lancer le diagnostic' }}</button>
       <div v-if="diagError" style="margin-top:10px; color:#b91c1c;">{{ diagError }}</div>
       <template v-if="diag">
         <div class="flash" :class="diag.probes && Object.values(diag.probes).every((p) => p.ok) && !diag.last24h.errors_5xx ? 'info' : 'err'" style="margin:12px 0 8px;"><div><strong>{{ diag.verdict }}</strong></div></div>
@@ -48,11 +76,14 @@
           <button class="btn-normal" style="margin-top:6px;" @click="copySupport">{{ copied ? 'Copié ✓' : 'Copier le message' }}</button>
         </details>
       </template>
+    </div></div>
+      </section>
     </div>
 
     <!-- Lancer un test -->
-    <div class="card" style="margin-bottom:24px;">
-      <h3>Lancer un test</h3>
+    <section class="gw-section">
+    <GwHead icon="flask" title="Tester" />
+    <div class="gw-card"><div class="gw-card-b">
       <form @submit.prevent="runTest" class="grid grid-3" style="gap:12px;">
         <select v-model="form.action">
           <option value="transfer">Transfert mobile → mobile (collecte puis décaissement)</option>
@@ -88,12 +119,14 @@
         <span v-if="lastTx.stage"> ({{ lastTx.stage }})</span>
         <span v-if="lastTx.failure_reason"> — {{ lastTx.failure_reason }}</span>
       </div>
-    </div>
+    </div></div>
+    </section>
 
     <!-- Remboursement PEEX -->
-    <div class="card" style="margin-bottom:24px;">
-      <h3>Remboursement PEEX</h3>
-      <form @submit.prevent="searchRefund" style="display:flex; gap:12px; margin-top:8px;">
+    <section class="gw-section">
+    <GwHead icon="refund" title="Remboursement" />
+    <div class="gw-card"><div class="gw-card-b">
+      <form @submit.prevent="searchRefund" style="display:flex; gap:12px;">
         <input v-model.trim="refundQ" placeholder="Ex. FP-CNSW0VIZPMGO, FP-…-C1 ou 057563644" style="flex:1;" />
         <button class="btn" type="submit" :disabled="refundSearching || refundQ.length < 3">{{ refundSearching ? 'Recherche…' : 'Rechercher' }}</button>
       </form>
@@ -116,18 +149,17 @@
           </tbody>
         </table>
       </div>
-    </div>
+    </div></div>
+    </section>
     <PeexRefund v-if="refundTx" :transaction-id="refundTx" @close="refundTx = null" @done="searchRefund(); loadRequests()" />
 
     <!-- Demandes PEEX -->
-    <div id="peex-requests" class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h3>Demandes PEEX</h3>
-        <div>
-          <label style="font-size:13px; margin-right:12px;"><input type="checkbox" v-model="autoRefresh" /> Auto-actualiser (10 s)</label>
-          <button class="btn" @click="syncAll" :disabled="syncing">{{ syncing ? 'Synchronisation…' : 'Synchroniser les statuts' }}</button>
-        </div>
-      </div>
+    <section id="peex-requests" class="gw-section">
+    <GwHead icon="swap" title="Demandes PEEX" :count="requests.length">
+      <label style="font-size:13px;"><input type="checkbox" v-model="autoRefresh" /> Auto (10 s)</label>
+      <button class="btn-normal" @click="syncAll" :disabled="syncing">{{ syncing ? 'Synchronisation…' : 'Synchroniser les statuts' }}</button>
+    </GwHead>
+    <div class="gw-card">
       <div class="req-wrap">
       <table class="req-table peex-req">
         <thead>
@@ -176,12 +208,7 @@
       </table>
       </div>
     </div>
-
-    <div class="card" style="margin-top:24px; font-size:13px;" v-if="overview">
-      <h3>Callbacks à déclarer chez PEEX</h3>
-      <div v-for="(url, k) in overview.callback_urls" :key="k"><strong>{{ k }}</strong> : <code>{{ url }}</code></div>
-      <div style="margin-top:8px"><strong>IP sortante du serveur</strong> (à faire autoriser par PEEX) : <code>{{ overview.server_ip || 'inconnue' }}</code></div>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -189,6 +216,8 @@
 import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import api from '../services/api'
 import PeexRefund from '../components/PeexRefund.vue'
+import GwHead from '../components/GwHead.vue'
+import GwField from '../components/GwField.vue'
 
 const labels = { collect: 'Compte Collecte', disbursement: 'Compte Décaissement', remittance: 'Compte Remittance' }
 const overview = ref(null)
@@ -343,7 +372,12 @@ onBeforeUnmount(stopTimer)
 </script>
 
 <style scoped>
-.req-wrap { overflow-x: auto; margin-top: 12px; }
+.req-wrap { overflow-x: auto; }
+.gw-card > .req-wrap .req-table th:first-child, .gw-card > .req-wrap .req-table td:first-child { padding-left: 16px; }
+.gw-acc { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px; align-items: start; }
+.acc-bal { font-size: 26px; font-weight: 800; letter-spacing: -.01em; cursor: pointer; }
+.cb-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 10px; }
+.cb-k { font-size: 12.5px; font-weight: 600; color: var(--text-2); text-transform: capitalize; }
 .req-table { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 13px; line-height: 1.4; }
 .req-table th { font-size: 11px; letter-spacing: .04em; padding: 8px 8px; white-space: nowrap; }
 .req-table td { vertical-align: top; padding: 9px 8px; }

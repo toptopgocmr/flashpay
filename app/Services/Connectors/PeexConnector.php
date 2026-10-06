@@ -142,6 +142,71 @@ class PeexConnector implements PaymentRailConnector
     }
 
     /**
+     * Remboursement manuel avec le formulaire officiel PEEX : les champs saisis
+     * dans la console sont envoyés tels quels à l'API choisie.
+     *  - disbursement : POST disbursement/request_payment
+     *  - remittance   : POST clients/request_payment
+     *  - bank         : POST clients/request_bank_payment
+     */
+    public function manualPeexRefund(Transaction $tx, string $api, array $f): array
+    {
+        $phone = fn (?string $p, ?string $c) => $p ? $this->corridors->resolve($p, $c)['phone'] : null;
+        $base = [
+            'track_id' => $this->trackId($tx->reference, 'M'),
+            'amount' => (int) $f['amount'],
+            'sender_first_name' => $f['sender_first_name'],
+            'sender_last_name' => $f['sender_last_name'],
+            'sender_mobile_phone' => $phone($f['sender_mobile_phone'], $f['sender_country'] ?? null),
+            'first_name' => $f['first_name'],
+            'last_name' => $f['last_name'],
+            'purpose' => $f['purpose'],
+            'fund_origin' => $f['fund_origin'],
+        ];
+
+        if ($api === 'disbursement') {
+            $country = strtoupper($f['country']);
+            $payload = $base + [
+                'mobile_phone' => $phone($f['mobile_phone'], $country),
+                'currency' => strtoupper($f['currency']),
+                'country' => $country,
+            ];
+            $route = ['country' => $country, 'corridor' => 'refund', 'phone' => $payload['mobile_phone']];
+
+            return $this->send('disbursement', $payload, $route, $tx, fn () => $this->client->disburse($payload));
+        }
+
+        $to = strtoupper($f['to_country']);
+        $payload = array_filter($base + [
+            'mobile_phone' => $phone($f['mobile_phone'] ?? null, $to),
+            'from_currency' => strtoupper($f['from_currency']),
+            'to_currency' => strtoupper($f['to_currency'] ?? $f['from_currency']),
+            'fxrate' => (float) ($f['fxrate'] ?? 1),
+            'aml_cft' => 1,
+            'sender_country' => strtoupper($f['sender_country']),
+            'to_country' => $to,
+            'email' => $f['email'] ?? null,
+            'sender_email' => $f['sender_email'] ?? null,
+            'sender_city' => $api === 'remittance' ? ($f['sender_city'] ?? null) : null,
+        ], fn ($v) => $v !== null && $v !== '');
+
+        if ($api === 'bank') {
+            $payload += [
+                'transaction_type' => 'bank',
+                'bank_address' => $f['bank_address'],
+                'bank_iban' => preg_replace('/\s+/', '', $f['bank_iban']),
+                'bank_swift' => strtoupper(preg_replace('/\s+/', '', $f['bank_swift'])),
+            ] + array_filter(['bank_name' => $f['bank_name'] ?? null]);
+            $route = ['country' => $to, 'corridor' => 'bank', 'phone' => $payload['mobile_phone'] ?? $payload['bank_iban']];
+
+            return $this->send('remittance', $payload, $route, $tx, fn () => $this->client->bankPayment($payload));
+        }
+
+        $route = ['country' => $to, 'corridor' => 'refund', 'phone' => $payload['mobile_phone']];
+
+        return $this->send('remittance', $payload, $route, $tx, fn () => $this->client->remit($payload));
+    }
+
+    /**
      * $externalRef = track_id PEEX. Interroge PEEX et met à jour peex_requests.
      * Une demande « unknown » (appel interrompu) introuvable chez PEEX après le
      * délai de grâce est déclarée jamais reçue : échec certain.

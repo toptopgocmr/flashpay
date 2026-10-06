@@ -9,6 +9,8 @@ use App\Models\ChatMessage;
 use App\Models\User;
 use App\Services\Notifications\NotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 
 /**
  * Appels audio dans le chat (WebRTC). Le serveur ne transporte pas la voix :
@@ -62,7 +64,7 @@ class ChatCallController extends Controller
             'caller_id' => $me->id,
             'callee_id' => $callee->id,
             'status' => 'ringing',
-            'offer' => $v['offer'],
+            'offer' => self::sdp($v['offer']),
             'agent_id' => \App\Support\SupportChat::isSupportUser($me) ? \App\Support\SupportChat::agent()?->id : null,
         ]);
 
@@ -89,7 +91,7 @@ class ChatCallController extends Controller
         if (! $call) {
             return response()->json(['call' => null]);
         }
-        return response()->json(['call' => $this->present($call, $me) + ['offer' => $call->offer], 'ice_servers' => self::iceServers()]);
+        return response()->json(['call' => $this->present($call, $me) + ['offer' => $call->offer ? self::sdp($call->offer) : null], 'ice_servers' => self::iceServers()]);
     }
 
     /** État d'un appel (l'appelant y récupère la réponse SDP une fois décroché). */
@@ -104,7 +106,7 @@ class ChatCallController extends Controller
         }
         $out = $this->present($call, $me);
         if ($call->status === 'accepted' && (int) $call->caller_id === $me->id) {
-            $out['answer'] = $call->answer;
+            $out['answer'] = $call->answer ? self::sdp($call->answer) : null;
         }
         return response()->json($out);
     }
@@ -120,7 +122,7 @@ class ChatCallController extends Controller
         if ($call->status !== 'ringing') {
             return response()->json(['message' => "L'appel est terminé.", 'status' => $call->status], 409);
         }
-        $call->forceFill(['status' => 'accepted', 'answer' => $v['answer'], 'answered_at' => now(), 'agent_id' => (\App\Support\SupportChat::isSupportUser($me) ? \App\Support\SupportChat::agent()?->id : null) ?? $call->agent_id])->save();
+        $call->forceFill(['status' => 'accepted', 'answer' => self::sdp($v['answer']), 'answered_at' => now(), 'agent_id' => (\App\Support\SupportChat::isSupportUser($me) ? \App\Support\SupportChat::agent()?->id : null) ?? $call->agent_id])->save();
         return response()->json($this->present($call, $me));
     }
 
@@ -149,11 +151,68 @@ class ChatCallController extends Controller
 
     // ------------------------------------------------------------------ Outils
 
+    /** SDP normalisé : lignes terminées par CRLF, y compris la dernière (sinon « Failed to parse SessionDescription »). */
+    public static function sdp(?string $sdp): string
+    {
+        $lines = preg_split('/\r\n|\r|\n/', trim((string) $sdp));
+        return implode("\r\n", array_filter($lines, fn ($l) => $l !== '')) . "\r\n";
+    }
+
     public static function iceServers(): array
+    {
+        return array_merge(self::baseIceServers(), self::providerTurn());
+    }
+
+    /**
+     * Relais TURN fournis par un service (identifiants temporaires, mis en cache) :
+     *  - Cloudflare : WEBRTC_CLOUDFLARE_TURN_KEY_ID + WEBRTC_CLOUDFLARE_TURN_TOKEN (1 000 Go/mois gratuits)
+     *  - Metered    : WEBRTC_METERED_DOMAIN (ex. flashpay.metered.live) + WEBRTC_METERED_API_KEY
+     */
+    public static function providerTurn(): array
+    {
+        $kid = config('flashpay.webrtc.cloudflare_key_id');
+        $tok = config('flashpay.webrtc.cloudflare_token');
+        if ($kid && $tok) {
+            $v = Cache::remember('webrtc:turn:cloudflare', now()->addHours(12), function () use ($kid, $tok) {
+                try {
+                    $r = Http::withToken($tok)->timeout(8)->post("https://rtc.live.cloudflare.com/v1/turn/keys/{$kid}/credentials/generate", ['ttl' => 86400]);
+                    $ice = $r->json('iceServers');
+                    return $r->successful() && $ice ? (array_is_list($ice) ? $ice : [$ice]) : null;
+                } catch (\Throwable) {
+                    return null;
+                }
+            });
+            if ($v) {
+                return $v;
+            }
+            Cache::forget('webrtc:turn:cloudflare');
+        }
+        $dom = config('flashpay.webrtc.metered_domain');
+        $key = config('flashpay.webrtc.metered_api_key');
+        if ($dom && $key) {
+            $v = Cache::remember('webrtc:turn:metered', now()->addHours(6), function () use ($dom, $key) {
+                try {
+                    $r = Http::timeout(8)->get('https://' . preg_replace('#^https?://#', '', rtrim((string) $dom, '/')) . '/api/v1/turn/credentials', ['apiKey' => $key]);
+                    $j = $r->json();
+                    return $r->successful() && is_array($j) && $j ? $j : null;
+                } catch (\Throwable) {
+                    return null;
+                }
+            });
+            if ($v) {
+                return $v;
+            }
+            Cache::forget('webrtc:turn:metered');
+        }
+        return [];
+    }
+
+    protected static function baseIceServers(): array
     {
         $stun = array_values(array_filter(array_map('trim', explode(',', (string) (config('flashpay.webrtc.stun_urls') ?: 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302')))));
         $servers = $stun ? [['urls' => $stun]] : [];
-        if (($turn = config('flashpay.webrtc.turn_url')) && strtolower((string) $turn) !== 'none') {
+        $provider = (config('flashpay.webrtc.cloudflare_key_id') && config('flashpay.webrtc.cloudflare_token')) || (config('flashpay.webrtc.metered_domain') && config('flashpay.webrtc.metered_api_key'));
+        if (($turn = config('flashpay.webrtc.turn_url')) && strtolower((string) $turn) !== 'none' && ! ($provider && str_contains((string) $turn, 'openrelay'))) {
             $servers[] = [
                 'urls' => array_values(array_filter(array_map('trim', explode(',', (string) $turn)))),
                 'username' => (string) config('flashpay.webrtc.turn_username', ''),
