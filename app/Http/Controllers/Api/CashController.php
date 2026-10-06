@@ -143,7 +143,10 @@ class CashController extends Controller
         $v = $request->validate(['code' => 'required|string|max:20']);
         $voucher = $this->cash->redeemVoucher($v['code'], 'cash_pickup', $request->user());
 
-        return response()->json($this->voucherPayload($voucher, false) + ['message' => 'Remettez ' . $voucher->amount . ' ' . $voucher->currency . ' au client.']);
+        return response()->json($this->voucherPayload($voucher, false) + [
+            'transaction_id' => $voucher->transaction?->id,
+            'reference' => $voucher->transaction?->reference,
+            'message' => 'Remettez ' . $voucher->amount . ' ' . $voucher->currency . ' au client.']);
     }
 
     // ------------------------------------------------------------ Banque partenaire (GAB)

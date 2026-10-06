@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="hce_service_description">FlashPay – paiement sans contact entre téléphones</string>
-    <string name="hce_aid_description">Code FlashPay (QR, paiement, dépôt)</string>
-</resources>

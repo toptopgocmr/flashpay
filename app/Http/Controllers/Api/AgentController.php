@@ -158,28 +158,86 @@ class AgentController extends Controller
         ]);
     }
 
+    /**
+     * Historique agent (dépôts / retraits) : filtres type, période, recherche,
+     * totaux de la sélection, et détail complet de chaque opération (reçu).
+     *   GET /api/agent/history?kind=deposit|withdrawal&from=Y-m-d&to=Y-m-d&q=…&status=…
+     */
     public function history(Request $request)
     {
         $walletId = $request->user()->wallet?->id;
-
-        $ops = \App\Models\Transaction::where(fn ($q) => $q->where('source_wallet_id', $walletId)->orWhere('destination_wallet_id', $walletId))
-            ->whereIn('type', ['cash_in', 'cash_out', 'cash_pickup'])
-            ->latest()
-            ->paginate(20);
-
-        $ops->getCollection()->transform(fn ($t) => [
-            'id' => $t->id,
-            'reference' => $t->reference,
-            'kind' => $t->type === 'cash_in' ? 'deposit' : 'withdrawal',
-            'label' => $t->type === 'cash_in' ? 'Dépôt' : 'Retrait cash',
-            'client' => $t->meta['client_name'] ?? $t->meta['beneficiary_name'] ?? null,
-            'amount' => $t->amount,
-            'currency' => $t->currency,
-            'commission' => (int) ($t->meta['agent_commission'] ?? 0),
-            'status' => $t->status,
-            'created_at' => $t->created_at,
+        $v = $request->validate([
+            'kind' => 'nullable|in:deposit,withdrawal',
+            'status' => 'nullable|in:successful,processing,failed,reversed',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'q' => 'nullable|string|max:60',
         ]);
 
-        return response()->json($ops);
+        $q = \App\Models\Transaction::where(fn ($q) => $q->where('source_wallet_id', $walletId)->orWhere('destination_wallet_id', $walletId))
+            ->whereIn('type', match ($v['kind'] ?? null) {
+                'deposit' => ['cash_in'],
+                'withdrawal' => ['cash_out', 'cash_pickup'],
+                default => ['cash_in', 'cash_out', 'cash_pickup'],
+            });
+        if (! empty($v['status'])) {
+            $q->where('status', $v['status']);
+        }
+        if (! empty($v['from'])) {
+            $q->where('created_at', '>=', \Illuminate\Support\Carbon::parse($v['from'], 'Africa/Brazzaville')->startOfDay()->utc());
+        }
+        if (! empty($v['to'])) {
+            $q->where('created_at', '<=', \Illuminate\Support\Carbon::parse($v['to'], 'Africa/Brazzaville')->endOfDay()->utc());
+        }
+        if ($term = trim((string) ($v['q'] ?? ''))) {
+            $digits = preg_replace('/\D/', '', $term);
+            $q->where(function ($w) use ($term, $digits) {
+                $w->where('reference', 'like', "%{$term}%")->orWhere('meta', 'like', "%{$term}%");
+                if (strlen($digits) >= 6) {
+                    $w->orWhere('source_account', 'like', "%{$digits}%")->orWhere('destination_account', 'like', "%{$digits}%")
+                        ->orWhereHas('sourceWallet.user', fn ($u) => $u->where('phone', 'like', "%{$digits}%"))
+                        ->orWhereHas('destinationWallet.user', fn ($u) => $u->where('phone', 'like', "%{$digits}%"));
+                }
+            });
+        }
+
+        // Totaux de la sélection (opérations réussies)
+        $ok = (clone $q)->where('status', 'successful')->get(['type', 'amount', 'meta']);
+        $summary = [
+            'deposits' => ['count' => $ok->where('type', 'cash_in')->count(), 'amount' => (int) $ok->where('type', 'cash_in')->sum('amount')],
+            'withdrawals' => ['count' => $ok->where('type', '!=', 'cash_in')->count(), 'amount' => (int) $ok->where('type', '!=', 'cash_in')->sum('amount')],
+            'commission' => (int) $ok->sum(fn ($t) => (int) ($t->meta['agent_commission'] ?? 0)),
+            'count' => (clone $q)->count(),
+        ];
+
+        $ops = $q->with(['sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone'])->latest()->paginate(20);
+
+        $ops->getCollection()->transform(function ($t) {
+            $p = \App\Support\TransactionPresenter::parties($t);
+            $deposit = $t->type === 'cash_in';
+
+            return [
+                'id' => $t->id,
+                'reference' => $t->reference,
+                'type' => $t->type,
+                'kind' => $deposit ? 'deposit' : 'withdrawal',
+                'label' => $deposit ? 'Dépôt' : 'Retrait cash',
+                'client' => $t->meta['client_name'] ?? $t->meta['beneficiary_name'] ?? ($deposit ? $p['beneficiary_name'] : $p['sender_name']),
+                'client_phone' => $deposit ? $p['beneficiary_phone'] : $p['sender_phone'],
+                'amount' => $t->amount,
+                'fee' => (int) $t->fee,
+                'currency' => $t->currency,
+                'commission' => (int) ($t->meta['agent_commission'] ?? 0),
+                'status' => $t->status,
+                'status_label' => $t->statusLabel(),
+                'failure_reason' => $t->failure_reason,
+                'created_at' => $t->created_at,
+                'completed_at' => $t->completed_at,
+                // Récapitulatif (même format que le reçu client : FpTxRecap)
+                'details' => \App\Support\TransactionPresenter::details($t, null, $deposit ? 'Dépôt d\'espèces' : 'Retrait d\'espèces'),
+            ] + $p;
+        });
+
+        return response()->json($ops->toArray() + ['summary' => $summary]);
     }
 }

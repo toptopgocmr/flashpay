@@ -2,7 +2,7 @@
   <div v-if="t">
     <div class="page-header">
       <div><h1 class="mono" style="font-size:22px;">{{ t.reference }}</h1></div>
-      <div class="actions"><button class="btn-normal" @click="showRefund = true">Rembourser via PEEX</button><router-link class="btn-normal" to="/transactions">‹ Transactions</router-link></div>
+      <div class="actions"><button class="btn-normal" title="Imprimer ou enregistrer en PDF" @click="openReceipt(t.id)">🧾 Reçu</button><button class="btn-normal" title="Format imprimante thermique 58/80 mm" @click="openReceipt(t.id, { ticket: true })">Ticket</button><button class="btn-normal" @click="showRefund = true">Rembourser via PEEX</button><router-link class="btn-normal" to="/transactions">‹ Transactions</router-link></div>
       <PeexRefund v-if="showRefund" :transaction-id="Number(route.params.id)" @close="showRefund = false" />
     </div>
     <div class="grid grid-4 mb">
@@ -93,6 +93,7 @@
 </template>
 
 <script setup>
+import { openReceipt } from '../utils/receipt'
 import { computed as _computed } from 'vue'
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'

@@ -310,6 +310,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::middleware('role:super_admin')->prefix('admin')->group(function () {
         Route::get('/dashboard', AdminDashboardController::class);
         Route::get('/transactions', [AdminDashboardController::class, 'transactions']);
+        // Reçus (un ou plusieurs, imprimables / PDF)
+        Route::post('/transactions/receipts', [\App\Http\Controllers\Api\ReceiptController::class, 'adminBatchLink']);
+        Route::get('/transactions/{transaction}/receipt', [\App\Http\Controllers\Api\ReceiptController::class, 'adminLink'])->whereNumber('transaction');
         Route::get('/transactions/{transaction}/refunds', [\App\Http\Controllers\Api\AdminRefundController::class, 'index']);
         Route::post('/transactions/{transaction}/refunds', [\App\Http\Controllers\Api\AdminRefundController::class, 'store'])->middleware('throttle:20,1');
         Route::post('/transactions/{transaction}/refunds/{peexRequest}/refresh', [\App\Http\Controllers\Api\AdminRefundController::class, 'refresh']);

@@ -72,25 +72,36 @@
         <input v-model="f.q" type="search" placeholder="Numéro de téléphone, référence FP-…" @keyup.enter="apply" />
       </label>
       <div class="wp-actions">
-        <button class="wp-btn" title="Réinitialiser les filtres" @click="reset"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/></svg></button>
-        <button class="wp-btn" title="Actualiser" @click="load(meta?.current_page || 1)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14 5.3M4 12A8 8 0 0 1 18 6.7M18 3v4h-4M6 21v-4h4"/></svg></button>
+        <button class="wp-btn" title="Réinitialiser les filtres" :disabled="loading" @click="reset"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/></svg></button>
+        <button class="wp-btn" :class="{ spin: loading }" title="Actualiser" :disabled="loading" @click="refresh"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14 5.3M4 12A8 8 0 0 1 18 6.7M18 3v4h-4M6 21v-4h4"/></svg></button>
+        <button class="wp-btn" :title="selected.size ? `Imprimer les reçus des ${selected.size} transactions cochées` : 'Imprimer les reçus de cette page'" :disabled="!transactions.length" @click="printReceipts">
+          <svg viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1h-2M6 14h12v7H6z"/></svg>
+          Reçus<template v-if="selected.size"> ({{ selected.size }})</template>
+        </button>
         <ExportButton class="wp-btn primary" filename="transactions" :columns="EXP_COLS" :fetch="expFetch" />
       </div>
     </section>
+
+    <div class="wp-refresh">
+      <span v-if="refreshedAt">Mis à jour à {{ refreshedAt }}<template v-if="meta"> · {{ meta.total }} résultat{{ meta.total > 1 ? 's' : '' }}</template></span>
+      <label title="Recharge la liste toutes les 30 secondes"><input v-model="auto" type="checkbox" /> Actualisation auto (30 s)</label>
+      <span v-if="selected.size" class="sel">{{ selected.size }} sélectionnée{{ selected.size > 1 ? 's' : '' }} · <a href="#" @click.prevent="selected.clear()">désélectionner</a></span>
+    </div>
 
     <!-- Tableau -->
     <section class="wp-box flush">
       <div class="wp-table">
         <table>
           <colgroup>
-            <col style="width:15%"><col style="width:14%"><col style="width:14%"><col style="width:9%"><col style="width:8%"><col style="width:8%">
-            <col style="width:8%"><col style="width:12%"><col style="width:9%"><col style="width:3%">
+            <col style="width:3%"><col style="width:14%"><col style="width:13%"><col style="width:13%"><col style="width:9%"><col style="width:7%"><col style="width:7%">
+            <col style="width:8%"><col style="width:11%"><col style="width:9%"><col style="width:6%">
           </colgroup>
           <thead>
-            <tr><th>ID</th><th>Expéditeur</th><th>Bénéficiaire</th><th class="num">Montant</th><th class="num">Frais</th><th class="num" title="Frais prélevés par la passerelle (WacePay / PEEX)">Frais pass.</th><th>Passerelle</th><th>Opérateurs</th><th>Date</th><th></th></tr>
+            <tr><th class="c-chk" @click.stop><input type="checkbox" :checked="allChecked" :indeterminate.prop="selected.size > 0 && !allChecked" title="Tout cocher (page)" @change="toggleAll" /></th><th>ID</th><th>Expéditeur</th><th>Bénéficiaire</th><th class="num">Montant</th><th class="num">Frais</th><th class="num" title="Frais prélevés par la passerelle (WacePay / PEEX)">Frais pass.</th><th>Passerelle</th><th>Opérateurs</th><th>Date</th><th></th></tr>
           </thead>
           <tbody>
-            <tr v-for="t in transactions" :key="t.id" @click="detail = t">
+            <tr v-for="t in transactions" :key="t.id" :class="{ sel: selected.has(t.id) }" @click="detail = t">
+              <td class="c-chk" @click.stop><input type="checkbox" :checked="selected.has(t.id)" @change="toggle(t.id)" /></td>
               <td class="c-code"><b class="mono">{{ t.reference }}</b><small><span class="pill sm" :class="t.status">{{ STATUS[t.status] || t.status }}</span> {{ t.journal?.label }}</small></td>
               <td class="c-who"><b :title="t.sender?.name">{{ t.sender?.name || '—' }}</b><small>{{ phone(t.sender?.account) }}</small></td>
               <td class="c-who"><b :title="t.beneficiary?.name">{{ t.beneficiary?.name || '—' }}</b><small>{{ phone(t.beneficiary?.account) }}</small></td>
@@ -107,11 +118,12 @@
               </td>
               <td class="c-ops">{{ opName(t.gateway?.in) }} <span class="arr">→</span> {{ opName(t.gateway?.out) }}</td>
               <td class="c-dt">{{ dt(t.created_at) }}</td>
-              <td class="c-eye" @click.stop="detail = t" title="Voir les détails">
-                <svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              <td class="c-eye" @click.stop>
+                <button title="Voir les détails" @click="detail = t"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                <button title="Reçu (imprimer / PDF)" @click="openReceipt(t.id)"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4"/></svg></button>
               </td>
             </tr>
-            <tr v-if="!loading && !transactions.length"><td colspan="10" class="empty">Aucune transaction pour ces filtres.</td></tr>
+            <tr v-if="!loading && !transactions.length"><td colspan="11" class="empty">Aucune transaction pour ces filtres.</td></tr>
           </tbody>
         </table>
       </div>
@@ -188,6 +200,10 @@
           </div>
 
           <div class="wp-mf">
+            <button class="wp-btn" title="Imprimer ou enregistrer en PDF (format A4)" @click="openReceipt(detail.id)">
+              <svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4"/></svg> Reçu
+            </button>
+            <button class="wp-btn" title="Format imprimante thermique 58/80 mm" @click="openReceipt(detail.id, { ticket: true })">Ticket</button>
             <button v-if="detail.status === 'processing' || detail.status === 'failed'" class="wp-btn" :disabled="check?.loading" @click="checkStatus(detail)">Vérifier le statut</button>
             <button v-if="detail.refundable > 0" class="wp-btn" @click="refundTx = detail.id; detail = null">Rembourser via PEEX</button>
             <router-link class="wp-btn primary" :to="'/transactions/' + detail.id">Fiche complète ›</router-link>
@@ -219,7 +235,8 @@ import PeexRefund from '../components/PeexRefund.vue'
 import ExportButton from '../components/ExportButton.vue'
 import Modal from '../components/Modal.vue'
 import { fetchAllPages, fmtDate } from '../utils/export'
-import { computed, reactive, ref, watch } from 'vue'
+import { openReceipt, openReceipts } from '../utils/receipt'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../services/api'
 
@@ -336,7 +353,42 @@ function apply() {
   router.replace({ path: '/transactions', query: Object.fromEntries(Object.entries(f).filter(([, v]) => v)) })
 }
 function reset() {
-  router.replace({ path: '/transactions' })
+  for (const k of Object.keys(f)) f[k] = ''
+  selected.value.clear()
+  // Déjà sans filtre : la route ne change pas, on recharge directement
+  if (Object.keys(route.query).length) router.replace({ path: '/transactions' })
+  else load(1)
+}
+
+// --- Actualisation (bouton + automatique toutes les 30 s)
+const refreshedAt = ref('')
+const auto = ref(false)
+let timer = null
+function refresh() { return load(meta.value?.current_page || 1) }
+watch(auto, (on) => {
+  clearInterval(timer)
+  timer = on ? setInterval(() => { if (!loading.value && !detail.value && !document.hidden) refresh() }, 30000) : null
+})
+onBeforeUnmount(() => clearInterval(timer))
+
+// --- Sélection & reçus
+const selected = ref(new Set())
+const allChecked = computed(() => transactions.value.length > 0 && transactions.value.every((t) => selected.value.has(t.id)))
+function toggle(id) {
+  const s = new Set(selected.value)
+  s.has(id) ? s.delete(id) : s.add(id)
+  selected.value = s
+}
+function toggleAll() {
+  const s = new Set(selected.value)
+  if (allChecked.value) transactions.value.forEach((t) => s.delete(t.id))
+  else transactions.value.forEach((t) => s.add(t.id))
+  selected.value = s
+}
+function printReceipts() {
+  const ids = selected.value.size ? [...selected.value] : transactions.value.map((t) => t.id)
+  if (ids.length > 100 && !window.confirm('Seuls les 100 premiers reçus seront imprimés. Continuer ?')) return
+  openReceipts(ids)
 }
 function quickStatus(s) {
   f.status = f.status === s ? '' : s
@@ -354,6 +406,11 @@ async function load(page = 1) {
     seenCurrencies.value = [...new Set([...seenCurrencies.value, ...keys])]
     if (f.currency) cur.value = f.currency
     else if (keys.length && !keys.includes(cur.value)) cur.value = keys[0]
+    // Fenêtre Détails ouverte : affiche la version à jour
+    if (detail.value) detail.value = data.data.find((x) => x.id === detail.value.id) || detail.value
+    refreshedAt.value = new Date().toLocaleTimeString('fr-FR')
+  } catch (e) {
+    window.alert(e.response?.data?.message || 'Impossible de charger les transactions.')
   } finally {
     loading.value = false
   }
@@ -429,6 +486,15 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 .wp-btn:hover { background: var(--soft); }
 .wp-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .wp-btn.primary { border-color: #2563eb; color: #2563eb; }
+.wp-btn:disabled { opacity: .55; cursor: default; }
+.wp-btn.spin svg { animation: wp-spin .8s linear infinite; }
+@keyframes wp-spin { to { transform: rotate(360deg); } }
+.wp-refresh { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: -4px 2px 8px; font-size: 11.5px; color: var(--t2); }
+.wp-refresh label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+.wp-refresh .sel { color: #2563eb; font-weight: 600; } .wp-refresh .sel a { color: inherit; }
+.c-chk { text-align: center; padding-left: 4px !important; padding-right: 0 !important; }
+.c-chk input { cursor: pointer; vertical-align: middle; }
+.wp-table tbody tr.sel td { background: #eff6ff; }
 
 /* Tableau : largeur fixe, en-tête collant, défilement vertical interne */
 .wp-table { max-height: calc(100vh - 330px); min-height: 260px; overflow: auto; }
@@ -448,7 +514,10 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 .c-ops { font-size: 12px; } .c-ops .arr { color: var(--t3); margin: 0 2px; }
 .c-dt { color: var(--t2); font-size: 11.5px; }
 .c-eye { text-align: center; padding-left: 0 !important; padding-right: 0 !important; }
-.c-eye svg { width: 17px; height: 17px; fill: none; stroke: #2563eb; stroke-width: 2; vertical-align: middle; }
+.c-eye { white-space: nowrap; }
+.c-eye button { border: 0; background: none; padding: 3px; border-radius: 6px; cursor: pointer; line-height: 0; }
+.c-eye button:hover { background: #eff6ff; }
+.c-eye svg { width: 17px; height: 17px; fill: none; stroke: #2563eb; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
 .pill { display: inline-block; padding: 3px 8px; border-radius: 5px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; white-space: nowrap; }
 .pill.sm { padding: 0 5px; font-size: 9.5px; border-radius: 4px; margin-right: 4px; line-height: 15px; }
 .pill.successful { background: #dcfce7; color: #15803d; } .pill.processing { background: #fef9c3; color: #a16207; }
@@ -482,6 +551,6 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 .rate-grid input { width: 80px !important; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
 
 @media (max-width: 1100px) { .wp-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } .wp-filters .wide { grid-column: span 2; } .wp-actions { grid-column: span 3; justify-content: flex-end; } }
-@media (max-width: 900px) { .wp-table table { width: 980px; } }
+@media (max-width: 900px) { .wp-table table { width: 1040px; } }
 @media (max-width: 640px) { .wp-filters { grid-template-columns: 1fr 1fr; } .wp-filters .wide, .wp-actions { grid-column: span 2; } }
 </style>

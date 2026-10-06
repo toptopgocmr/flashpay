@@ -23,6 +23,41 @@ class ReceiptController extends Controller
         ]);
     }
 
+    /** Console admin : lien du reçu de n'importe quelle transaction. */
+    public function adminLink(Transaction $transaction)
+    {
+        return response()->json([
+            'url' => URL::temporarySignedRoute('receipt.show', now()->addDays(7), ['transaction' => $transaction->reference]),
+            'reference' => $transaction->reference,
+        ]);
+    }
+
+    /**
+     * Console admin : plusieurs reçus sur une seule page imprimable
+     * (un reçu par page A4, ou à la suite en format ticket).
+     *   POST /api/admin/transactions/receipts {ids: [..]}  (100 max)
+     */
+    public function adminBatchLink(Request $request)
+    {
+        $v = $request->validate(['ids' => 'required|array|min:1|max:100', 'ids.*' => 'integer']);
+        $refs = Transaction::whereIn('id', $v['ids'])->orderByDesc('id')->pluck('reference')->all();
+        abort_if(! $refs, 404);
+
+        return response()->json([
+            'url' => URL::temporarySignedRoute('receipt.batch', now()->addHours(2), ['refs' => implode(',', $refs), 'autoprint' => 1]),
+            'count' => count($refs),
+        ]);
+    }
+
+    public function batch(Request $request)
+    {
+        $refs = array_slice(array_filter(explode(',', (string) $request->query('refs'))), 0, 100);
+        $txs = Transaction::with(['sourceWallet.user', 'destinationWallet.user', 'peexRequests'])
+            ->whereIn('reference', $refs)->orderByDesc('id')->get();
+
+        return response()->view('receipts', ['receipts' => $txs->map(fn ($t) => self::data($t))->all()]);
+    }
+
     public function show(string $transaction)
     {
         $tx = Transaction::with(['sourceWallet.user', 'destinationWallet.user', 'peexRequests'])
@@ -39,8 +74,8 @@ class ReceiptController extends Controller
         $dst = $tx->destinationWallet?->user;
         $operatorRef = null;
         $p = \App\Support\TransactionPresenter::parties($tx);
-        foreach ($tx->peexRequests as $p) {
-            $j = json_decode((string) $p->payment_proof, true);
+        foreach ($tx->peexRequests as $pr) {
+            $j = json_decode((string) $pr->payment_proof, true);
             $operatorRef = $operatorRef ?: ($j['financialTransactionId'] ?? null);
         }
 
@@ -64,6 +99,23 @@ class ReceiptController extends Controller
             'note' => $m['note'] ?? null,
             'operator_ref' => $operatorRef,
             'failure' => $tx->status === 'failed' ? $tx->failure_reason : null,
+            // Dépôt / retrait en espèces : agent qui a servi le client
+            'agent' => match ($tx->type) {
+                'cash_in' => self::agentLabel($src, $m['agent_name'] ?? null),
+                'cash_out', 'cash_pickup' => self::agentLabel($dst, $m['agent_name'] ?? null),
+                default => null,
+            },
         ];
+    }
+
+    protected static function agentLabel($user, ?string $fallback): ?string
+    {
+        $agent = $user?->agent;
+        if (! $agent) {
+            return $fallback;
+        }
+        $code = $agent->agent_code ? ' (' . $agent->agent_code . ')' : '';
+
+        return trim(($user->full_name ?: $fallback) . $code);
     }
 }
