@@ -594,8 +594,9 @@ class DigitwaceClient
                     $json = $this->call('get', 'payout_tx', [], ['id' => rawurlencode($waceIdOrReference)]);
                 }
             }
-            $raw = data_get($json, 'data.status') ?? data_get($json, 'data.transaction.status') ?? data_get($json, 'status');
-            $raw = is_bool($raw) ? null : $raw;
+            // Le statut de l'opération peut être à plusieurs endroits ; « status: true » en tête
+            // de réponse = succès de l'APPEL, pas de la transaction (ignoré).
+            $raw = self::findStatus($json);
 
             return [
                 'status' => self::normalize($raw),
@@ -627,11 +628,43 @@ class DigitwaceClient
         }
     }
 
+    /** Statut de transaction dans une réponse WacePay (premier libellé texte trouvé). */
+    public static function findStatus(array $json): ?string
+    {
+        foreach (['data.status', 'data.transaction.status', 'data.payment.status', 'data.paymentStatus', 'data.transactionStatus',
+            'data.0.status', 'data.data.status', 'data.payout.status', 'transaction.status', 'paymentStatus', 'transactionStatus'] as $k) {
+            $v = data_get($json, $k);
+            if (is_string($v) && $v !== '') {
+                return $v;
+            }
+        }
+        // Recherche en profondeur : clé « status » / « paymentStatus » / « transactionStatus » texte
+        $walk = function (array $a, int $d) use (&$walk): ?string {
+            foreach ($a as $k => $v) {
+                if (is_string($k) && in_array(strtolower($k), ['status', 'paymentstatus', 'transactionstatus', 'state'], true) && is_string($v) && $v !== '') {
+                    return $v;
+                }
+            }
+            foreach ($a as $v) {
+                if (is_array($v) && $d < 4 && ($r = $walk($v, $d + 1)) !== null) {
+                    return $r;
+                }
+            }
+            return null;
+        };
+        // Dans « data » seulement : le « status » de premier niveau peut décrire l'APPEL (« success »), pas la transaction
+        if (is_array($json['data'] ?? null)) {
+            return $walk($json['data'], 0);
+        }
+        $top = $json['status'] ?? null;
+        return is_string($top) && $top !== '' ? $top : null;
+    }
+
     public static function normalize(mixed $s): string
     {
         $s = strtolower(trim((string) $s));
         return match (true) {
-            in_array($s, ['success', 'successful', 'successfull', 'succeeded', 'paid', 'completed', 'complete', 'done', 'approved', 'delivered', 'confirmed_paid'], true) => 'successful',
+            in_array($s, ['success', 'successful', 'successfull', 'succeeded', 'succes', 'paid', 'completed', 'complete', 'done', 'approved', 'delivered', 'confirmed_paid', 'settled', 'credited', 'validated'], true) => 'successful',
             in_array($s, ['failed', 'failure', 'rejected', 'declined', 'cancel', 'canceled', 'cancelled', 'error', 'refunded', 'expired', 'reversed'], true) => 'failed',
             default => 'pending',
         };

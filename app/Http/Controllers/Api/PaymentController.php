@@ -177,6 +177,17 @@ class PaymentController extends Controller
                     }
                 }
             }
+            // Même chose pour WacePay (collecte, page carte, versement) sans attendre le webhook
+            $wace = app(\App\Services\Digitwace\DigitwaceStatusHandler::class);
+            foreach (\App\Models\DigitwaceRequest::where('transaction_id', $transaction->id)->whereNull('finalized_at')->get() as $req) {
+                if (\Illuminate\Support\Facades\Cache::add('wace:poll:' . $req->id, 1, 4)) {
+                    try {
+                        $wace->refresh($req);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('WacePay : vérification du statut impossible', ['reference' => $req->reference, 'error' => $e->getMessage()]);
+                    }
+                }
+            }
             $transaction->refresh();
             // Délai de validation dépassé : on conclut sans attendre le planificateur
             app(\App\Services\Peex\PendingTimeoutService::class)->expireIfStale($transaction);

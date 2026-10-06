@@ -176,11 +176,16 @@ class AdminDashboardController extends Controller
             $wid = $u?->wallet?->id ?? 0;
             $q->where(fn ($w) => $w->where('initiated_by', $uid)->orWhere('source_wallet_id', $wid)->orWhere('destination_wallet_id', $wid));
         }
+        if ($cur = strtoupper(trim((string) $request->query('currency')))) {
+            $q->where('currency', $cur);
+        }
         if ($term = trim((string) $request->query('q'))) {
             $q->where(fn ($w) => $w->where('reference', 'like', "%{$term}%")
                 ->orWhere('source_account', 'like', "%{$term}%")
                 ->orWhere('destination_account', 'like', "%{$term}%"));
         }
+
+        $summary = $this->txSummary(clone $q);
 
         $page = $q->select('transactions.*')->selectRaw("{$expr} as channel")
             ->with(['sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone', 'peexRequests', 'digitwaceRequests'])
@@ -201,8 +206,49 @@ class AdminDashboardController extends Controller
         $c = $page->getCollection()->pluck('costs');
         $totals = ['billed' => $c->sum('billed'), 'partner_total' => $c->sum('partner_total'), 'margin' => $c->sum('margin')];
 
-        return response()->json($page->toArray() + ['cost_totals' => $totals, 'partner_rates' => $rates, 'channels' => TransactionChannels::LABELS, 'families' => TransactionChannels::FAMILIES, 'statuses' => TransactionChannels::STATUSES,
+        return response()->json($page->toArray() + ['summary' => $summary, 'cost_totals' => $totals, 'partner_rates' => $rates, 'channels' => TransactionChannels::LABELS, 'families' => TransactionChannels::FAMILIES, 'statuses' => TransactionChannels::STATUSES,
             'user_name' => ($uid = (int) $request->query('user')) ? User::whereKey($uid)->value('full_name') : null]);
+    }
+
+    /**
+     * Cartes de synthèse (style WacePay) par devise, sur toutes les transactions filtrées :
+     * réussies, en attente, échouées, frais facturés, frais partenaires, marge, taux de réussite.
+     */
+    private function txSummary($q): array
+    {
+        $rows = (clone $q)->reorder()->selectRaw("currency,
+                SUM(CASE WHEN status = 'successful' THEN 1 ELSE 0 END) as ok_n, SUM(CASE WHEN status = 'successful' THEN amount ELSE 0 END) as ok_sum,
+                SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as pend_n, SUM(CASE WHEN status = 'processing' THEN amount ELSE 0 END) as pend_sum,
+                SUM(CASE WHEN status IN ('failed','reversed') THEN 1 ELSE 0 END) as ko_n, SUM(CASE WHEN status IN ('failed','reversed') THEN amount ELSE 0 END) as ko_sum,
+                SUM(CASE WHEN status = 'successful' THEN fee + COALESCE(merchant_fee, 0) ELSE 0 END) as billed")
+            ->groupBy('currency')->get();
+
+        // Frais partenaires des opérations réussies (plafonné pour rester rapide)
+        $rates = \App\Support\PartnerFees::rates();
+        $partner = [];
+        (clone $q)->reorder()->where('status', 'successful')->latest('id')->limit(3000)
+            ->with(['peexRequests', 'digitwaceRequests'])->get()
+            ->each(function ($t) use (&$partner, $rates) {
+                $partner[$t->currency] = ($partner[$t->currency] ?? 0) + \App\Support\PartnerFees::of($t, $rates)['partner_total'];
+            });
+
+        $out = [];
+        foreach ($rows as $r) {
+            $done = (int) $r->ok_n + (int) $r->ko_n;
+            $pf = (int) ($partner[$r->currency] ?? 0);
+            $out[$r->currency] = [
+                'successful' => ['count' => (int) $r->ok_n, 'amount' => (int) $r->ok_sum],
+                'pending' => ['count' => (int) $r->pend_n, 'amount' => (int) $r->pend_sum],
+                'failed' => ['count' => (int) $r->ko_n, 'amount' => (int) $r->ko_sum],
+                'billed' => (int) $r->billed,
+                'partner_fees' => $pf,
+                'margin' => (int) $r->billed - $pf,
+                'success_rate' => $done ? round(100 * (int) $r->ok_n / $done, 1) : null,
+                'total' => (int) $r->ok_n + (int) $r->pend_n + (int) $r->ko_n,
+            ];
+        }
+        uasort($out, fn ($a, $b) => $b['total'] <=> $a['total']);
+        return $out;
     }
 
     /**
