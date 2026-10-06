@@ -103,6 +103,83 @@ class PublicPagesController extends Controller
         return response($this->layout('API e-commerce FlashPay', file_get_contents(resource_path('docs/api-ecommerce.html')), 760));
     }
 
+    // ------------------------------------------------------------ Google Play : confidentialité & suppression
+
+    /** Politique de confidentialité (URL déclarée sur Google Play). */
+    public function privacy()
+    {
+        $html = strtr(file_get_contents(resource_path('docs/confidentialite.html')), [
+            '{{ENTITY}}' => e(config('flashpay.legal.entity')),
+            '{{DATE}}' => e(config('flashpay.legal.privacy_updated')),
+            '{{DELETE_URL}}' => e(url('/suppression-compte')),
+            '{{CONTACT}}' => $this->contactHtml(),
+        ]);
+
+        return response($this->layout('Politique de confidentialité — FlashPay', $html, 760));
+    }
+
+    /** Page publique de demande de suppression de compte (exigence Google Play). */
+    public function accountDeletion(?string $notice = null, ?string $error = null)
+    {
+        $body = '<div class="doc"><h1 style="font-size:22px;margin:0 0 8px">Supprimer mon compte FlashPay</h1>'
+            . ($notice ? '<p class="ok">' . e($notice) . '</p>' : '')
+            . ($error ? '<p class="err">' . e($error) . '</p>' : '')
+            . '<p><b>Depuis l\'application</b> (le plus rapide) : ouvrez <b>Profil › Supprimer mon compte</b>.</p>'
+            . '<p><b>Sans l\'application</b> : remplissez ce formulaire. Nous vous rappellerons sur ce numéro pour confirmer qu\'il s\'agit bien de vous avant toute fermeture.</p>'
+            . '<form method="post" action="' . e(url('/suppression-compte')) . '">'
+            . '<input name="phone" required placeholder="Numéro de téléphone du compte (ex. +242 06 123 4567)" maxlength="25">'
+            . '<input name="name" required placeholder="Nom complet" maxlength="120">'
+            . '<input name="reason" placeholder="Motif (facultatif)" maxlength="300">'
+            . '<button class="btn" type="submit">Demander la suppression</button></form>'
+            . '<h2 style="font-size:17px">Ce qui se passe ensuite</h2><ul>'
+            . '<li>Votre solde doit être retiré ou transféré avant la fermeture.</li>'
+            . '<li>Le compte est fermé sous 72 heures après confirmation.</li>'
+            . '<li><b>Supprimées</b> : profil, photo, comptes liés, bénéficiaires enregistrés, appareils, messages.</li>'
+            . '<li><b>Conservées</b> : données d\'identité et historique des opérations, pendant la durée légale imposée par la réglementation financière (jusqu\'à 10 ans), puis supprimées.</li>'
+            . '</ul><p class="muted">Contact : ' . $this->contactHtml() . ' · <a href="' . e(url('/confidentialite')) . '">Politique de confidentialité</a></p></div>';
+
+        return response($this->layout('Suppression de compte — FlashPay', $body, 640));
+    }
+
+    public function accountDeletionSubmit(Request $request)
+    {
+        $data = $request->validate([
+            'phone' => 'required|string|max:25',
+            'name' => 'required|string|max:120',
+            'reason' => 'nullable|string|max:300',
+        ]);
+        $digits = preg_replace('/\D+/', '', $data['phone']);
+        if (strlen($digits) < 8) {
+            return $this->accountDeletion(error: 'Numéro de téléphone invalide.');
+        }
+        $user = \App\Models\User::where('phone', 'like', '%' . substr($digits, -9))->first();
+
+        if ($user) {
+            try {
+                app(\App\Services\Client\SupportService::class)->openTicket($user, 'account', 'Suppression de compte (formulaire web)',
+                    "Demande reçue depuis la page publique.\nNom saisi : {$data['name']}\nNuméro saisi : {$data['phone']}\nMotif : " . ($data['reason'] ?: 'non précisé')
+                    . "\n⚠ Rappeler le client pour confirmer son identité avant toute fermeture.", 'high');
+            } catch (\Throwable) {
+            }
+        } else {
+            app(\App\Services\Notifications\NotificationService::class)->toAdmins('support_ticket',
+                'Demande de suppression de compte (numéro inconnu)', "{$data['name']} — {$data['phone']}", ['severity' => 'warning']);
+        }
+
+        // Même réponse dans tous les cas : on ne révèle pas si un numéro a un compte.
+        return $this->accountDeletion(notice: 'Demande enregistrée. Nous vous contacterons sous 72 heures pour confirmer la suppression.');
+    }
+
+    protected function contactHtml(): string
+    {
+        $parts = array_filter([
+            config('flashpay.legal.email') ? '<a href="mailto:' . e(config('flashpay.legal.email')) . '">' . e(config('flashpay.legal.email')) . '</a>' : null,
+            config('flashpay.legal.phone') ? e(config('flashpay.legal.phone')) : null,
+        ]);
+
+        return $parts ? implode(' · ', $parts) : 'application FlashPay, rubrique Aide &amp; réclamations';
+    }
+
     // ------------------------------------------------------------ HTML
 
     protected function checkoutPage(PaymentIntent $pi, array $p, ?string $error = null, array $state = []): string

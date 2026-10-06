@@ -25,6 +25,9 @@ use App\Services\Peex\PeexGuard;
  */
 class QuoteService
 {
+    /** Codes machine des blocages du devis (l'appli propose une action adaptée). */
+    protected array $codes = [];
+
     public function __construct(
         protected PeexCorridors $corridors,
         protected FeeService $fees,
@@ -47,6 +50,7 @@ class QuoteService
         }
 
         $problems = [];
+        $this->codes = [];
         $src = $this->endpoint($in['source'], 'source', $problems);
         $dst = $this->endpoint($in['destination'], 'destination', $problems);
 
@@ -83,6 +87,7 @@ class QuoteService
             : 0;
 
         if ($src['type'] === 'wallet' && isset($src['balance']) && $src['balance'] < $amount + $fee) {
+            $this->codes[] = 'insufficient_balance';
             $problems[] = 'Solde insuffisant (' . number_format($src['balance'], 0, ',', ' ') . ' ' . $src['currency'] . ').';
         }
 
@@ -111,6 +116,7 @@ class QuoteService
             'gross_destination_amount' => $fx['amount'],
             'available' => empty($problems),
             'problems' => array_values(array_unique($problems)),
+            'problem_codes' => array_values(array_unique($this->codes)),
             'async' => in_array($src['type'], ['mobile', 'card', 'bank'], true) || $dst['type'] === 'mobile',
         ];
     }
@@ -130,6 +136,7 @@ class QuoteService
         // de frais n'existe chez lui sous ce seuil. On l'annonce avant tout débit.
         $min = (int) config('flashpay.peex.min_amount', 100);
         if (($src['type'] === 'mobile' || $dst['type'] === 'mobile') && $outAmount < $min) {
+            $this->codes[] = 'min_amount';
             $problems[] = 'Montant minimum pour le mobile money : ' . number_format($min, 0, ',', ' ') . ' XAF.';
             return;
         }
@@ -141,6 +148,7 @@ class QuoteService
 
         if ($src['type'] === 'mobile' && $collectBy === 'peex') {
             if ($p = $guard->checkCollect()) {
+                $this->codes[] = 'collect_unavailable';
                 $problems[] = $p;
                 return;
             }
@@ -164,6 +172,7 @@ class QuoteService
                 $dst['name'] = $v['name'];
             }
             if ($p = $guard->checkPayout($dst['country'], $outAmount)) {
+                $this->codes[] = 'payout_unavailable';
                 $problems[] = $p;
             }
         }
@@ -173,7 +182,8 @@ class QuoteService
             } elseif (config('flashpay.digitwace.check_balance', true)) {
                 $avail = app(\App\Services\Digitwace\WacepayBalanceService::class)->availableFor($dst['currency']);
                 if ($avail !== null && $avail < $outAmount) {
-                    $problems[] = 'Service de versement momentanément indisponible vers ce pays (solde partenaire insuffisant). Réessayez plus tard.';
+                    $this->codes[] = 'payout_unavailable';
+                    $problems[] = "Les envois vers {$dst['country_name']} sont momentanément suspendus (réapprovisionnement du service de versement en cours). Réessayez plus tard ou envoyez un montant plus petit.";
                 }
             }
         }

@@ -84,6 +84,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::patch('/me', [AuthController::class, 'updateProfile']);
     Route::post('/me/pin', [AuthController::class, 'setPin'])->middleware('throttle:10,1');
     Route::post('/me/pin/verify', [AuthController::class, 'verifyPin'])->middleware('throttle:10,1');
+    Route::post('/me/account-deletion', [\App\Http\Controllers\Api\AccountDeletionController::class, 'store'])->middleware('throttle:5,1');
     Route::get('/me/devices', [AuthController::class, 'devices']);
     Route::post('/me/devices', [AuthController::class, 'updateDevice']);
     Route::delete('/me/devices/{device}', [AuthController::class, 'revokeDevice']);

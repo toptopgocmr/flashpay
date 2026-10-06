@@ -171,7 +171,8 @@ class PeexGuard
 
         if (($me['is_activated'] ?? true) === false) {
             Log::critical("PEEX : service {$service} désactivé");
-            return 'Versements mobile money momentanément indisponibles (service désactivé).';
+            $this->alertOps($service, $iso, "Service PEEX {$service} désactivé : versements vers {$this->countryName($iso)} bloqués.");
+            return "Les envois vers {$this->countryName($iso)} sont momentanément suspendus. Réessayez plus tard.";
         }
 
         $balance = $me[$service === 'disbursement' ? 'disbursement_solde' : 'solde'] ?? $me['solde'] ?? null;
@@ -196,10 +197,46 @@ class PeexGuard
             Log::critical("PEEX : solde {$service} insuffisant", [
                 'solde' => $balance, 'engage' => $reserved, 'requis' => $required, 'pays' => $iso,
             ]);
-            return 'Versements vers ce pays temporairement indisponibles. Réessayez plus tard.';
+            $this->alertOps($service, $iso, sprintf(
+                'Solde PEEX %s insuffisant : %s disponible (solde %s − engagé %s), %s requis pour un versement vers %s. Réapprovisionner le compte PEEX.',
+                $service,
+                number_format(max(0, $available), 0, ',', ' '),
+                number_format((float) $balance, 0, ',', ' '),
+                number_format($reserved, 0, ',', ' '),
+                number_format($required, 0, ',', ' '),
+                $this->countryName($iso),
+            ));
+
+            return "Les envois vers {$this->countryName($iso)} sont momentanément suspendus (réapprovisionnement du service de versement en cours). Réessayez plus tard ou envoyez un montant plus petit.";
         }
 
         return null;
+    }
+
+    /** Nom du pays (« le Sénégal » → « Sénégal ») pour les messages client. */
+    private function countryName(string $iso): string
+    {
+        try {
+            return (string) ($this->corridors->country($iso)['name'] ?? $iso);
+        } catch (\Throwable) {
+            return $iso;
+        }
+    }
+
+    /**
+     * Prévient l'équipe (notification console) qu'un service de versement est
+     * bloqué — au plus une fois toutes les 30 minutes par service.
+     */
+    private function alertOps(string $service, string $iso, string $message): void
+    {
+        if (! Cache::add("peex:payout-alert:{$service}", 1, now()->addMinutes(30))) {
+            return;
+        }
+        try {
+            app(\App\Services\Notifications\NotificationService::class)
+                ->toAdmins('ops', "Versements {$iso} bloqués (PEEX {$service})", $message, ['severity' => 'critical']);
+        } catch (\Throwable) {
+        }
     }
 
     /**

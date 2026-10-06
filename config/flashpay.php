@@ -1,6 +1,17 @@
 <?php
 
 return [
+    /*
+    | Mentions légales (pages publiques /confidentialite et /suppression-compte,
+    | déclarées sur Google Play).
+    */
+    'legal' => [
+        'entity' => env('FLASHPAY_LEGAL_ENTITY', 'SEND-PAZ Group, Brazzaville (République du Congo)'),
+        'email' => env('FLASHPAY_SUPPORT_EMAIL'),
+        'phone' => env('FLASHPAY_SUPPORT_PHONE'),
+        'privacy_updated' => env('FLASHPAY_PRIVACY_UPDATED', '6 octobre 2026'),
+    ],
+
     // Une seule opération d'argent à la fois par utilisateur (middleware one_op)
     'single_operation' => (bool) env('FLASHPAY_SINGLE_OPERATION', true),
     'single_operation_minutes' => (int) env('FLASHPAY_SINGLE_OPERATION_MINUTES', 10),

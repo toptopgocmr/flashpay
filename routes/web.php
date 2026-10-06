@@ -23,6 +23,10 @@ Route::post('/checkout/{id}', [\App\Http\Controllers\PublicPagesController::clas
 Route::get('/p/{token}', [\App\Http\Controllers\PublicPagesController::class, 'paymentLink']);
 Route::get('/g/{code}', [\App\Http\Controllers\PublicPagesController::class, 'gift']);
 Route::get('/d/{reference}', [\App\Http\Controllers\PublicPagesController::class, 'moneyRequest'])->where('reference', 'DM-[A-Za-z0-9]+');
+// Google Play : politique de confidentialité et suppression de compte (URL publiques)
+Route::get('/confidentialite', [\App\Http\Controllers\PublicPagesController::class, 'privacy']);
+Route::get('/suppression-compte', [\App\Http\Controllers\PublicPagesController::class, 'accountDeletion']);
+Route::post('/suppression-compte', [\App\Http\Controllers\PublicPagesController::class, 'accountDeletionSubmit'])->middleware('throttle:5,1');
 Route::get('/docs/api-ecommerce', [\App\Http\Controllers\PublicPagesController::class, 'apiDocs']);
 
 // Reçus de transaction et médias du chat : liens temporaires signés
