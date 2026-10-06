@@ -209,15 +209,15 @@ class PublicPagesController extends Controller
 
     protected function layout(string $title, string $body, int $width = 420): string
     {
-        return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . e($title) . '</title><style>
+        return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . e($title) . '</title><link rel="icon" type="image/png" href="/favicon.png"><style>
 body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#eef2f9;color:#0f1d3a}
 .card{max-width:' . $width . 'px;margin:32px auto;background:#fff;border-radius:18px;padding:28px 24px;box-shadow:0 8px 30px rgba(15,29,58,.08);text-align:center}
-.brand{font-weight:800;color:#1b4fd8;font-size:20px;margin-bottom:10px}.amount{font-size:34px;font-weight:800;margin:6px 0}
+.brand{display:flex;align-items:center;justify-content:center;gap:8px;font-weight:800;color:#1e2ba6;font-size:22px;margin-bottom:12px}.brand img{display:block}.brand b{color:#e10600}.amount{font-size:34px;font-weight:800;margin:6px 0}
 .muted{color:#6b7896;font-size:14px}.ok{color:#0f8a4b;font-weight:600}.err{color:#c62828;font-weight:600}.warn{background:#fff4d6;color:#8a5a00;padding:6px 10px;border-radius:8px;font-size:13px}
 input{width:100%;box-sizing:border-box;padding:13px;border:1px solid #cdd6e6;border-radius:10px;font-size:16px;margin:6px 0}
 .btn{display:block;width:100%;box-sizing:border-box;background:#1b4fd8;color:#fff;border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700;text-decoration:none;margin:10px 0;cursor:pointer}
 .btn.outline{background:#fff;color:#1b4fd8;border:2px solid #1b4fd8}.link{background:none;border:0;color:#6b7896;text-decoration:underline;cursor:pointer;margin-top:8px}
 .sep{color:#9aa6bf;font-size:13px;margin:8px 0}.doc{text-align:left}.doc pre{background:#0f1d3a;color:#e6ecff;padding:12px;border-radius:10px;overflow:auto;font-size:13px}
-</style></head><body><div class="card"><div class="brand">⚡ FlashPay</div>' . $body . '</div></body></html>';
+</style></head><body><div class="card"><div class="brand"><img src="/images/flashpay-logo.png" alt="" width="34" height="34"><span>Flash<b>Pay</b></span></div>' . $body . '</div></body></html>';
     }
 }
