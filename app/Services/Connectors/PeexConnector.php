@@ -269,7 +269,7 @@ class PeexConnector implements PaymentRailConnector
             'sender_mobile_phone' => $senderPhone,
             'first_name' => $first,
             'last_name' => $last,
-            'purpose' => $o['purpose'] ?? config('flashpay.peex.default_purpose'),
+            'purpose' => self::peexPurpose($o['purpose'] ?? null),
             'fund_origin' => $o['fund_origin'] ?? config('flashpay.peex.default_fund_origin'),
         ];
 
@@ -361,6 +361,17 @@ class PeexConnector implements PaymentRailConnector
     }
 
     /** Étape d'une demande d'après son track_id : C (collecte), D (versement), R (remboursement). */
+    /** Motif choisi dans l'app (liste) → valeurs acceptées par PEEX (FAMILY, BUSINESS, EDUCATION, MEDICAL). */
+    public static function peexPurpose(?string $p): string
+    {
+        $p = strtoupper(trim((string) $p));
+        return match (true) {
+            in_array($p, ['FAMILY', 'BUSINESS', 'EDUCATION', 'MEDICAL'], true) => $p,
+            in_array($p, ['RENT', 'BILL', 'SALARY', 'PURCHASE', 'REPAY'], true) => 'BUSINESS',
+            default => (string) config('flashpay.peex.default_purpose', 'FAMILY'),
+        };
+    }
+
     public static function legOf(string $trackId): string
     {
         return preg_match('/-([CDRM])\d+$/', $trackId, $m) ? $m[1] : 'D';

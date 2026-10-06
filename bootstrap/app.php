@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'pin' => \App\Http\Middleware\RequirePin::class,
             'cap' => \App\Http\Middleware\RequireCapability::class,
             'idempotent' => \App\Http\Middleware\Idempotent::class,
+            'one_op' => \App\Http\Middleware\SingleOperation::class,
             'merchant.api' => \App\Http\Middleware\AuthenticateMerchantApi::class,
         ]);
 

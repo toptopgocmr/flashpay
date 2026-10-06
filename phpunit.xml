@@ -14,6 +14,7 @@
         <env name="FLASHPAY_ATM_PARTNER_KEY" value="bank-secret"/>
         <env name="FLASHPAY_REQUIRE_OTP" value="false"/>
         <env name="FLASHPAY_PIN_MANDATORY" value="false"/>
+        <env name="FLASHPAY_SINGLE_OPERATION" value="false"/>
         <env name="FLASHPAY_CASHIN_CONFIRM" value="false"/>
         <env name="FLASHPAY_OTP_DEBUG" value="true"/>
         <env name="APP_KEY" value="base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10="/>

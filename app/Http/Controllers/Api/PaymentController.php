@@ -145,6 +145,13 @@ class PaymentController extends Controller
         return $this->respond($tx);
     }
 
+    /** Opération d'argent encore en cours de l'utilisateur (validation, page carte, versement). */
+    public function pending(Request $request)
+    {
+        $tx = \App\Http\Middleware\SingleOperation::pendingOf($request->user()->id, 60);
+        return response()->json(['transaction' => $tx ? $this->txPayload($tx) : null]);
+    }
+
     public function status(Request $request, Transaction $transaction)
     {
         $user = $request->user();

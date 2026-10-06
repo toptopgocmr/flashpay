@@ -1,6 +1,10 @@
 <?php
 
 return [
+    // Une seule opération d'argent à la fois par utilisateur (middleware one_op)
+    'single_operation' => (bool) env('FLASHPAY_SINGLE_OPERATION', true),
+    'single_operation_minutes' => (int) env('FLASHPAY_SINGLE_OPERATION_MINUTES', 10),
+
     /*
     |--------------------------------------------------------------------------
     | Rails de paiement actifs
