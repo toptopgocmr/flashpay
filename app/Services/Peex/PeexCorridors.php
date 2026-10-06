@@ -14,6 +14,12 @@ class PeexCorridors
     /** Pays dont le 0 initial fait partie du numéro international. */
     protected const LEADING_ZERO = ['CG', 'GA', 'CI', 'BJ'];
 
+    /** Le 0 de tête fait partie du numéro national (ex. Congo +242 06…). */
+    public static function keepsLeadingZero(string $iso): bool
+    {
+        return in_array(strtoupper($iso), self::LEADING_ZERO, true);
+    }
+
     public function __construct(protected ?PeexClient $client = null)
     {
     }

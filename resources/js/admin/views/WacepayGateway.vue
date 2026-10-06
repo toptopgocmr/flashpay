@@ -106,6 +106,8 @@
               <small>{{ [s.country, s.currency, s.operator].filter(Boolean).join(' · ') || '—' }} · <span class="mono">{{ s.id }}</span></small>
             </div>
             <div class="gw-end">
+              <span v-if="s.type === 'card'" class="gw-pill warn">Carte</span>
+              <span v-if="s.type === 'bank'" class="gw-pill warn">Banque</span>
               <span v-if="s.payin" class="gw-pill ok">Collecte</span>
               <span v-if="s.payout" class="gw-pill info">Versement</span>
             </div>
@@ -117,21 +119,58 @@
     <!-- Tests -->
     <section v-if="o" class="gw-section">
       <GwHead icon="flask" title="Tester" />
-      <div class="gw-cols">
+      <div class="gw-cols three">
         <div class="gw-card">
-          <div class="gw-card-h"><div class="t"><h3>Collecte</h3><p>POST payments/create</p></div></div>
+          <div class="gw-card-h"><div class="t"><h3>Collecte mobile money</h3><p>POST payments/create</p></div></div>
           <form class="gw-card-b" @submit.prevent="testPayin">
             <div class="gw-form">
               <label class="full">Service (wp-subscription-key)
-                <select v-model="tin.service_id"><option value="">— choisir —</option><option v-for="s in payinServices" :key="s.id" :value="s.id">{{ s.name || s.id }}{{ s.country ? ' · ' + s.country : '' }}</option></select></label>
-              <label>Numéro (customer_msisdn)<input v-model.trim="tin.phone" placeholder="+237695562570" /></label>
+                <select v-model="tin.service_id"><option value="">— choisir —</option><option v-for="s in walletPayin" :key="s.id" :value="s.id">{{ s.name || s.id }}{{ s.country ? ' · ' + s.country : '' }}</option></select></label>
+              <label class="full">Numéro (customer_msisdn)
+                <div class="ph">
+                  <select v-model="tin.iso" :title="country(tin.iso)?.name"><option v-for="c in dialList" :key="c.iso" :value="c.iso">{{ c.flag }} +{{ c.dial }} · {{ c.name }}</option></select>
+                  <span class="dial">{{ country(tin.iso)?.flag }} +{{ country(tin.iso)?.dial }}</span>
+                  <input v-model.trim="tin.local" inputmode="tel" :placeholder="sample(tin.iso)" />
+                </div>
+                <small class="hint">{{ fullPhone(tin) || '—' }}</small></label>
               <label>Montant (min. 100)<input v-model.number="tin.amount" type="number" min="100" /></label>
               <label>Devise<input v-model="tin.currency" maxlength="3" class="up" /></label>
-              <label>Pays (ISO2)<input v-model="tin.country" maxlength="2" class="up" /></label>
-              <label>Opérateur<input v-model="tin.operator" placeholder="MTN, ORANGE…" class="up" /></label>
+              <label>Opérateur<input v-model="tin.operator" placeholder="MTN, AIRTEL…" class="up" /></label>
               <label>Nom du client<input v-model="tin.name" /></label>
             </div>
-            <button class="gw-btn block" :disabled="testBusy || !tin.service_id || !tin.phone || !tin.amount">{{ testBusy === 'in' ? 'Envoi…' : 'Envoyer la demande de paiement' }}</button>
+            <button class="gw-btn block" :disabled="testBusy || !tin.service_id || !tin.local || !tin.amount">{{ testBusy === 'in' ? 'Envoi…' : 'Envoyer la demande de paiement' }}</button>
+          </form>
+        </div>
+        <div class="gw-card">
+          <div class="gw-card-h"><div class="t"><h3>Carte · Compte bancaire</h3><p>Page de paiement WacePay</p></div>
+            <div class="side">
+              <span class="gw-pill" :class="o.checkout?.card ? 'ok' : 'muted'" :title="o.checkout?.card ? 'Recharges par carte de l\'app via WacePay' : 'FLASHPAY_CARD_DRIVER ≠ wacepay'">Carte</span>
+              <span class="gw-pill" :class="o.checkout?.bank ? 'ok' : 'muted'" :title="o.checkout?.bank ? 'Recharges par compte bancaire de l\'app via WacePay' : 'FLASHPAY_BANK_DEBIT_DRIVER ≠ wacepay'">Banque</span>
+            </div></div>
+          <form class="gw-card-b" @submit.prevent="testCheckout">
+            <div class="seg">
+              <button type="button" :class="{ on: tck.method === 'card' }" @click="tck.method = 'card'">💳 Carte Visa / Mastercard</button>
+              <button type="button" :class="{ on: tck.method === 'bank' }" @click="tck.method = 'bank'">🏦 Compte bancaire</button>
+            </div>
+            <div class="gw-form">
+              <label class="full">Service WacePay
+                <select v-model="tck.service_id">
+                  <option value="">Automatique{{ autoCheckout ? ' (' + autoCheckout + ')' : ' — aucun service détecté' }}</option>
+                  <option v-for="s in payinServices" :key="s.id" :value="s.id">{{ s.name || s.id }}{{ s.country ? ' · ' + s.country : '' }}{{ s.type !== 'wallet' ? ' · ' + (s.type === 'card' ? 'carte' : 'banque') : '' }}</option>
+                </select></label>
+              <label>Montant (min. 100)<input v-model.number="tck.amount" type="number" min="100" /></label>
+              <label>Devise<input v-model="tck.currency" maxlength="3" class="up" /></label>
+              <label class="full">Téléphone du client
+                <div class="ph">
+                  <select v-model="tck.iso"><option v-for="c in dialList" :key="c.iso" :value="c.iso">{{ c.flag }} +{{ c.dial }} · {{ c.name }}</option></select>
+                  <span class="dial">{{ country(tck.iso)?.flag }} +{{ country(tck.iso)?.dial }}</span>
+                  <input v-model.trim="tck.local" inputmode="tel" :placeholder="sample(tck.iso)" />
+                </div></label>
+              <label>Nom du client<input v-model="tck.name" /></label>
+              <label>E-mail<input v-model.trim="tck.email" type="email" placeholder="client@exemple.com" /></label>
+            </div>
+            <button class="gw-btn block" :disabled="testBusy || !tck.amount">{{ testBusy === 'ck' ? 'Création…' : 'Créer la page de paiement' }}</button>
+            <a v-if="checkoutUrl" class="gw-btn block ghost" :href="checkoutUrl" target="_blank" rel="noopener">Ouvrir la page de paiement ↗</a>
           </form>
         </div>
         <div class="gw-card">
@@ -140,11 +179,17 @@
             <div class="gw-form">
               <label class="full">Service (payoutSubscriptionId)
                 <select v-model="tout.service_id"><option value="">— choisir —</option><option v-for="s in payoutServices" :key="s.id" :value="s.id">{{ s.name || s.id }}{{ s.country ? ' · ' + s.country : '' }}</option></select></label>
-              <label>Numéro (recipientMsisdn)<input v-model.trim="tout.phone" placeholder="+237691234567" /></label>
+              <label class="full">Numéro (recipientMsisdn)
+                <div class="ph">
+                  <select v-model="tout.iso"><option v-for="c in dialList" :key="c.iso" :value="c.iso">{{ c.flag }} +{{ c.dial }} · {{ c.name }}</option></select>
+                  <span class="dial">{{ country(tout.iso)?.flag }} +{{ country(tout.iso)?.dial }}</span>
+                  <input v-model.trim="tout.local" inputmode="tel" :placeholder="sample(tout.iso)" />
+                </div>
+                <small class="hint">{{ fullPhone(tout) || '—' }}</small></label>
               <label>Montant<input v-model.number="tout.amount" type="number" min="1" /></label>
-              <label class="full">Bénéficiaire (recipientName)<input v-model="tout.name" /></label>
+              <label>Bénéficiaire (recipientName)<input v-model="tout.name" /></label>
             </div>
-            <button class="gw-btn block" :disabled="testBusy || !tout.service_id || !tout.phone || !tout.amount">{{ testBusy === 'out' ? 'Envoi…' : 'Envoyer le versement' }}</button>
+            <button class="gw-btn block" :disabled="testBusy || !tout.service_id || !tout.local || !tout.amount">{{ testBusy === 'out' ? 'Envoi…' : 'Envoyer le versement' }}</button>
           </form>
         </div>
       </div>
@@ -219,21 +264,64 @@ const testBusy = ref('')
 const error = ref('')
 const svcError = ref('')
 const toast = ref(null)
-const tin = reactive({ service_id: '', phone: '', amount: 100, currency: 'XAF', country: 'CM', operator: '', name: 'Test FlashPay' })
-const tout = reactive({ service_id: '', phone: '', amount: 100, name: 'Test FlashPay' })
+const tin = reactive({ service_id: '', iso: 'CG', local: '', amount: 100, currency: 'XAF', operator: '', name: 'Test FlashPay' })
+const tout = reactive({ service_id: '', iso: 'CG', local: '', amount: 100, name: 'Test FlashPay' })
+const tck = reactive({ method: 'card', service_id: '', iso: 'CG', local: '', amount: 100, currency: 'XAF', name: 'Test FlashPay', email: '' })
+const checkoutUrl = ref('')
+// Indicatifs : pays des corridors + référentiel WacePay (renvoyés par /admin/wacepay/overview)
+const dialList = computed(() => o.value?.countries || [])
+const country = (iso) => dialList.value.find((c) => c.iso === iso)
+const sample = (iso) => { const c = country(iso); return c?.local_length ? `${c.local_length} chiffres` : 'Numéro' }
+// Numéro international : +indicatif + numéro national (0 de tête retiré sauf pays où il fait partie du numéro)
+function fullPhone(f) {
+  const c = country(f.iso)
+  let d = String(f.local || '').replace(/\D/g, '')
+  if (!c || !d) return ''
+  if (d.startsWith('00')) return '+' + d.slice(2)
+  if (d.startsWith(c.dial) && d.length > (c.local_length || 0)) d = d.slice(c.dial.length)
+  if (!c.leading_zero) d = d.replace(/^0+/, '')
+  else if (c.local_length && d.length === c.local_length - 1 && !d.startsWith('0')) d = '0' + d
+  return '+' + c.dial + d
+}
+// Numéro collé au format international : on choisit le bon pays automatiquement
+function autoCountry(f) {
+  const raw = String(f.local || '')
+  if (!raw.startsWith('+') && !raw.startsWith('00')) return
+  const d = raw.replace(/\D/g, '').replace(/^00/, '')
+  const hit = [...dialList.value].sort((a, b) => b.dial.length - a.dial.length).find((c) => d.startsWith(c.dial))
+  if (hit) { f.iso = hit.iso; f.local = d.slice(hit.dial.length) }
+}
+for (const f of [tin, tout, tck]) watch(() => f.local, () => autoCountry(f))
 // Service choisi : pays, devise et opérateur repris du service WacePay
 watch(() => tin.service_id, (id) => {
   const s = (services.value || []).find((x) => x.id === id)
   if (!s) return
-  if (s.country) tin.country = s.country
+  if (s.country) tin.iso = s.country
   if (s.currency) tin.currency = s.currency
   if (s.operator) tin.operator = s.operator
+})
+watch(() => tout.service_id, (id) => {
+  const s = (services.value || []).find((x) => x.id === id)
+  if (s?.country) tout.iso = s.country
+})
+watch(() => tck.service_id, (id) => {
+  const s = (services.value || []).find((x) => x.id === id)
+  if (s?.country) tck.iso = s.country
+  if (s?.currency) tck.currency = s.currency
+  if (s?.type === 'card' || s?.type === 'bank') tck.method = s.type
+})
+const autoCheckout = computed(() => {
+  const id = tck.method === 'bank' ? o.value?.checkout?.bank_service : o.value?.checkout?.card_service
+  if (!id) return ''
+  const s = (services.value || []).find((x) => x.id === id)
+  return s?.name || id
 })
 
 const nf = new Intl.NumberFormat('fr-FR')
 const n = (v) => nf.format(Math.floor(v || 0))
 const dt = (s) => (s ? new Date(s).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '')
 const payinServices = computed(() => (services.value || []).filter((s) => s.payin))
+const walletPayin = computed(() => payinServices.value.filter((s) => (s.type || 'wallet') === 'wallet'))
 const payoutServices = computed(() => (services.value || []).filter((s) => s.payout))
 const balanceText = computed(() => {
   if (!bal.value) return '…'
@@ -286,9 +374,30 @@ async function sync() {
 async function runTest(kind) {
   testBusy.value = kind
   try {
-    const { data } = await api.post(kind === 'in' ? '/admin/wacepay/test-payin' : '/admin/wacepay/test-payout', kind === 'in' ? { ...tin } : { ...tout })
+    const body = kind === 'in'
+      ? { service_id: tin.service_id, phone: fullPhone(tin), amount: tin.amount, currency: tin.currency, country: tin.iso, operator: tin.operator, name: tin.name }
+      : { service_id: tout.service_id, phone: fullPhone(tout), amount: tout.amount, name: tout.name }
+    const { data } = await api.post(kind === 'in' ? '/admin/wacepay/test-payin' : '/admin/wacepay/test-payout', body)
     const r = data.request
     showToast(r.status === 'failed' ? (r.message || 'Refusé par WacePay') : `${r.reference} envoyé`, r.status === 'failed' ? 'err' : 'ok')
+    await load()
+  } catch (e) {
+    const errs = e.response?.data?.errors
+    showToast((errs && Object.values(errs).flat().join(' ')) || msg(e), 'err')
+  } finally { testBusy.value = '' }
+}
+async function testCheckout() {
+  testBusy.value = 'ck'
+  checkoutUrl.value = ''
+  try {
+    const { data } = await api.post('/admin/wacepay/test-checkout', {
+      method: tck.method, service_id: tck.service_id || null, amount: tck.amount, currency: tck.currency,
+      country: tck.iso, name: tck.name, email: tck.email || null, phone: fullPhone(tck) || null,
+    })
+    const r = data.request
+    checkoutUrl.value = data.url || ''
+    if (data.url) window.open(data.url, '_blank', 'noopener')
+    showToast(r.status === 'failed' ? (r.message || 'Refusé par WacePay') : 'Page de paiement créée', r.status === 'failed' ? 'err' : 'ok')
     await load()
   } catch (e) {
     const errs = e.response?.data?.errors
@@ -307,6 +416,17 @@ onMounted(load)
 
 <style scoped>
 .up { text-transform: uppercase; }
+.gw-cols.three { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.ph { display: flex; align-items: stretch; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); margin-top: 6px; position: relative; }
+.ph select { width: 108px; flex: none; border: 0; border-right: 1px solid var(--border); border-radius: 0; margin: 0; opacity: 0; position: absolute; left: 0; top: 0; bottom: 0; cursor: pointer; }
+.ph .dial { width: 108px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 10px; font-weight: 700; border-right: 1px solid var(--border); background: var(--bg, #f8fafc); pointer-events: none; }
+.ph .dial::after { content: '▾'; margin-left: auto; font-size: 11px; color: var(--text-2); }
+.ph input { flex: 1; min-width: 0; border: 0; border-radius: 0; margin: 0; }
+.hint { display: block; margin-top: 4px; font-size: 12px; color: var(--text-2); font-family: ui-monospace, monospace; }
+.seg { display: flex; gap: 6px; margin-bottom: 12px; }
+.seg button { flex: 1; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font: inherit; font-size: 13px; cursor: pointer; }
+.seg button.on { border-color: var(--link); background: color-mix(in srgb, var(--link) 10%, transparent); font-weight: 700; }
+.gw-btn.ghost { margin-top: 8px; text-align: center; text-decoration: none; background: transparent; color: var(--link); border: 1px solid var(--link); }
 .ep { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .t-err { color: #b91c1c; }
 .small { font-size: 12px; }

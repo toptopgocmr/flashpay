@@ -134,7 +134,12 @@ class QuoteService
             return;
         }
 
-        if ($src['type'] === 'mobile') {
+        // Passerelle choisie pour le pays (console › Pays & change) : TOUS les contrôles
+        // du flux passent par elle — aucun appel PEEX quand le pays est confié à WacePay.
+        $collectBy = $src['type'] === 'mobile' ? $this->partnerFor($src['country'], 'collect_partner') : null;
+        $payoutBy = $dst['type'] === 'mobile' ? $this->partnerFor($dst['country'], 'payout_partner') : null;
+
+        if ($src['type'] === 'mobile' && $collectBy === 'peex') {
             if ($p = $guard->checkCollect()) {
                 $problems[] = $p;
                 return;
@@ -145,8 +150,11 @@ class QuoteService
             }
             $src['verified_name'] = $v['name'];
         }
+        if ($src['type'] === 'mobile' && $collectBy === 'digitwace' && ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled()) {
+            $problems[] = "Collecte depuis {$src['country_name']} confiée à WacePay, mais WacePay n'est pas configuré.";
+        }
 
-        if ($dst['type'] === 'mobile') {
+        if ($dst['type'] === 'mobile' && $payoutBy === 'peex') {
             $v = $guard->verifyAccount($dst, 'destination');
             if ($v['problem']) {
                 $problems[] = $v['problem'];
@@ -158,9 +166,34 @@ class QuoteService
             if ($p = $guard->checkPayout($dst['country'], $outAmount)) {
                 $problems[] = $p;
             }
-            if ($src['type'] === 'mobile' && ! $src['payout']) {
-                $problems[] = "Remboursement automatique impossible vers {$src['country_name']} en cas d'échec : opération non disponible.";
+        }
+        if ($dst['type'] === 'mobile' && $payoutBy === 'digitwace') {
+            if (! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled()) {
+                $problems[] = "Versements vers {$dst['country_name']} confiés à WacePay, mais WacePay n'est pas configuré.";
+            } elseif (config('flashpay.digitwace.check_balance', true)) {
+                $avail = app(\App\Services\Digitwace\WacepayBalanceService::class)->availableFor($dst['currency']);
+                if ($avail !== null && $avail < $outAmount) {
+                    $problems[] = 'Service de versement momentanément indisponible vers ce pays (solde partenaire insuffisant). Réessayez plus tard.';
+                }
             }
+        }
+        // Remboursement automatique d'une collecte PEEX = versement PEEX vers le payeur.
+        // (Collecte WacePay : remboursement sur le wallet FlashPay du client.)
+        if ($src['type'] === 'mobile' && $dst['type'] === 'mobile' && $collectBy === 'peex' && ! $src['payout']) {
+            $problems[] = "Remboursement automatique impossible vers {$src['country_name']} en cas d'échec : opération non disponible.";
+        }
+    }
+
+    /** Partenaire (peex | digitwace) qui gère ce flux pour le pays. */
+    protected function partnerFor(?string $iso, string $field): string
+    {
+        if (! $iso) {
+            return 'peex';
+        }
+        try {
+            return ($this->corridors->country($iso)[$field] ?? 'peex') === 'digitwace' ? 'digitwace' : 'peex';
+        } catch (\Throwable) {
+            return 'peex';
         }
     }
 

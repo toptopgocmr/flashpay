@@ -73,6 +73,7 @@ class PaymentController extends Controller
     public function transfer(Request $request)
     {
         $v = $this->validateOperation($request->merge(['operation' => 'transfer']));
+        $v['require_beneficiary_name'] = true; // app mobile : nom obligatoire vers un numéro mobile money
         $tx = $this->flows->transfer($request->user(), $v['source'], $v['source_phone'] ?? null, $v['destination_phone'], $v['amount'], $v);
 
         return $this->respond($tx);

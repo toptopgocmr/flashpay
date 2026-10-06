@@ -121,7 +121,7 @@ class DigitwaceConnector implements PaymentRailConnector
         try {
             $op = $req?->operation;
             // Collecte (API Partenaire) : statut par referenceId ; versement : par id WacePay
-            $id = ($op === 'payin' && $this->client->partner()) ? ($req?->reference ?: $externalRef) : ($req?->wace_id ?: $externalRef);
+            $id = (in_array($op, ['payin', 'checkout'], true) && $this->client->partner()) ? ($req?->reference ?: $externalRef) : ($req?->wace_id ?: $externalRef);
             $r = $this->client->status($id, $op);
         } catch (\Throwable $e) {
             $req?->update(['last_checked_at' => now()]);

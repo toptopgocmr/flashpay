@@ -146,7 +146,7 @@ class SwitchService
      */
     protected function collectFallback(Transaction $tx, array $wace): ?array
     {
-        if ($tx->source_rail !== 'digitwace' || ! config('flashpay.digitwace.collect_fallback_peex', true) || ! config('flashpay.rails.peex.enabled', false)) {
+        if ($tx->source_rail !== 'digitwace' || ! config('flashpay.digitwace.collect_fallback_peex', false) || ! config('flashpay.rails.peex.enabled', false)) {
             return null;
         }
         try {

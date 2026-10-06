@@ -170,6 +170,10 @@ class PeexFlowService
     public function transfer(User $user, string $source, ?string $sourcePhone, string $destPhone, int $amount, array $opt = []): Transaction
     {
         $q = $this->quoteTransfer($user, $source, $sourcePhone, $destPhone, $amount, $opt);
+        if (! empty($opt['require_beneficiary_name']) && ($q['destination']['type'] ?? null) === 'mobile'
+            && mb_strlen(trim((string) ($opt['beneficiary_name'] ?? ''))) < 3) {
+            throw new PeexException('Le nom complet du bénéficiaire est obligatoire pour un envoi vers un numéro mobile money.');
+        }
 
         return $this->execute($user, $q, 'p2p', [
             'beneficiary_name' => $opt['beneficiary_name'] ?? $q['destination']['name'] ?? null,

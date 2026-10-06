@@ -48,7 +48,34 @@ class WacepayAdminController extends Controller
                 'failed' => DigitwaceRequest::where('status', 'failed')->where('created_at', '>=', $since)->count(),
             ],
             'requests' => $requests,
+            // Indicatifs des pays (sélecteur devant les numéros de test)
+            'countries' => $this->dialCountries(),
+            'checkout' => [
+                'card' => config('payment_methods.card_driver') === 'wacepay',
+                'bank' => config('payment_methods.bank_debit_driver') === 'wacepay',
+                'card_service' => $this->client->checkoutServiceFor('card'),
+                'bank_service' => $this->client->checkoutServiceFor('bank'),
+            ],
         ]);
+    }
+
+    /** [{iso, name, dial, flag, local_length, leading_zero}] : corridors + référentiel WacePay. */
+    protected function dialCountries(): array
+    {
+        $out = [];
+        try {
+            foreach (app(\App\Services\Peex\PeexCorridors::class)->all() as $iso => $c) {
+                if (! empty($c['dial'])) {
+                    $out[$iso] = ['iso' => $iso, 'name' => $c['name'] ?? $iso, 'dial' => (string) $c['dial'], 'flag' => $c['flag'] ?? \App\Services\Digitwace\CountryReference::flag($iso),
+                        'local_length' => (int) ($c['local_length'] ?? 0), 'leading_zero' => \App\Services\Peex\PeexCorridors::keepsLeadingZero($iso)];
+                }
+            }
+        } catch (\Throwable) {
+        }
+        foreach (\App\Services\Digitwace\CountryReference::COUNTRIES as $iso => $r) {
+            $out[$iso] ??= ['iso' => $iso, 'name' => $r[0], 'dial' => (string) $r[2], 'flag' => \App\Services\Digitwace\CountryReference::flag($iso), 'local_length' => (int) $r[3], 'leading_zero' => false];
+        }
+        return collect($out)->sortBy('name')->values()->all();
     }
 
     /** Services de collecte (wp-subscription-key) et de versement (payoutSubscriptionId), lus en direct. */
@@ -70,6 +97,7 @@ class WacepayAdminController extends Controller
             'country' => $s['countryCode'] ?? \App\Services\Digitwace\CoverageService::countryOf($s),
             'currency' => ($c = $P($s, ['currency', 'currencyCode'])) ? strtoupper(substr($c, 0, 3)) : null,
             'operator' => ($o = $P($s, ['operatorCode', 'operator'])) ? strtoupper($o) : null,
+            'type' => DigitwaceClient::serviceType($s['raw_service'] ?? $s),
             'payin' => (bool) ($s['payin'] ?? false),
             'payout' => (bool) ($s['payout'] ?? false),
             'status' => $P($s['raw_service'] ?? $s, ['status']),
@@ -126,6 +154,38 @@ class WacepayAdminController extends Controller
         Audit::log('digitwace.test_payout', null, ['reference' => $ref, 'amount' => $v['amount'], 'phone' => $v['phone']], $request->user()->id);
 
         return response()->json(['request' => $this->present($req->fresh())], 201);
+    }
+
+    /** Collecte de test par carte Visa / Mastercard ou compte bancaire : page de paiement WacePay. */
+    public function testCheckout(Request $request)
+    {
+        $v = $request->validate([
+            'method' => 'required|in:card,bank',
+            'service_id' => 'nullable|string|max:80',
+            'amount' => 'required|integer|min:100',
+            'currency' => 'required|string|size:3',
+            'country' => 'required|string|size:2',
+            'name' => 'nullable|string|max:100',
+            'email' => 'nullable|email|max:120',
+            'phone' => 'nullable|string|max:20',
+        ]);
+        $ref = 'WTEST-' . ($v['method'] === 'bank' ? 'BK' : 'CB') . '-' . strtoupper(Str::random(10));
+        $req = DigitwaceRequest::create(['reference' => $ref, 'operation' => 'checkout', 'status' => 'new']);
+        $url = null;
+        try {
+            $r = $this->client->checkout($v['method'], $ref, $v['amount'], strtoupper($v['currency']), [
+                'name' => ($v['name'] ?? null) ?: 'Test FlashPay', 'email' => $v['email'] ?? null, 'phone' => $v['phone'] ?? null,
+                'country' => strtoupper($v['country']), 'description' => 'Test FlashPay ' . $ref,
+            ], url('/admin/wacepay'), ($v['service_id'] ?? null) ?: null);
+            $url = $r['url'];
+            $req->update(['wace_id' => $r['wace_id'], 'status' => $url ? 'pending' : 'failed', 'message' => $url ? null : 'Aucune page de paiement renvoyée par WacePay',
+                'last_response' => $r['raw'], 'last_checked_at' => now(), 'finalized_at' => $url ? null : now()]);
+        } catch (DigitwaceException $e) {
+            $req->update(['status' => 'failed', 'message' => mb_substr($e->getMessage(), 0, 250), 'last_response' => $e->response, 'finalized_at' => now()]);
+        }
+        Audit::log('digitwace.test_checkout', null, ['reference' => $ref, 'method' => $v['method'], 'amount' => $v['amount']], $request->user()->id);
+
+        return response()->json(['request' => $this->present($req->fresh()), 'url' => $url], 201);
     }
 
     public function refresh(DigitwaceRequest $digitwaceRequest, DigitwaceStatusHandler $handler)

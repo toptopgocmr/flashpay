@@ -48,9 +48,13 @@ return [
         'api' => env('DIGITWACE_API', 'partner'),
         // E-mail client envoyé à payments/create quand le client n'en a pas
         'default_email' => env('DIGITWACE_DEFAULT_EMAIL', 'clients@flashpay.cg'),
-        // Collecte WacePay refusée (rien n'est prélevé) : nouvel essai automatique via PEEX
-        // quand PEEX couvre le pays (config/corridors). false = échec direct.
-        'collect_fallback_peex' => (bool) env('DIGITWACE_COLLECT_FALLBACK_PEEX', true),
+        // Services WacePay (wp-subscription-key) pour la collecte par carte / compte bancaire.
+        // Vide = détection automatique dans la couverture synchronisée (nom VISA, CARD, BANK…).
+        'card_service_id' => env('DIGITWACE_CARD_SERVICE_ID'),
+        'bank_service_id' => env('DIGITWACE_BANK_SERVICE_ID'),
+        // Collecte WacePay refusée (rien n'est prélevé) : nouvel essai automatique via PEEX.
+        // Désactivé par défaut : la passerelle choisie dans la console gère TOUS les flux du pays.
+        'collect_fallback_peex' => (bool) env('DIGITWACE_COLLECT_FALLBACK_PEEX', false),
         // Chemins de l'API Partenaire à surcharger si WacePay les change (sinon valeurs de DigitwaceClient::PARTNER_PATHS)
         'partner_paths' => array_filter([
             'login' => env('DIGITWACE_PARTNER_PATH_LOGIN'),

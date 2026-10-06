@@ -159,8 +159,17 @@ class PricingAdminController extends Controller
             // Partenaire qui gère les flux : collecte = PEEX (seul partenaire de collecte), versement = PEEX ou WacePay
             'collect_partner' => 'sometimes|nullable|in:peex,digitwace',
             'payout_partner' => 'sometimes|nullable|in:peex,digitwace',
+            // Passerelle unique : collecte ET versement confiés au même partenaire
+            'partner' => 'sometimes|in:peex,digitwace',
             'note' => 'sometimes|nullable|string|max:190',
         ]);
+        if (isset($v['partner'])) {
+            $v['collect_partner'] = $v['payout_partner'] = $v['partner'];
+            if ($v['partner'] === 'peex' && ($this->corridors->defaults()[$iso]['source'] ?? null) === 'wacepay') {
+                return response()->json(['message' => "{$iso} n'est couvert que par WacePay : PEEX ne peut pas gérer ses flux."], 422);
+            }
+            unset($v['partner']);
+        }
 
         // WacePay n'est proposé que là où la couverture synchronisée l'annonce
         foreach (['collect_partner' => 'payin', 'payout_partner' => 'payout'] as $field => $service) {
@@ -182,6 +191,9 @@ class PricingAdminController extends Controller
 
         $waceOff = ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled();
         $message = match (true) {
+            isset($v['payout_partner'], $v['collect_partner']) && $v['payout_partner'] === $v['collect_partner'] =>
+                'Tous les flux de ' . $iso . ' (collecte, versement, vérifications, soldes) passent désormais par ' . PeexCorridors::partnerName($v['payout_partner']) . '.'
+                . ($v['payout_partner'] === 'digitwace' && $waceOff ? ' Attention : WacePay n\'est pas encore configuré, les opérations de ce pays seront refusées.' : ''),
             isset($v['payout_partner']) => 'Versements vers ' . $iso . ' gérés par ' . PeexCorridors::partnerName($v['payout_partner']) . '.'
                 . ($v['payout_partner'] === 'digitwace' && $waceOff ? ' Attention : WacePay n\'est pas encore configuré, les envois vers ce pays seront refusés.' : ''),
             isset($v['collect_partner']) => 'Collecte depuis ' . $iso . ' gérée par ' . PeexCorridors::partnerName($v['collect_partner']) . '.'

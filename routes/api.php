@@ -373,6 +373,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/wacepay/services', [\App\Http\Controllers\Api\WacepayAdminController::class, 'services'])->middleware('throttle:20,1');
         Route::post('/wacepay/test-payin', [\App\Http\Controllers\Api\WacepayAdminController::class, 'testPayin'])->middleware('throttle:10,1');
         Route::post('/wacepay/test-payout', [\App\Http\Controllers\Api\WacepayAdminController::class, 'testPayout'])->middleware('throttle:10,1');
+        Route::post('/wacepay/test-checkout', [\App\Http\Controllers\Api\WacepayAdminController::class, 'testCheckout'])->middleware('throttle:10,1');
         Route::post('/wacepay/requests/{digitwaceRequest}/refresh', [\App\Http\Controllers\Api\WacepayAdminController::class, 'refresh'])->whereNumber('digitwaceRequest');
         Route::delete('/corridors/{iso}', [PricingAdminController::class, 'resetCorridor'])->where('iso', '[A-Za-z]{2}');
         Route::post('/fx-rates/{rate}/active', [PricingAdminController::class, 'toggleRate']);

@@ -454,8 +454,11 @@ class DigitwaceClient
      * @param  'card'|'bank'  $method
      * @return array{url:?string, wace_id:string, status:string, raw:array}
      */
-    public function checkout(string $method, string $reference, int $amount, string $currency, array $customer, string $returnUrl): array
+    public function checkout(string $method, string $reference, int $amount, string $currency, array $customer, string $returnUrl, ?string $serviceId = null): array
     {
+        if ($this->partner()) {
+            return $this->partnerCheckout($method, $reference, $amount, $currency, $customer, $returnUrl, $serviceId);
+        }
         $f = $this->cfg('fields.transaction');
         [$first, $last] = $this->splitName($customer['name'] ?? 'Client FlashPay');
         $json = $this->call('post', $method === 'bank' ? 'payin_bank' : 'payin_card', array_filter([
@@ -490,11 +493,79 @@ class DigitwaceClient
         ];
     }
 
+    /**
+     * API Partenaire : carte / compte bancaire = un service de collecte WacePay dédié
+     * (wp-subscription-key) ; payments/create renvoie l'adresse de la page de paiement.
+     */
+    protected function partnerCheckout(string $method, string $reference, int $amount, string $currency, array $customer, string $returnUrl, ?string $serviceId): array
+    {
+        $serviceId ??= $this->checkoutServiceFor($method, $customer['country'] ?? null);
+        if (! $serviceId) {
+            throw new DigitwaceException('Aucun service WacePay ' . ($method === 'bank' ? '« compte bancaire »' : '« carte »')
+                . ' trouvé : synchronisez la couverture WacePay ou renseignez DIGITWACE_' . ($method === 'bank' ? 'BANK' : 'CARD') . '_SERVICE_ID.', '1001');
+        }
+        $phone = isset($customer['phone']) ? preg_replace('/\D/', '', (string) $customer['phone']) : null;
+        $json = $this->call('post', 'payin', array_filter([
+            'amount' => $amount,
+            'referenceId' => $reference,
+            'currency' => strtoupper($currency),
+            'customer_name' => mb_substr(trim((string) ($customer['name'] ?? '')) ?: 'Client FlashPay', 0, 100),
+            'customer_email' => ($customer['email'] ?? null) ?: $this->cfg('default_email'),
+            'customer_msisdn' => $phone ? (int) $phone : null,
+            'countryCode' => isset($customer['country']) ? strtoupper($customer['country']) : null,
+            'payment_method' => $method === 'bank' ? 'BANK' : 'CARD',
+            'description' => $customer['description'] ?? "FlashPay {$reference}",
+            'callback_url' => $this->callbackUrl(),
+            'return_url' => $returnUrl,
+            'success_url' => $returnUrl,
+            'cancel_url' => $returnUrl,
+        ], fn ($v) => $v !== null && $v !== ''), [], ['wp-subscription-key' => $serviceId]);
+
+        $url = collect(['paymentUrl', 'payment_url', 'checkoutUrl', 'checkout_url', 'redirectUrl', 'redirect_url', 'paymentLink', 'payment_link', 'link', 'url'])
+            ->flatMap(fn ($k) => ["data.{$k}", $k, "data.payment.{$k}"])
+            ->map(fn ($k) => data_get($json, $k))
+            ->first(fn ($v) => is_string($v) && str_starts_with($v, 'http'));
+
+        return [
+            'url' => $url,
+            'wace_id' => (string) (data_get($json, 'data.referenceId') ?? $reference),
+            'status' => self::normalize(data_get($json, 'data.status') ?? 'pending'),
+            'raw' => $json,
+        ];
+    }
+
+    /** Type d'un service WacePay d'après son nom / ses champs : card | bank | wallet. */
+    public static function serviceType(array $svc): string
+    {
+        $txt = strtoupper(json_encode($svc, JSON_UNESCAPED_UNICODE) ?: '');
+        return match (true) {
+            (bool) preg_match('/VISA|MASTERCARD|CARTE|\bCARD\b|CARD_|CREDIT ?CARD|\bCB\b/', $txt) => 'card',
+            (bool) preg_match('/BANK|BANQUE|VIREMENT|TRANSFER_BANK|\bRIB\b|\bIBAN\b/', $txt) => 'bank',
+            default => 'wallet',
+        };
+    }
+
+    /** Service de collecte carte / banque : variable DIGITWACE_CARD_SERVICE_ID / _BANK_, sinon couverture synchronisée. */
+    public function checkoutServiceFor(string $method, ?string $country = null): ?string
+    {
+        if ($id = $this->cfg($method === 'bank' ? 'bank_service_id' : 'card_service_id')) {
+            return (string) $id;
+        }
+        try {
+            $rows = \App\Models\WacepayCoverage::where('payin', true)->get()
+                ->filter(fn ($r) => self::serviceType(array_merge((array) ($r->raw ?? []), ['name' => $r->payer_name, 'method' => $r->method])) === $method);
+            $pick = ($country ? $rows->firstWhere('country', strtoupper($country)) : null) ?? $rows->first();
+            return $pick?->payer_code;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     /** @return array{status:string, raw_status:?string, message:?string, raw:array} */
     public function status(string $waceIdOrReference, ?string $operation = null): array
     {
         if ($this->partner()) {
-            if ($operation === 'payin') {
+            if (in_array($operation, ['payin', 'checkout'], true)) {
                 $json = $this->call('get', 'payin_status', [], [], ['referenceId' => $waceIdOrReference]);
             } else {
                 try {

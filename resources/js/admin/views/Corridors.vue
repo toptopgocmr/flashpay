@@ -104,6 +104,16 @@
                 <td class="c"><label class="switch"><input type="checkbox" :checked="c.collect" @change="update(c, { collect: $event.target.checked })" /><span></span></label></td>
                 <td class="c"><label class="switch"><input type="checkbox" :checked="c.payout" @change="update(c, { payout: $event.target.checked })" /><span></span></label></td>
                 <td class="partner-cell">
+                  <div class="pl pl-gw">
+                    <span class="lbl">Passerelle</span>
+                    <select class="api" :class="'p-' + gw(c)" :value="gw(c)" @change="setGateway(c, $event.target.value)" title="Collecte, versement, vérifications et soldes passent par cette passerelle">
+                      <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
+                      <option value="digitwace" :disabled="!waceOk(c, 'payin') && !waceOk(c, 'payout')">WacePay</option>
+                      <option value="mixed" disabled>Mixte</option>
+                    </select>
+                    <button type="button" class="custom-btn" @click="custom[c.country] = !custom[c.country]">{{ custom[c.country] ? 'Masquer' : 'Par flux' }}</button>
+                  </div>
+                  <template v-if="custom[c.country] || gw(c) === 'mixed'">
                   <div class="pl" :class="{ dim: !c.collect }">
                     <span class="lbl">Collecte</span>
                     <select class="api" :class="'p-' + c.collect_partner" :value="c.collect_partner" @change="update(c, { collect_partner: $event.target.value })">
@@ -118,6 +128,7 @@
                       <option value="digitwace" :disabled="!waceOk(c, 'payout')">WacePay{{ waceNote(c, 'payout') }}</option>
                     </select>
                   </div>
+                  </template>
                   <div v-if="c.wacepay" class="wace-avail" :title="c.wacepay.payers.map((p) => p.name || p.code).join(', ')">
                     WacePay ici : {{ [c.wacepay.payin && 'collecte', c.wacepay.payout && 'versement'].filter(Boolean).join(' + ') || '—' }} · {{ c.wacepay.payers.length }} opérateur(s)
                   </div>
@@ -318,6 +329,14 @@ async function diagnose() {
   try { diag.value = (await api.get('/admin/digitwace/diagnose')).data } catch (e) { showToast(e.response?.data?.message || e.message, 'err') } finally { diagBusy.value = false }
 }
 const rowErr = reactive({})
+const custom = reactive({})
+// Passerelle du pays : la même pour tous les flux, sinon « Mixte » (réglage par flux)
+const gw = (c) => (c.collect_partner === c.payout_partner ? c.collect_partner : 'mixed')
+function setGateway(c, partner) {
+  if (partner === gw(c)) return
+  if (!confirm(`Confier TOUS les flux de ${c.name} à ${partnerName(partner)} ?\n\nCollecte, versements, vérifications de compte et contrôles de solde passeront par ${partnerName(partner)}. Les opérations en cours restent chez l'ancien partenaire.`)) return load()
+  run(() => api.post(`/admin/corridors/${c.country}`, { partner }), c.country)
+}
 let toastTimer = null
 function showToast(text, kind = 'ok') {
   toast.value = { text, kind }
@@ -436,6 +455,9 @@ onMounted(load)
 .partner-cell .api { width: 140px; }
 .pl { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
 .pl.dim { opacity: .5; }
+.pl-gw { padding-bottom: 4px; border-bottom: 1px dashed var(--border); margin-bottom: 4px; }
+.pl-gw .lbl { font-weight: 700; color: var(--text); }
+.custom-btn { background: none; border: 0; color: var(--link); font-size: 12px; cursor: pointer; padding: 0; white-space: nowrap; }
 .pl .lbl { width: 72px; font-size: 12px; color: var(--text-2); }
 .api.p-peex { border-color: #1e3a8a; color: #1e3a8a; font-weight: 700; }
 .api.p-digitwace { border-color: #ea7a17; color: #b45309; font-weight: 700; }
