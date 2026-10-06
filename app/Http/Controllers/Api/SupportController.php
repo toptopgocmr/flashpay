@@ -22,6 +22,11 @@ class SupportController extends Controller
         unset($out['peex_requests'], $out['digitwace_requests']);
         $out['flow'] = $costs['flow'];
         $out['gateway'] = \App\Support\TransactionPresenter::gateway($transaction);
+        $out['type_label'] = $transaction->typeLabel();
+        $out['status_label'] = $transaction->statusLabel();
+        $out['channel_label'] = \App\Support\TransactionPresenter::channel($transaction);
+        $out['parties'] = \App\Support\TransactionPresenter::parties($transaction);
+        $out['details'] = \App\Support\TransactionPresenter::details($transaction);
         if ($request->user()->hasRole('super_admin')) {
             unset($costs['flow']);
             $out['costs'] = $costs;
