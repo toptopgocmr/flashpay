@@ -125,7 +125,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     // --- Wallet consolidé, comptes liés, cadeaux, partage de note, mini-programmes ---
     Route::get('/wallet/overview', [ClientFeaturesController::class, 'overview']);
     Route::get('/linked-accounts', [ClientFeaturesController::class, 'linkedAccounts']);
-    Route::post('/linked-accounts', [ClientFeaturesController::class, 'addLinkedAccount']);
+    Route::post('/linked-accounts', [ClientFeaturesController::class, 'addLinkedAccount'])->middleware('pin');
     Route::delete('/linked-accounts/{account}', [ClientFeaturesController::class, 'deleteLinkedAccount']);
     Route::post('/linked-accounts/{account}/default', [ClientFeaturesController::class, 'defaultLinkedAccount']);
     Route::post('/pay/withdraw-bank', [ClientFeaturesController::class, 'withdrawToBank'])->middleware(['cap:withdraw', 'pin', 'idempotent']);
@@ -133,7 +133,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/gifts', [ClientFeaturesController::class, 'sendGift'])->middleware(['cap:send', 'pin', 'idempotent']);
     Route::get('/gifts/{code}', [ClientFeaturesController::class, 'showGift']);
     Route::post('/gifts/{code}/claim', [ClientFeaturesController::class, 'claimGift'])->middleware('throttle:20,1');
-    Route::post('/gifts/{code}/cancel', [ClientFeaturesController::class, 'cancelGift'])->middleware('throttle:20,1');
+    Route::post('/gifts/{code}/cancel', [ClientFeaturesController::class, 'cancelGift'])->middleware(['throttle:20,1', 'pin']);
     Route::get('/splits', [ClientFeaturesController::class, 'splits']);
     Route::post('/splits', [ClientFeaturesController::class, 'createSplit']);
     Route::post('/splits/{split}/remind', [ClientFeaturesController::class, 'remindSplit']);
@@ -172,17 +172,17 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/lookup', [PaymentController::class, 'lookup']);
         Route::post('/quote', [PaymentController::class, 'quote']);
         Route::post('/transfer', [PaymentController::class, 'transfer'])->middleware(['cap:send', 'pin', 'idempotent']);
-        Route::post('/deposit', [PaymentController::class, 'deposit'])->middleware(['cap:topup', 'idempotent']);
+        Route::post('/deposit', [PaymentController::class, 'deposit'])->middleware(['cap:topup', 'pin', 'idempotent']);
         Route::post('/withdraw', [PaymentController::class, 'withdraw'])->middleware(['cap:withdraw,settlement', 'pin', 'idempotent']);
         Route::get('/merchant/{code}', [PaymentController::class, 'merchantInfo'])->where('code', '.*');
         Route::post('/merchant', [PaymentController::class, 'payMerchant'])->middleware(['cap:pay', 'pin', 'idempotent']);
         Route::get('/transactions/{transaction}/status', [PaymentController::class, 'status']);
         // Moyens proposés selon le pays + code QR de paiement + bons de retrait
         Route::get('/methods', [CashController::class, 'methods']);
-        Route::post('/code', [CashController::class, 'payCode'])->middleware('throttle:30,1');
+        Route::post('/code', [CashController::class, 'payCode'])->middleware(['throttle:30,1', 'pin']);
         Route::get('/vouchers', [CashController::class, 'vouchers']);
         Route::post('/vouchers', [CashController::class, 'createVoucher'])->middleware(['cap:withdraw,settlement', 'pin', 'idempotent']);
-        Route::post('/vouchers/{voucher}/cancel', [CashController::class, 'cancelVoucher']);
+        Route::post('/vouchers/{voucher}/cancel', [CashController::class, 'cancelVoucher'])->middleware('pin');
     });
 
     // --- PEEX : corridors & frais (tous profils) ---
@@ -219,7 +219,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/transactions/send-money', [TransactionController::class, 'sendMoney'])->middleware(['cap:send', 'pin', 'idempotent']);
         Route::post('/transactions/pay-merchant', [TransactionController::class, 'payMerchant'])->middleware(['cap:pay', 'pin', 'idempotent']);
         // Recharge du wallet depuis MTN / Airtel (collecte PEEX)
-        Route::post('/transactions/cash-in-mobile', [PeexController::class, 'cashInMobile'])->middleware('cap:topup');
+        Route::post('/transactions/cash-in-mobile', [PeexController::class, 'cashInMobile'])->middleware(['cap:topup', 'pin']);
         // Transfert mobile money -> mobile money (ex: MTN CG -> Airtel CG) via PEEX
         Route::post('/transactions/mobile-transfer', [PeexController::class, 'mobileTransfer'])->middleware(['cap:send', 'pin', 'idempotent']);
     });
@@ -231,15 +231,15 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/outlets', [MerchantController::class, 'createOutlet']);
         Route::get('/collections', [MerchantController::class, 'collections']);
         Route::post('/withdraw', [MerchantController::class, 'requestWithdrawal'])->middleware(['cap:settlement', 'pin', 'idempotent']);
-        Route::post('/collect-ussd', [MerchantController::class, 'collectUssd'])->middleware('cap:collect');
-        Route::post('/charge-code', [CashController::class, 'chargeCode'])->middleware(['throttle:30,1', 'cap:scan_client']);
+        Route::post('/collect-ussd', [MerchantController::class, 'collectUssd'])->middleware(['cap:collect', 'pin']);
+        Route::post('/charge-code', [CashController::class, 'chargeCode'])->middleware(['throttle:30,1', 'cap:scan_client', 'pin']);
         // Règlements : comptes (mobile money, banque, wallet, cash), règlement manuel / automatique
         Route::get('/settlement', [SettlementController::class, 'show']);
-        Route::post('/settlement/accounts', [SettlementController::class, 'addAccount']);
+        Route::post('/settlement/accounts', [SettlementController::class, 'addAccount'])->middleware('pin');
         Route::post('/settlement/accounts/{account}/default', [SettlementController::class, 'setDefault']);
         Route::delete('/settlement/accounts/{account}', [SettlementController::class, 'deleteAccount']);
         Route::post('/settlement/settle', [SettlementController::class, 'settle'])->middleware(['throttle:20,1', 'cap:settlement', 'pin', 'idempotent']);
-        Route::post('/settlement/auto', [SettlementController::class, 'auto'])->middleware('cap:settlement');
+        Route::post('/settlement/auto', [SettlementController::class, 'auto'])->middleware(['cap:settlement', 'pin']);
         Route::get('/qr', [MerchantController::class, 'qr']);
         // Caissiers, remboursements, rapports, paiement en ligne (§3.2.3–3.2.5, §13.2)
         Route::get('/cashiers', [MerchantToolsController::class, 'cashiers']);
@@ -260,12 +260,12 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/dashboard', [AgentController::class, 'dashboard']);
         Route::post('/cash-in', [CashController::class, 'agentCashIn'])->middleware(['cap:cash_in', 'pin', 'idempotent']);
         Route::get('/vouchers/{code}', [CashController::class, 'agentVoucher'])->middleware(['throttle:20,1', 'cap:cash_out']);
-        Route::post('/vouchers/redeem', [CashController::class, 'agentRedeem'])->middleware(['throttle:20,1', 'cap:cash_out']);
-        Route::post('/cash-out', [AgentController::class, 'cashOut'])->middleware('cap:cash_out');
+        Route::post('/vouchers/redeem', [CashController::class, 'agentRedeem'])->middleware(['throttle:20,1', 'cap:cash_out', 'pin']);
+        Route::post('/cash-out', [AgentController::class, 'cashOut'])->middleware(['cap:cash_out', 'pin']);
         Route::get('/history', [AgentController::class, 'history']);
         // Approvisionnement, caisse, commissions (§3.1.2, §3.1.6, §3.1.7)
         Route::get('/float-requests', [AgentController::class, 'floatRequests']);
-        Route::post('/float-requests', [AgentController::class, 'createFloatRequest'])->middleware('cap:float');
+        Route::post('/float-requests', [AgentController::class, 'createFloatRequest'])->middleware(['cap:float', 'pin']);
         Route::post('/float-requests/{floatRequest}/cancel', [AgentController::class, 'cancelFloatRequest']);
         Route::post('/float-requests/{floatRequest}/review', [AgentController::class, 'reviewFloatRequest'])->middleware(['cap:sub_agents', 'pin']);
         Route::get('/float', [AgentController::class, 'float']);
