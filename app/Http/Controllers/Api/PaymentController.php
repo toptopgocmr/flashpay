@@ -191,7 +191,7 @@ class PaymentController extends Controller
             'destination_phone' => 'required_if:operation,transfer|nullable|string|max:25',
             'destination_country' => 'nullable|string|size:2',
             'merchant_code' => 'required_if:operation,merchant|nullable|string',
-            'deliver_to' => 'nullable|in:auto,mobile',
+            'deliver_to' => 'nullable|in:auto,wallet,mobile', // wallet = compte FlashPay uniquement ; mobile = compte mobile money
             'beneficiary_name' => 'nullable|string|max:100',
             'purpose' => 'nullable|string|max:50',
             'note' => 'nullable|string|max:140',

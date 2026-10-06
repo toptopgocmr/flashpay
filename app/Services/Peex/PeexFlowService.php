@@ -323,10 +323,15 @@ class PeexFlowService
     {
         $route = $this->corridors->resolve($phone, $opt['destination_country'] ?? null);
 
-        if (($opt['deliver_to'] ?? 'auto') !== 'mobile') {
+        $deliver = $opt['deliver_to'] ?? 'auto';
+        if ($deliver !== 'mobile') {
             $user = $this->findUserByPhone($route['phone']);
             if ($user && ($wallet = $user->wallet) && $user->hasRole('client')) {
                 return ['type' => 'wallet', 'wallet' => $wallet];
+            }
+            // Compte choisi = wallet FlashPay : pas de bascule silencieuse vers le mobile money
+            if ($deliver === 'wallet') {
+                throw new PeexException("Le numéro {$route['phone']} n'a pas de compte FlashPay. Choisissez « Mobile money » comme compte du bénéficiaire.");
             }
         }
 
