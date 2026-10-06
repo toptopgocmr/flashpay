@@ -50,11 +50,28 @@
     <section class="container">
       <div class="container-head">
         <h3>Résultats <span class="counter">({{ meta?.total ?? 0 }})</span></h3>
+        <div class="cost-sum" v-if="meta?.cost_totals" title="Totaux de la page affichée (transactions réussies)">
+          <span>Facturé FlashPay <b>{{ n(meta.cost_totals.billed) }}</b></span>
+          <span>Frais partenaires <b class="neg">−{{ n(meta.cost_totals.partner_total) }}</b></span>
+          <span>Marge <b :class="meta.cost_totals.margin < 0 ? 'neg' : 'pos'">{{ n(meta.cost_totals.margin) }}</b></span>
+          <button class="btn-link" @click="showRates = !showRates">Tarifs partenaires</button>
+        </div>
+      </div>
+      <div v-if="showRates" class="rates">
+        <p class="stat-label">Frais appliqués quand PEEX / WacePay ne renvoient pas leurs frais dans la réponse (affichés « estimé »). Les frais communiqués par le partenaire sont toujours prioritaires.</p>
+        <div class="rate-grid">
+          <template v-for="(r, k) in rates" :key="k">
+            <label>{{ r.label }}</label>
+            <span><input v-model.number="r.pct" type="number" min="0" max="50" step="0.01" /> %</span>
+            <span>+ <input v-model.number="r.fixed" type="number" min="0" step="1" /> fixe</span>
+          </template>
+        </div>
+        <button class="btn" @click="saveRates" :disabled="savingRates">{{ savingRates ? 'Enregistrement…' : 'Enregistrer' }}</button>
       </div>
       <div class="container-body flush" style="overflow-x: auto;">
         <table class="tx-table">
           <thead>
-            <tr><th>Opération</th><th>Parcours</th><th>Expéditeur → bénéficiaire</th><th class="num">Montant</th><th>Statut</th><th>Date</th><th></th></tr>
+            <tr><th>Opération</th><th>Parcours</th><th>Expéditeur → bénéficiaire</th><th class="num">Montant</th><th class="num" title="Frais facturés par FlashPay − frais PEEX / WacePay">Frais &amp; marge</th><th>Statut</th><th>Date</th><th></th></tr>
           </thead>
           <tbody>
             <tr v-for="t in transactions" :key="t.id" style="cursor:pointer" @click="$router.push('/transactions/' + t.id)">
@@ -75,6 +92,14 @@
                 <div :title="t.beneficiary?.account"><span class="who">↓</span>{{ t.beneficiary?.name || t.beneficiary?.account || '—' }}</div>
               </td>
               <td class="num c-am"><b>{{ money(t.amount, t.currency) }}</b><small v-if="t.fee">frais {{ n(t.fee) }}</small></td>
+              <td class="num c-cost" :title="costTitle(t)">
+                <template v-if="t.costs">
+                  <div>FlashPay <b>{{ n(t.costs.billed) }}</b></div>
+                  <div v-for="l in t.costs.legs" :key="l.kind + l.reference" class="leg">{{ l.partner }} {{ l.kind === 'collect' ? 'coll.' : l.kind === 'payout' ? 'vers.' : 'remb.' }}
+                    <b v-if="l.fee !== null">−{{ n(l.fee) }}</b><i v-else>?</i><sup v-if="l.fee_source === 'estimate'">est.</sup></div>
+                  <div class="mg" :class="t.costs.margin < 0 ? 'neg' : 'pos'">Marge {{ n(t.costs.margin) }}</div>
+                </template>
+              </td>
               <td><span class="status" :class="statusClass(t.status)">{{ STATUS[t.status] || t.status }}</span></td>
               <td class="c-dt">{{ dt(t.created_at) }}</td>
               <td class="c-act" @click.stop>
@@ -82,7 +107,7 @@
                 <IconAction v-if="t.refundable > 0" icon="undo" tone="accent" label="Rembourser via PEEX" @click="refundTx = t.id" />
               </td>
             </tr>
-            <tr v-if="!loading && !transactions.length"><td colspan="7" class="stat-label">Aucune transaction pour ces filtres.</td></tr>
+            <tr v-if="!loading && !transactions.length"><td colspan="8" class="stat-label">Aucune transaction pour ces filtres.</td></tr>
           </tbody>
         </table>
       </div>
@@ -185,6 +210,25 @@ async function load(page = 1) {
 
 const nf = new Intl.NumberFormat('fr-FR')
 const money = (n, cur) => nf.format(n || 0) + ' ' + (cur || 'XAF')
+const costTitle = (t) => {
+  const c = t.costs
+  if (!c) return ''
+  const lines = [`Facturé FlashPay : ${n(c.billed)} ${c.currency} (frais client ${n(c.client_fee)}${c.merchant_fee ? ', commission marchand ' + n(c.merchant_fee) : ''})`]
+  for (const l of c.legs) lines.push(`${l.label} via ${l.partner}${l.reference ? ' (' + l.reference + ')' : ''} : ${l.fee === null ? 'frais non communiqués' : n(l.fee) + ' ' + l.currency + (l.fee_source === 'estimate' ? ' (estimé)' : '')}`)
+  lines.push(`Marge FlashPay : ${n(c.margin)} ${c.currency}`)
+  return lines.join('\n')
+}
+const showRates = ref(false)
+const rates = ref({})
+const savingRates = ref(false)
+watch(showRates, async (v) => { if (v) rates.value = (await api.get('/admin/settings/partner-fees')).data })
+async function saveRates() {
+  savingRates.value = true
+  try {
+    rates.value = (await api.post('/admin/settings/partner-fees', { rates: rates.value })).data
+    await load(meta.value?.current_page || 1)
+  } finally { savingRates.value = false }
+}
 const statusClass = (s) => ({ successful: 'ok', processing: 'pending', failed: 'err', reversed: 'warn' }[s] || 'muted')
 
 watch(() => route.query, () => { syncFromRoute(); load() }, { immediate: true })
@@ -209,6 +253,11 @@ const EXP_COLS = [
   { label: 'Frais', value: (t) => t.fee },
   { label: 'Commission marchand', value: (t) => t.merchant_fee },
   { label: 'Devise', value: (t) => t.currency },
+  { label: 'Facturé FlashPay', value: (t) => t.costs?.billed ?? '' },
+  { label: 'Frais PEEX', value: (t) => (t.costs?.legs || []).filter((l) => l.partner === 'PEEX').reduce((a, l) => a + (l.fee || 0), 0) },
+  { label: 'Frais WacePay', value: (t) => (t.costs?.legs || []).filter((l) => l.partner === 'WacePay').reduce((a, l) => a + (l.fee || 0), 0) },
+  { label: 'Frais partenaires (total)', value: (t) => t.costs?.partner_total ?? '' },
+  { label: 'Marge FlashPay', value: (t) => t.costs?.margin ?? '' },
   { label: 'Montant reçu', value: (t) => t.destination_amount ?? '' },
   { label: 'Devise reçue', value: (t) => t.destination_currency ?? '' },
   { label: 'Statut', value: (t) => STATUS[t.status] || t.status },
@@ -233,6 +282,13 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 .c-pt div { white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 .c-pt .who { display: inline-block; width: 14px; color: var(--text-2); font-weight: 700; }
 .c-am b { white-space: nowrap; } .c-am small { display: block; color: var(--text-2); font-size: 11px; }
+.c-cost { font-size: 11px; white-space: nowrap; color: var(--text-2); }
+.c-cost b { color: var(--text); } .c-cost .leg b { color: #b91c1c; } .c-cost i { font-style: normal; color: #a16207; } .c-cost sup { font-size: 9px; margin-left: 2px; }
+.c-cost .mg { font-weight: 700; } .pos { color: #15803d !important; } .neg { color: #b91c1c !important; }
+.cost-sum { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
+.rates { padding: 12px 16px; border-bottom: 1px solid var(--border, #eee); }
+.rate-grid { display: grid; grid-template-columns: minmax(200px, auto) auto auto; gap: 6px 12px; align-items: center; margin: 8px 0 12px; font-size: 13px; }
+.rate-grid input { width: 80px; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 6px; font: inherit; }
 .c-dt { white-space: nowrap; color: var(--text-2); }
 .c-act { white-space: nowrap; text-align: right; }
 .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }

@@ -231,6 +231,7 @@ class PeexConnector implements PaymentRailConnector
                 'peex_id' => $item['id'] ?? $req->peex_id,
                 'payment_proof' => $this->str($item['payment_proof'] ?? $req->payment_proof),
                 'message' => $this->str($item['message'] ?? $req->message),
+                'fees' => \App\Support\PartnerFees::findFee($item) ?? $req->fees,
             ]);
         } elseif ($req->status === 'unknown'
             && $req->created_at->lt(now()->subMinutes(config('flashpay.peex.unknown_grace_minutes', 10)))) {

@@ -135,6 +135,11 @@ class Transaction extends Model
         return $this->hasMany(PeexRequest::class);
     }
 
+    public function digitwaceRequests()
+    {
+        return $this->hasMany(DigitwaceRequest::class);
+    }
+
     public function notes()
     {
         return $this->hasMany(TransactionNote::class);

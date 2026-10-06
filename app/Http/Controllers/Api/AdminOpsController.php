@@ -169,6 +169,24 @@ class AdminOpsController extends Controller
         return response()->json($settings->channels());
     }
 
+    /** Tarifs des partenaires (PEEX, WacePay…) utilisés quand le partenaire ne renvoie pas ses frais. */
+    public function partnerFees()
+    {
+        return response()->json(\App\Support\PartnerFees::rates());
+    }
+
+    public function updatePartnerFees(Request $request, PlatformSettings $settings)
+    {
+        $v = $request->validate(['rates' => 'required|array', 'rates.*.pct' => 'nullable|numeric|min:0|max:50', 'rates.*.fixed' => 'nullable|integer|min:0|max:1000000']);
+        $current = [];
+        foreach (\App\Support\PartnerFees::RATES as $k => $label) {
+            $current[$k] = ['pct' => (float) ($v['rates'][$k]['pct'] ?? 0), 'fixed' => (int) ($v['rates'][$k]['fixed'] ?? 0)];
+        }
+        $settings->set('partner_fees', $current, $request->user()->id);
+        Audit::log('settings.partner_fees', null, $current);
+        return response()->json(\App\Support\PartnerFees::rates());
+    }
+
     public function updateLimits(Request $request, PlatformSettings $settings)
     {
         $v = $request->validate(['limits' => 'required|array']);

@@ -183,18 +183,25 @@ class AdminDashboardController extends Controller
         }
 
         $page = $q->select('transactions.*')->selectRaw("{$expr} as channel")
-            ->with(['sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone', 'peexRequests:id,transaction_id,track_id,status,amount'])
+            ->with(['sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone', 'peexRequests', 'digitwaceRequests'])
             ->paginate(25)->withQueryString();
-        $page->getCollection()->transform(function ($t) {
+        $rates = \App\Support\PartnerFees::rates();
+        $page->getCollection()->transform(function ($t) use ($rates) {
+            // Frais facturés par FlashPay vs frais PEEX / WacePay → marge
+            $t->costs = \App\Support\PartnerFees::of($t, $rates);
             $t->channel_label = TransactionChannels::LABELS[$t->channel] ?? $t->channel;
             // Journal : libellé (Recharge compte FlashPay, Transfert entrant/sortant…), sens crédit/débit, canal
             $t->journal = \App\Support\TransactionPresenter::present($t);
             $t->gateway = \App\Support\TransactionPresenter::gateway($t);
             $t->refundable = \App\Services\Peex\ManualRefundService::refundableOf($t);
+            $t->setRelation('peexRequests', $t->peexRequests->map->only(['id', 'transaction_id', 'track_id', 'status', 'amount']));
+            $t->unsetRelation('digitwaceRequests');
             return $this->withParties($t);
         });
+        $c = $page->getCollection()->pluck('costs');
+        $totals = ['billed' => $c->sum('billed'), 'partner_total' => $c->sum('partner_total'), 'margin' => $c->sum('margin')];
 
-        return response()->json($page->toArray() + ['channels' => TransactionChannels::LABELS, 'families' => TransactionChannels::FAMILIES, 'statuses' => TransactionChannels::STATUSES,
+        return response()->json($page->toArray() + ['cost_totals' => $totals, 'partner_rates' => $rates, 'channels' => TransactionChannels::LABELS, 'families' => TransactionChannels::FAMILIES, 'statuses' => TransactionChannels::STATUSES,
             'user_name' => ($uid = (int) $request->query('user')) ? User::whereKey($uid)->value('full_name') : null]);
     }
 

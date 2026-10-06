@@ -59,6 +59,8 @@ class PeexStatusHandler
             'payment_proof' => isset($item['payment_proof']) && $item['payment_proof'] !== '' ? (string) $item['payment_proof'] : $req->payment_proof,
             'message' => isset($item['message']) && $item['message'] !== '' ? (string) $item['message'] : $req->message,
             'last_callback' => $item,
+            // Frais prélevés par PEEX sur l'opération (si communiqués)
+            'fees' => \App\Support\PartnerFees::findFee($item) ?? $req->fees,
         ])->save();
 
         return $this->finalize($req);

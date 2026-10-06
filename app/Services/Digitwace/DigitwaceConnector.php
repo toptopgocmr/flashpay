@@ -42,7 +42,8 @@ class DigitwaceConnector implements PaymentRailConnector
         try {
             $payer = $this->client->payerCodeFor($route['country'], $meta['source_operator'] ?? $route['operator'] ?? null, 'payin');
             if (! $payer) {
-                throw new DigitwaceException("Collecte WacePay non disponible pour {$route['country']} (aucun payeur PAYIN — synchronisez la couverture).", '1001');
+                $op = \App\Services\Digitwace\DigitwaceClient::operatorCode($meta['source_operator'] ?? $route['operator'] ?? null);
+                throw new DigitwaceException('Collecte WacePay non disponible' . ($op ? " pour les numéros {$op}" : '') . " ({$route['country']}) : aucun service de collecte WacePay" . ($op ? " {$op}" : '') . ' sur votre compte. Activez-le chez WacePay puis synchronisez la couverture.', '1001');
             }
             $r = $this->client->payin($ref, $payer, $amountMinor, $currency, $route['phone'],
                 $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $tx?->initiator?->full_name ?? 'Client FlashPay', $route['country'],
@@ -71,7 +72,7 @@ class DigitwaceConnector implements PaymentRailConnector
         ]);
 
         try {
-            $payer = $this->client->payerCodeFor($route['country'], $meta['destination_operator'] ?? null);
+            $payer = $this->client->payerCodeFor($route['country'], $meta['destination_operator'] ?? $route['operator'] ?? null);
             if (! $payer) {
                 throw new DigitwaceException("Aucun payerCode WacePay pour {$route['country']} / " . ($meta['destination_operator'] ?? 'opérateur inconnu') . ' (DIGITWACE_PAYER_CODES).', '1001');
             }

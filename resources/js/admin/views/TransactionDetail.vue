@@ -12,6 +12,47 @@
       <div class="card" v-go="t.destination_wallet?.user ? { path: '/transactions', query: { user: t.destination_wallet.user.id } } : '#tx-ledger'" title="Opérations du bénéficiaire"><div class="stat-label">Bénéficiaire</div><div style="font-weight:700;font-size:17px">{{ beneficiary.name || '—' }}</div><div class="mono stat-label">{{ beneficiary.account || '' }} · {{ t.destination_rail }}</div></div>
     </div>
 
+    <div v-if="t.flow" class="card" style="margin-bottom:24px;">
+      <h3>Parcours des fonds</h3>
+      <p class="stat-label" style="margin-top:-4px">Débit du compte de l'expéditeur (collecte) → compte principal FlashPay → crédit du compte du bénéficiaire (décaissement).</p>
+      <div class="flow">
+        <template v-for="(s, i) in t.flow" :key="s.step">
+          <div class="step" :class="'st-' + (s.status || 'none')">
+            <div class="st-l">{{ i + 1 }}. {{ s.label }}</div>
+            <div class="st-a">{{ s.account }}</div>
+            <div class="st-p">{{ s.partner }} · {{ ST[s.status] || '—' }}</div>
+          </div>
+          <div v-if="i < t.flow.length - 1" class="arrow">→</div>
+        </template>
+      </div>
+    </div>
+
+    <div v-if="t.costs" class="card" style="margin-bottom:24px;">
+      <h3>Frais &amp; marge</h3>
+      <table>
+        <thead><tr><th>Ligne</th><th>Partenaire</th><th>Référence</th><th>Statut</th><th class="num">Montant</th><th class="num">Frais</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>Facturé par FlashPay</b><div class="stat-label">frais client{{ t.costs.merchant_fee ? ' + commission marchand' : '' }}</div></td>
+            <td>FlashPay</td><td class="mono">{{ t.reference }}</td><td>{{ ST[t.status] || t.status }}</td><td></td>
+            <td class="num pos"><b>+{{ nf(t.costs.billed) }} {{ t.costs.currency }}</b></td>
+          </tr>
+          <tr v-for="l in t.costs.legs" :key="l.kind + l.reference">
+            <td>{{ l.label }}</td><td>{{ l.partner }}</td><td class="mono">{{ l.reference || '—' }}</td><td>{{ ST[l.status] || '—' }}</td>
+            <td class="num">{{ nf(l.amount) }} {{ l.currency }}</td>
+            <td class="num neg">
+              <template v-if="l.fee !== null">−{{ nf(l.fee) }} {{ l.currency }} <small v-if="l.fee_source === 'estimate'" title="Tarif saisi dans Transactions › Tarifs partenaires">(estimé)</small><small v-else>(partenaire)</small></template>
+              <small v-else>non communiqués</small>
+            </td>
+          </tr>
+          <tr class="tot">
+            <td colspan="5"><b>Marge FlashPay</b> <small class="stat-label">= facturé − frais partenaires</small></td>
+            <td class="num" :class="t.costs.margin < 0 ? 'neg' : 'pos'"><b>{{ nf(t.costs.margin) }} {{ t.costs.currency }}</b></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
     <div id="tx-ledger" class="card" style="margin-bottom:24px;">
       <h3>Écritures du grand livre</h3>
       <table>
@@ -86,6 +127,9 @@ async function escalate() {
   alert('Incident escaladé.')
 }
 
+const ST = { successful: 'Réussi', pending: 'En cours', failed: 'Échoué', processing: 'En cours', reversed: 'Remboursé' }
+const nf = (n) => new Intl.NumberFormat('fr-FR').format(n || 0)
+
 function formatXaf(n) {
   return new Intl.NumberFormat('fr-FR').format(n || 0) + ' XAF'
 }
@@ -102,3 +146,12 @@ const beneficiary = _computed(() => {
   return { name: m.merchant_name || u?.full_name || m.beneficiary_name || m.client_name || (x.destination_rail === 'treasury' ? 'FlashPay (trésorerie)' : null), account: x.destination_account || u?.phone || m.bank_name }
 })
 </script>
+
+<style scoped>
+.flow { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+.flow .step { flex: 1; min-width: 180px; border: 1px solid var(--border, #e5e7eb); border-radius: 10px; padding: 10px 12px; border-left-width: 4px; }
+.flow .arrow { align-self: center; font-size: 20px; color: var(--text-2, #6b7280); }
+.st-successful { border-left-color: #16a34a !important; } .st-pending { border-left-color: #d97706 !important; } .st-failed { border-left-color: #dc2626 !important; } .st-none { border-left-color: #9ca3af !important; }
+.st-l { font-weight: 700; } .st-a { font-size: 13px; margin: 2px 0; word-break: break-all; } .st-p { font-size: 12px; color: var(--text-2, #6b7280); }
+.num { text-align: right; white-space: nowrap; } .pos { color: #15803d; } .neg { color: #b91c1c; } tr.tot td { border-top: 2px solid var(--border, #e5e7eb); }
+</style>

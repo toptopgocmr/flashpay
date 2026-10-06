@@ -15,8 +15,18 @@ class SupportController extends Controller
 {
     public function transactionDetail(Request $request, Transaction $transaction)
     {
-        $transaction->load('ledgerEntries', 'notes.author', 'initiator', 'sourceWallet.user', 'destinationWallet.user');
-        return response()->json($transaction);
+        $transaction->load('ledgerEntries', 'notes.author', 'initiator', 'sourceWallet.user', 'destinationWallet.user', 'peexRequests', 'digitwaceRequests');
+        // Parcours des fonds (expéditeur → compte principal FlashPay → bénéficiaire) + frais partenaires / marge (super admin)
+        $costs = \App\Support\PartnerFees::of($transaction, null, true);
+        $out = $transaction->toArray();
+        unset($out['peex_requests'], $out['digitwace_requests']);
+        $out['flow'] = $costs['flow'];
+        $out['gateway'] = \App\Support\TransactionPresenter::gateway($transaction);
+        if ($request->user()->hasRole('super_admin')) {
+            unset($costs['flow']);
+            $out['costs'] = $costs;
+        }
+        return response()->json($out);
     }
 
     /**

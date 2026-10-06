@@ -209,6 +209,18 @@ class DigitwaceClient
         return trim(preg_replace('/\s*\(.*\)\s*/', '', $op)) ?: null;
     }
 
+    /** Opérateur reconnu dans un libellé de service WacePay (MTN, AIRTEL…), sinon null (service générique). */
+    public static function knownOperator(string $label): ?string
+    {
+        $l = strtoupper($label);
+        foreach (['MTN', 'ORANGE', 'AIRTEL', 'MOOV', 'WAVE', 'FREE', 'VODACOM', 'M-PESA', 'MPESA', 'TIGO', 'EXPRESSO', 'CAMTEL', 'AFRICELL'] as $o) {
+            if (str_contains($l, $o)) {
+                return $o === 'M-PESA' ? 'MPESA' : $o;
+            }
+        }
+        return null;
+    }
+
     /** Opérateur (MTN, ORANGE…) d'un service synchronisé, pour payments/create. */
     public function operatorFor(string $serviceId): ?string
     {
@@ -250,8 +262,16 @@ class DigitwaceClient
         // Couverture synchronisée (console › Pays & change › Synchroniser WacePay)
         try {
             $rows = \App\Models\WacepayCoverage::where('country', strtoupper($country))->where($service, true)->get();
-            $pick = $rows->first(fn ($r) => $operator && str_contains(strtoupper((string) $r->payer_name), strtoupper($operator)))
-                ?? $rows->firstWhere('method', 'wallet') ?? $rows->first();
+            $op = self::operatorCode($operator);
+            $opOf = fn ($r) => self::knownOperator((string) $r->payer_name);
+            $pick = $op ? $rows->first(fn ($r) => $opOf($r) === $op) : null;
+            if (! $pick && $op && $service === 'payin' && $rows->contains(fn ($r) => $opOf($r) !== null)) {
+                // Collecte : un service MTN ne peut pas débiter un numéro Airtel (« Service does not match subscription »)
+                return null;
+            }
+            $pick ??= $rows->first(fn ($r) => $opOf($r) === null && $r->method === 'wallet')
+                ?? $rows->first(fn ($r) => $opOf($r) === null)
+                ?? ($service === 'payin' && $op ? null : ($rows->firstWhere('method', 'wallet') ?? $rows->first()));
             if ($pick) {
                 return $pick->payer_code;
             }
@@ -265,7 +285,7 @@ class DigitwaceClient
             $pc = strtoupper((string) ($p['country'] ?? $p['countryCode'] ?? $p['country_code'] ?? $country));
             $name = strtoupper((string) ($p['name'] ?? $p['payerName'] ?? $p['label'] ?? ''));
             $code = $p['payerCode'] ?? $p['code'] ?? $p['payer_code'] ?? null;
-            if ($code && $pc === strtoupper($country) && (! $operator || str_contains($name, strtoupper($operator)))) {
+            if ($code && $pc === strtoupper($country) && (! $operator || str_contains($name, (string) (self::operatorCode($operator) ?? strtoupper($operator))))) {
                 return (string) $code;
             }
         }
@@ -397,12 +417,12 @@ class DigitwaceClient
     {
         if ($this->partner()) {
             // POST payments/create — wp-subscription-key = id du service de collecte.
-            // Doc Digitwace : customer_msisdn est un ENTIER (indicatif + numéro, sans « + »).
+            // WacePay (réponse réelle) : customer_msisdn = TEXTE de 8 à 14 chiffres, « + » facultatif.
             $digits = preg_replace('/\D/', '', $phone);
             $body = array_filter([
                 'amount' => $amount,
                 'referenceId' => $reference,
-                'customer_msisdn' => (int) $digits,
+                'customer_msisdn' => '+' . $digits,
                 'customer_name' => mb_substr(trim($name) ?: 'Client FlashPay', 0, 100),
                 'customer_email' => $email ?: $this->cfg('default_email'),
                 'currency' => strtoupper($currency),
@@ -413,11 +433,11 @@ class DigitwaceClient
             try {
                 $json = $this->call('post', 'payin', $body, [], ['wp-subscription-key' => $payerCode]);
             } catch (DigitwaceException $e) {
-                // Données refusées (400/422) : 2e essai avec le numéro au format « +242… » (texte)
-                if (! in_array($e->httpStatus, [400, 422], true)) {
+                // Format du numéro refusé (400/422) : 2e essai sans « + » (texte, chiffres seuls)
+                if (! in_array($e->httpStatus, [400, 422], true) || ! str_contains(strtolower($e->getMessage() . json_encode($e->response ?? [])), 'msisdn')) {
                     throw $e;
                 }
-                $json = $this->call('post', 'payin', ['customer_msisdn' => '+' . $digits] + $body, [], ['wp-subscription-key' => $payerCode]);
+                $json = $this->call('post', 'payin', ['customer_msisdn' => (string) $digits] + $body, [], ['wp-subscription-key' => $payerCode]);
             }
 
             return [
@@ -511,7 +531,7 @@ class DigitwaceClient
             'currency' => strtoupper($currency),
             'customer_name' => mb_substr(trim((string) ($customer['name'] ?? '')) ?: 'Client FlashPay', 0, 100),
             'customer_email' => ($customer['email'] ?? null) ?: $this->cfg('default_email'),
-            'customer_msisdn' => $phone ? (int) $phone : null,
+            'customer_msisdn' => $phone ? '+' . preg_replace('/\D/', '', (string) $phone) : null,
             'countryCode' => isset($customer['country']) ? strtoupper($customer['country']) : null,
             'payment_method' => $method === 'bank' ? 'BANK' : 'CARD',
             'description' => $customer['description'] ?? "FlashPay {$reference}",

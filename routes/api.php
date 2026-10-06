@@ -424,6 +424,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/reconciliation/run', [AdminOpsController::class, 'runReconciliation']);
         Route::get('/settings', [AdminOpsController::class, 'settings']);
         Route::post('/settings/channels', [AdminOpsController::class, 'updateChannels']);
+        Route::get('/settings/partner-fees', [AdminOpsController::class, 'partnerFees']);
+        Route::post('/settings/partner-fees', [AdminOpsController::class, 'updatePartnerFees']);
         Route::post('/settings/limits', [AdminOpsController::class, 'updateLimits']);
         Route::get('/commission-rules', [AdminOpsController::class, 'commissionRules']);
         Route::post('/commission-rules', [AdminOpsController::class, 'saveCommissionRule']);
