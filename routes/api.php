@@ -124,6 +124,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     // --- Wallet consolidé, comptes liés, cadeaux, partage de note, mini-programmes ---
     Route::get('/wallet/overview', [ClientFeaturesController::class, 'overview']);
+    // Carnet de bénéficiaires (rempli automatiquement à chaque envoi)
+    Route::get('/beneficiaries', [\App\Http\Controllers\Api\BeneficiaryController::class, 'index']);
+    Route::patch('/beneficiaries/{beneficiary}', [\App\Http\Controllers\Api\BeneficiaryController::class, 'update'])->whereNumber('beneficiary');
+    Route::delete('/beneficiaries/{beneficiary}', [\App\Http\Controllers\Api\BeneficiaryController::class, 'destroy'])->whereNumber('beneficiary');
     Route::get('/linked-accounts', [ClientFeaturesController::class, 'linkedAccounts']);
     Route::post('/linked-accounts', [ClientFeaturesController::class, 'addLinkedAccount'])->middleware('pin');
     Route::delete('/linked-accounts/{account}', [ClientFeaturesController::class, 'deleteLinkedAccount']);

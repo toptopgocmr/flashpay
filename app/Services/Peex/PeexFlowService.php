@@ -245,11 +245,21 @@ class PeexFlowService
             throw new PeexException('Le nom complet du bénéficiaire est obligatoire pour un envoi vers un numéro mobile money.');
         }
 
-        return $this->execute($user, $q, 'p2p', [
+        $tx = $this->execute($user, $q, 'p2p', [
             'beneficiary_name' => $opt['beneficiary_name'] ?? $q['destination']['name'] ?? null,
             'purpose' => $opt['purpose'] ?? null,
             'note' => $opt['note'] ?? null,
         ]);
+        // Bénéficiaire enregistré pour le prochain envoi (sauf tests console)
+        if (empty($opt['test'])) {
+            try {
+                app(\App\Services\Beneficiaries\BeneficiaryBook::class)->remember($tx, $user);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Carnet de bénéficiaires : enregistrement impossible', ['tx' => $tx->id, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return $tx;
     }
 
     public function deposit(User $user, string $phone, int $amount, array $opt = []): Transaction
