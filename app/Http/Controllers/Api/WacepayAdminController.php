@@ -198,6 +198,47 @@ class WacepayAdminController extends Controller
         return response()->json(['request' => $this->present($req->load('transaction'))]);
     }
 
+    /**
+     * Console › Transactions › « Vérifier le statut » : interroge WacePay et PEEX pour
+     * toutes les demandes non finalisées d'une transaction, applique le résultat et
+     * renvoie le diagnostic (statut lu, message, réponse brute).
+     */
+    public function checkTransaction(\App\Models\Transaction $transaction, DigitwaceStatusHandler $handler)
+    {
+        $out = [];
+        foreach (DigitwaceRequest::where('transaction_id', $transaction->id)->orderBy('id')->get() as $r) {
+            if (! $r->finalized_at) {
+                try {
+                    $handler->refresh($r);
+                } catch (\Throwable $e) {
+                    $r->update(['message' => mb_substr('Vérification : ' . $e->getMessage(), 0, 250)]);
+                }
+            }
+            $r->refresh();
+            $out[] = ['partner' => 'WacePay', 'reference' => $r->reference, 'id' => $r->wace_id, 'operation' => $r->operation, 'status' => $r->status,
+                'raw_status' => $r->raw_status, 'message' => $r->message, 'final' => (bool) $r->finalized_at, 'checked_at' => $r->last_checked_at?->toIso8601String(),
+                'response' => $r->last_response, 'callback' => $r->last_callback];
+        }
+        $peex = app(\App\Services\Peex\PeexStatusHandler::class);
+        foreach ($transaction->peexRequests()->orderBy('id')->get() as $r) {
+            if (! $r->finalized_at) {
+                try {
+                    $peex->refresh($r);
+                } catch (\Throwable $e) {
+                    $r->message = mb_substr($e->getMessage(), 0, 250);
+                }
+            }
+            $r->refresh();
+            $out[] = ['partner' => 'PEEX', 'reference' => $r->track_id, 'id' => $r->peex_id, 'operation' => $r->service, 'status' => $r->status,
+                'raw_status' => $r->status, 'message' => $r->message, 'final' => (bool) $r->finalized_at, 'checked_at' => $r->last_checked_at?->toIso8601String(),
+                'response' => $r->last_callback ?? $r->response_payload, 'callback' => null];
+        }
+        $transaction->refresh();
+        Audit::log('transaction.check_status', $transaction, ['status' => $transaction->status], request()->user()?->id);
+
+        return response()->json(['status' => $transaction->status, 'stage' => $transaction->stage, 'failure_reason' => $transaction->failure_reason, 'requests' => $out]);
+    }
+
     protected function present(DigitwaceRequest $r): array
     {
         $tx = $r->transaction;

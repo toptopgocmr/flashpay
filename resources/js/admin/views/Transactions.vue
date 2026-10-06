@@ -172,7 +172,23 @@
             <p class="reason">{{ detail.failure_reason }}</p>
           </div>
 
+          <div class="wp-sec" v-if="check">
+            <h4>Vérification auprès des passerelles</h4>
+            <p v-if="check.loading" class="muted">Interrogation de WacePay / PEEX…</p>
+            <p v-else-if="check.error" class="reason">{{ check.error }}</p>
+            <template v-else>
+              <div v-for="r in check.requests" :key="r.reference" class="chk">
+                <div class="kv"><span>{{ r.partner }} · {{ r.operation }} <small class="mono">{{ r.reference }}</small></span>
+                  <b><span class="pill sm" :class="r.status === 'successful' || r.status === 'paid' ? 'successful' : r.status === 'failed' ? 'failed' : 'processing'">{{ r.raw_status || r.status }}</span></b></div>
+                <p v-if="r.message" class="chk-msg">{{ r.message }}</p>
+                <details v-if="r.response"><summary>Réponse brute</summary><pre>{{ JSON.stringify(r.response, null, 2) }}</pre></details>
+              </div>
+              <p v-if="!check.requests.length" class="muted">Aucune demande partenaire pour cette opération.</p>
+            </template>
+          </div>
+
           <div class="wp-mf">
+            <button v-if="detail.status === 'processing' || detail.status === 'failed'" class="wp-btn" :disabled="check?.loading" @click="checkStatus(detail)">Vérifier le statut</button>
             <button v-if="detail.refundable > 0" class="wp-btn" @click="refundTx = detail.id; detail = null">Rembourser via PEEX</button>
             <router-link class="wp-btn primary" :to="'/transactions/' + detail.id">Fiche complète ›</router-link>
           </div>
@@ -274,6 +290,24 @@ async function saveRates() {
     showRates.value = false
     await load(meta.value?.current_page || 1)
   } finally { savingRates.value = false }
+}
+
+// « Vérifier le statut » : interroge WacePay / PEEX et applique le résultat
+const check = ref(null)
+watch(detail, () => { check.value = null })
+async function checkStatus(t) {
+  check.value = { loading: true, requests: [] }
+  try {
+    const { data } = await api.post(`/admin/transactions/${t.id}/check-status`)
+    check.value = { requests: data.requests || [] }
+    if (data.status !== t.status) {
+      await load(meta.value?.current_page || 1)
+      detail.value = transactions.value.find((x) => x.id === t.id) || detail.value
+      check.value = { requests: data.requests || [] }
+    }
+  } catch (e) {
+    check.value = { error: e.response?.data?.message || e.message, requests: [] }
+  }
 }
 
 const summary = computed(() => meta.value?.summary || {})
@@ -438,6 +472,10 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 .wp-sec h4 { margin: 0 0 4px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--t2); }
 .kv { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 13px; }
 .kv span { color: var(--t2); } .kv span small { color: var(--t3); font-size: 10.5px; } .kv b { font-weight: 600; text-align: right; }
+.chk { border-top: 1px dashed var(--line); padding-top: 4px; } .chk:first-of-type { border-top: 0; }
+.chk-msg { margin: 0 0 6px; color: #b45309; font-size: 12px; word-break: break-word; }
+.chk details { margin-bottom: 6px; } .chk summary { cursor: pointer; color: #2563eb; font-size: 12px; }
+.chk pre { max-height: 220px; overflow: auto; background: #0f172a; color: #e2e8f0; padding: 8px; border-radius: 8px; font-size: 11px; }
 .reason { margin: 0 0 8px; color: #b91c1c; font-size: 12.5px; }
 .wp-mf { display: flex; justify-content: flex-end; gap: 6px; }
 .rate-grid { display: grid; grid-template-columns: minmax(180px, auto) auto auto; gap: 8px 12px; align-items: center; font-size: 13px; }

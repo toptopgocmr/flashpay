@@ -582,17 +582,13 @@ class DigitwaceClient
     }
 
     /** @return array{status:string, raw_status:?string, message:?string, raw:array} */
-    public function status(string $waceIdOrReference, ?string $operation = null): array
+    public function status(string $waceIdOrReference, ?string $operation = null, ?string $reference = null): array
     {
         if ($this->partner()) {
             if (in_array($operation, ['payin', 'checkout'], true)) {
                 $json = $this->call('get', 'payin_status', [], [], ['referenceId' => $waceIdOrReference]);
             } else {
-                try {
-                    $json = $this->call('get', 'payout_refresh', [], ['id' => rawurlencode($waceIdOrReference)]);
-                } catch (DigitwaceException) {
-                    $json = $this->call('get', 'payout_tx', [], ['id' => rawurlencode($waceIdOrReference)]);
-                }
+                $json = $this->payoutStatusJson($waceIdOrReference, $reference);
             }
             // Le statut de l'opération peut être à plusieurs endroits ; « status: true » en tête
             // de réponse = succès de l'APPEL, pas de la transaction (ignoré).
@@ -626,6 +622,52 @@ class DigitwaceClient
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Versement : refresh-status/{id} → transactions/{id} → recherche dans la liste des
+     * versements (par id WacePay, code transaction ou notre référence). Lève une erreur
+     * détaillée si rien ne répond (le motif est gardé sur la demande).
+     */
+    protected function payoutStatusJson(string $id, ?string $reference): array
+    {
+        $errors = [];
+        $first = null;
+        foreach (array_unique(array_filter([$id, $reference])) as $key) {
+            foreach (['payout_refresh', 'payout_tx'] as $ep) {
+                try {
+                    $j = $this->call('get', $ep, [], ['id' => rawurlencode($key)]);
+                    if (self::findStatus($j)) {
+                        return $j;
+                    }
+                    $first ??= $j;
+                } catch (DigitwaceException $e) {
+                    $errors[] = "{$ep}/{$key} : " . mb_substr($e->getMessage(), 0, 120);
+                }
+            }
+        }
+        try {
+            $list = $this->call('get', 'payout_list', ['search' => $reference ?: $id, 'limit' => 50]);
+            $items = collect([data_get($list, 'data.data'), data_get($list, 'data.items'), data_get($list, 'data.transactions'), data_get($list, 'data'), data_get($list, 'items')])
+                ->first(fn ($v) => is_array($v) && array_is_list($v)) ?? [];
+            $needles = array_filter([$id, $reference]);
+            foreach ($items as $it) {
+                if (! is_array($it)) {
+                    continue;
+                }
+                $vals = array_map('strval', array_filter(\Illuminate\Support\Arr::flatten($it), 'is_scalar'));
+                if (array_intersect($needles, $vals)) {
+                    return ['data' => $it, 'source' => 'payout_list'];
+                }
+            }
+            $errors[] = 'payout_list : versement introuvable (' . implode(', ', $needles) . ')';
+        } catch (DigitwaceException $e) {
+            $errors[] = 'payout_list : ' . mb_substr($e->getMessage(), 0, 120);
+        }
+        if ($first) {
+            return $first;
+        }
+        throw new DigitwaceException('Statut WacePay introuvable — ' . implode(' | ', $errors));
     }
 
     /** Statut de transaction dans une réponse WacePay (premier libellé texte trouvé). */

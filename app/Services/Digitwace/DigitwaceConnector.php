@@ -123,9 +123,10 @@ class DigitwaceConnector implements PaymentRailConnector
             $op = $req?->operation;
             // Collecte (API Partenaire) : statut par referenceId ; versement : par id WacePay
             $id = (in_array($op, ['payin', 'checkout'], true) && $this->client->partner()) ? ($req?->reference ?: $externalRef) : ($req?->wace_id ?: $externalRef);
-            $r = $this->client->status($id, $op);
+            $r = $this->client->status($id, $op, $req?->reference);
         } catch (\Throwable $e) {
-            $req?->update(['last_checked_at' => now()]);
+            \Illuminate\Support\Facades\Log::warning('WacePay : statut illisible', ['reference' => $req?->reference, 'wace_id' => $req?->wace_id, 'error' => $e->getMessage()]);
+            $req?->update(['last_checked_at' => now(), 'message' => mb_substr('Vérification : ' . $e->getMessage(), 0, 250)]);
             return ['status' => 'unknown', 'external_ref' => $externalRef, 'raw' => ['error' => $e->getMessage()], 'checked' => false];
         }
         $req?->update(['raw_status' => $r['raw_status'], 'message' => $r['message'] ? mb_substr((string) $r['message'], 0, 250) : $req->message, 'last_response' => $r['raw'], 'last_checked_at' => now()]);

@@ -190,6 +190,25 @@ class AdminDashboardController extends Controller
         $page = $q->select('transactions.*')->selectRaw("{$expr} as channel")
             ->with(['sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone', 'peexRequests', 'digitwaceRequests'])
             ->paginate(25)->withQueryString();
+        // Opérations WacePay en attente sur la page : vérification auprès de WacePay (sans
+        // dépendre du planificateur), 3 au plus par chargement, une fois par minute chacune.
+        $checked = 0;
+        foreach ($page->getCollection()->where('status', 'processing') as $t) {
+            foreach ($t->digitwaceRequests->whereNull('finalized_at') as $req) {
+                if ($checked >= 3 || ! \Illuminate\Support\Facades\Cache::add('wace:admin-poll:' . $req->id, 1, 60)) {
+                    continue;
+                }
+                $checked++;
+                try {
+                    app(\App\Services\Digitwace\DigitwaceStatusHandler::class)->refresh($req);
+                    // Statut à jour en gardant la colonne calculée « channel »
+                    $t->setRawAttributes(array_merge($t->getAttributes(), Transaction::find($t->id)->getAttributes()), true);
+                    $t->load(['peexRequests', 'digitwaceRequests']);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('WacePay : vérification impossible (console)', ['reference' => $req->reference, 'error' => $e->getMessage()]);
+                }
+            }
+        }
         $rates = \App\Support\PartnerFees::rates();
         $page->getCollection()->transform(function ($t) use ($rates) {
             // Frais facturés par FlashPay vs frais PEEX / WacePay → marge
