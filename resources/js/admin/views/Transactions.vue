@@ -83,30 +83,27 @@
       <div class="wp-table">
         <table>
           <thead>
-            <tr><th>Code</th><th>Expéditeur → bénéficiaire</th><th class="num">Montant</th><th class="num">Frais</th><th class="num">Partenaires</th><th class="num">Net</th><th>Service</th><th>Statut</th><th>Date</th><th></th></tr>
+            <tr><th>ID</th><th>Expéditeur</th><th>Bénéficiaire</th><th class="num">Montant</th><th class="num">Total frais</th><th class="num">Frais passerelle</th><th>Passerelle</th><th>Opérateurs</th><th>Date</th><th></th></tr>
           </thead>
           <tbody>
             <tr v-for="t in transactions" :key="t.id" @click="detail = t">
-              <td class="c-code"><b class="mono">{{ t.reference }}</b><small><span :class="t.journal?.flow === 'in' ? 'pos' : 'neg'">{{ t.journal?.arrow }}</span> {{ t.journal?.label }}</small></td>
-              <td class="c-who">
-                <b>{{ t.beneficiary?.name || t.beneficiary?.account || '—' }}</b>
-                <small>{{ phone(t.beneficiary?.account) }}<template v-if="t.sender?.name"> · de {{ t.sender.name }}</template></small>
-              </td>
+              <td class="c-code"><b class="mono">{{ t.reference }}</b><small><span class="pill sm" :class="t.status">{{ STATUS[t.status] || t.status }}</span> {{ t.journal?.label }}</small></td>
+              <td class="c-who"><b :title="t.sender?.name">{{ t.sender?.name || '—' }}</b><small>{{ phone(t.sender?.account) }}</small></td>
+              <td class="c-who"><b :title="t.beneficiary?.name">{{ t.beneficiary?.name || '—' }}</b><small>{{ phone(t.beneficiary?.account) }}</small></td>
               <td class="num"><b>{{ money(t.amount, t.currency) }}</b></td>
-              <td class="num muted">{{ money(t.costs?.billed ?? t.fee, t.currency) }}</td>
+              <td class="num">{{ money(t.fee + (t.merchant_fee || 0), t.currency) }}</td>
               <td class="num" :title="partnerTitle(t)">
-                <span v-if="t.costs?.partner_total" class="neg">−{{ money(t.costs.partner_total, t.currency) }}</span>
-                <span v-else-if="t.costs?.legs?.some((l) => l.fee === null && l.status !== 'failed')" class="unk">?</span>
+                <span v-if="t.costs?.partner_total" class="neg">{{ money(t.costs.partner_total, t.currency) }}</span>
+                <span v-else-if="t.costs?.legs?.some((l) => l.fee === null && l.status !== 'failed')" class="unk" title="Frais non communiqués par la passerelle">?</span>
                 <span v-else class="muted">0</span>
               </td>
-              <td class="num"><b class="net">{{ money(netOf(t), t.destination_currency || t.currency) }}</b></td>
               <td class="c-svc">
-                <span>{{ svc(t) }}</span>
-                <em v-if="partnerOf(t)" :class="'p-' + partnerOf(t).toLowerCase()">{{ partnerOf(t) }}</em>
+                <em v-for="p in gateways(t)" :key="p" :class="'p-' + p.toLowerCase()">{{ p }}</em>
+                <span v-if="!gateways(t).length" class="muted">Interne</span>
               </td>
-              <td><span class="pill" :class="t.status">{{ STATUS[t.status] || t.status }}</span></td>
+              <td class="c-ops">{{ opName(t.gateway?.in) }} <span class="arr">→</span> {{ opName(t.gateway?.out) }}</td>
               <td class="c-dt">{{ dt(t.created_at) }}</td>
-              <td class="c-eye" @click.stop="detail = t" title="Détails">
+              <td class="c-eye" @click.stop="detail = t" title="Voir les détails">
                 <svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
               </td>
             </tr>
@@ -253,6 +250,13 @@ const svc = (t) => {
   const op = (side.operator || '—').replace(/ Mobile Money| Money/g, '').replace('Wallet FlashPay', 'Wallet')
   return side.country ? `${op} (${side.country})` : op
 }
+// Passerelles utilisées (collecte et/ou versement) et opérateurs débité → crédité
+const gateways = (t) => [...new Set([t.gateway?.in.partner, t.gateway?.out.partner].filter(Boolean).map((p) => p.replace(/ \(.*\)/, '').replace('Carte (3-D Secure)', '3DS')))]
+const opName = (side) => {
+  if (!side) return '—'
+  const op = (side.operator || '—').replace(/ Mobile Money| Money/g, '').replace('Wallet FlashPay', 'Wallet').replace('Carte Visa / Mastercard', 'Carte')
+  return side.country ? `${op} (${side.country})` : op
+}
 const partnerTitle = (t) => (t.costs?.legs || []).map((l) => `${l.partner} ${l.kind === 'collect' ? 'collecte' : l.kind === 'payout' ? 'versement' : 'remboursement'} : ${l.fee === null ? 'non communiqués' : n(l.fee) + ' ' + l.currency + (l.fee_source === 'estimate' ? ' (estimé)' : '')}`).join('\n')
 
 const showRates = ref(false)
@@ -383,8 +387,8 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 
 .wp-table { overflow-x: auto; }
 .wp-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.wp-table th { background: var(--wp-soft); text-align: left; font-weight: 700; color: #111827; padding: 16px 14px; white-space: nowrap; font-size: 14px; text-transform: none; letter-spacing: 0; }
-.wp-table td { padding: 16px 14px; border-top: 1px solid var(--wp-line); vertical-align: middle; }
+.wp-table th { background: var(--wp-soft); text-align: left; font-weight: 700; color: #111827; padding: 14px 10px; white-space: nowrap; font-size: 13.5px; text-transform: none; letter-spacing: 0; }
+.wp-table td { padding: 14px 10px; border-top: 1px solid var(--wp-line); vertical-align: middle; }
 .wp-table tbody tr { cursor: pointer; }
 .wp-table tbody tr:hover td { background: #fafbfc; }
 .num { text-align: right; white-space: nowrap; }
@@ -395,6 +399,10 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 .c-code small, .c-who small { display: block; color: var(--wp-text2); font-size: 12px; margin-top: 2px; white-space: nowrap; }
 .c-who b { display: block; font-weight: 700; white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
 .c-svc { white-space: nowrap; }
+.c-svc em:first-child { margin-left: 0; }
+.c-ops { white-space: nowrap; font-size: 13px; } .c-ops .arr { color: var(--wp-text2); margin: 0 3px; }
+.c-who b { max-width: 190px; }
+.pill.sm { padding: 1px 6px; font-size: 10px; border-radius: 4px; margin-right: 4px; }
 .c-svc em { font-style: normal; font-size: 10.5px; font-weight: 700; margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: #e0e7ff; color: #1e3a8a; }
 .c-svc em.p-wacepay { background: #ffedd5; color: #c2410c; }
 .c-dt { white-space: nowrap; color: var(--wp-text2); font-size: 13px; }
