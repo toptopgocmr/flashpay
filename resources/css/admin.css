@@ -45,6 +45,7 @@
   --shadow-lg: 0 12px 32px rgba(15, 23, 42, .16);
   --nav-h: 56px;
   --side-w: 248px;
+  --rail-w: 76px;
 
   /* compat anciennes vues */
   --fp-navy: var(--brand);
@@ -166,12 +167,13 @@ code { font-family: "JetBrains Mono", Consolas, Menlo, monospace; font-size: 12p
 .sidenav .foot { padding: 14px 20px; color: var(--text-3); font-size: 12px; border-top: 1px solid var(--border); }
 .shell.collapsed .sidenav { transform: translateX(-100%); }
 .side-open-btn {
+  display: none;
   position: fixed; top: calc(var(--nav-h) + 12px); left: 12px; z-index: 39;
   background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; cursor: pointer; box-shadow: var(--shadow);
 }
 
 .main { flex: 1; margin-left: var(--side-w); padding: 20px 32px 48px; min-width: 0; transition: margin .2s ease; max-width: calc(var(--side-w) + 1480px); }
-.shell.collapsed .main { margin-left: 0; padding-left: 64px; }
+.shell.collapsed .main { margin-left: var(--rail-w); padding-left: 32px; }
 .content { padding: 0; }
 
 .breadcrumbs { display: flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--text-2); margin-bottom: 10px; }
@@ -345,13 +347,14 @@ a.role-tile:hover { border-color: var(--brand); box-shadow: var(--shadow); color
   .grid-2-1, .grid-3 { grid-template-columns: 1fr; }
   /* Menu en panneau superposé : le contenu garde toute la largeur */
   .sidenav { box-shadow: var(--shadow-lg); z-index: 46; }
-  .main, .shell.collapsed .main { margin-left: 0; padding-left: 64px; }
+  /* Le rail d'icônes reste visible : le contenu ne bouge pas quand le menu s'ouvre */
+  .main, .shell.collapsed .main { margin-left: var(--rail-w); padding-left: 24px; }
 }
 .side-backdrop { position: fixed; inset: var(--nav-h) 0 0 0; background: rgba(15, 23, 42, .35); z-index: 45; }
 
 /* Impression / export PDF : uniquement le contenu de la page */
 @media print {
-  .topnav, .sidenav, .side-open-btn, .side-backdrop, .services-menu, .fp-toast, .breadcrumbs, .actions, .toolbar { display: none !important; }
+  .topnav, .sidenav, .siderail, .rail-fly, .side-open-btn, .side-backdrop, .services-menu, .fp-toast, .breadcrumbs, .actions, .toolbar { display: none !important; }
   .shell { padding-top: 0; display: block; }
   .main, .shell.collapsed .main { margin: 0 !important; padding: 0 !important; max-width: none; }
   html, body { background: #fff; }
@@ -361,7 +364,7 @@ a.role-tile:hover { border-color: var(--brand); box-shadow: var(--shadow); color
 }
 @media (max-width: 800px) {
   .nav-search, .topnav .brand small, .hide-sm { display: none; }
-  .main, .shell.collapsed .main { margin-left: 0; padding: 60px 16px 40px; }
+  .main, .shell.collapsed .main { margin-left: var(--rail-w); padding: 20px 14px 40px; }
   .grid-4, .grid-2 { grid-template-columns: 1fr; }
   .kv { grid-template-columns: 1fr 1fr; row-gap: 16px; }
   .kv > div { border-left: 0; padding: 0 8px 0 0; }
@@ -495,3 +498,10 @@ button.gw-stat { cursor: pointer; } button.gw-stat:hover { border-color: var(--b
 .gw-scroll { overflow-x: auto; }
 .gw-empty { padding: 26px; text-align: center; color: var(--text-2); font-size: 13.5px; }
 @media (max-width: 700px) { .gw-card-h, .gw-card-b, .gw-row { padding-left: 14px; padding-right: 14px; } }
+
+/* Téléphone : pas de rail, bouton ☰ pour ouvrir le menu */
+@media (max-width: 560px) {
+  .siderail, .rail-fly { display: none !important; }
+  .side-open-btn { display: inline-flex; }
+  .main, .shell.collapsed .main { margin-left: 0; padding: 60px 14px 40px; }
+}

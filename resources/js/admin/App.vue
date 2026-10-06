@@ -86,8 +86,8 @@
     <aside class="sidenav" @click.stop>
       <div class="sidenav-head">
         <strong>Navigation</strong>
-        <button class="icon-btn" title="Masquer le menu" @click="collapsed = true">
-          <svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+        <button class="icon-btn" title="Réduire le menu (icônes)" @click="collapsed = true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
         </button>
       </div>
       <nav>
@@ -110,6 +110,34 @@
     </aside>
 
     <div v-if="!collapsed && narrow" class="side-backdrop" @click.stop="collapsed = true"></div>
+ <!-- Menu réduit : rail d'icônes (une par rubrique), sous-menu au survol -->
+    <aside v-if="collapsed" class="siderail" @click.stop @mouseleave="leaveRail">
+      <button class="rail-btn rail-toggle" title="Afficher le menu complet" @click="collapsed = false; flyout = null">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <button
+        v-for="g in groups"
+        :key="g.name"
+        type="button"
+        class="rail-item"
+        :class="{ active: groupHasActive(g), hover: flyout?.name === g.name }"
+        :title="g.name"
+        @mouseenter="openFly(g, $event)"
+        @click="toggleFly(g, $event)"
+      >
+        <svg viewBox="0 0 24 24" v-html="ICONS[g.icon]"></svg>
+        <span v-if="groupCount(g)" class="rail-dot">{{ groupCount(g) > 99 ? '99+' : groupCount(g) }}</span>
+      </button>
+    </aside>
+    <div v-if="collapsed && flyout" class="rail-fly" :style="{ top: flyout.top + 'px' }" @click.stop @mouseenter="cancelLeave" @mouseleave="leaveRail">
+      <h4>{{ flyout.name }}</h4>
+      <router-link v-for="l in flyout.links" :key="l.to" :to="l.to" :class="{ active: isActive(l.to) }" @click="flyout = null">
+        <svg viewBox="0 0 24 24" v-html="ICONS[l.icon]"></svg>
+        <span>{{ l.label }}</span>
+        <span v-if="l.badge && badges[l.badge]" class="count">{{ badges[l.badge] }}</span>
+      </router-link>
+    </div>
+
     <button v-if="collapsed" class="side-open-btn" title="Afficher le menu" @click.stop="collapsed = false">
       <svg width="18" height="18" viewBox="0 0 18 18" stroke="currentColor" stroke-width="2"><path d="M2 4h14M2 9h14M2 14h14"/></svg>
     </button>
@@ -281,17 +309,24 @@ let announcedAtLogin = false
 const allLinks = groups.flatMap((g) => g.links.map((l) => ({ ...l, group: g.name })))
 
 const isLoginPage = computed(() => route.path === '/login')
-// En dessous de 1100 px, le menu devient un panneau superposé (fermé par défaut)
-// pour ne jamais recouvrir le contenu des pages.
+// En dessous de 1100 px, le menu se réduit en rail d'icônes (comme WacePay) ;
+// le menu complet s'ouvre alors en panneau superposé. Au-dessus, le choix
+// (complet / réduit) est mémorisé par navigateur.
 const NARROW = 1100
 const narrow = ref(window.innerWidth < NARROW)
-const collapsed = ref(narrow.value)
+let savedMini = false
+try { savedMini = localStorage.getItem('fp_admin_nav_mini') === '1' } catch (_) {}
+const collapsed = ref(narrow.value || savedMini)
+watch(collapsed, (c) => { if (!narrow.value) { try { localStorage.setItem('fp_admin_nav_mini', c ? '1' : '0') } catch (_) {} } })
 function onResize() {
   const n = window.innerWidth < NARROW
   if (n !== narrow.value) {
     narrow.value = n
-    collapsed.value = n
+    collapsed.value = n || savedMiniNow()
   }
+}
+function savedMiniNow() {
+  try { return localStorage.getItem('fp_admin_nav_mini') === '1' } catch (_) { return false }
 }
 // Groupes du menu repliables ; l'état est mémorisé par navigateur.
 const openGroups = ref({})
@@ -334,7 +369,30 @@ function toggle(which) {
   servicesOpen.value = s ? !servicesOpen.value : false
   userOpen.value = s ? false : !userOpen.value
 }
+// --- Rail d'icônes (menu réduit) : sous-menu flottant de la rubrique survolée
+const flyout = ref(null)
+let leaveTimer = null
+function openFly(g, ev) {
+  clearTimeout(leaveTimer)
+  const r = ev.currentTarget.getBoundingClientRect()
+  const h = 56 + g.links.length * 40
+  const top = Math.max(64, Math.min(r.top - 6, window.innerHeight - h - 12))
+  flyout.value = { name: g.name, links: g.links, top }
+}
+function toggleFly(g, ev) {
+  if (flyout.value?.name === g.name) flyout.value = null
+  else openFly(g, ev)
+}
+function leaveRail() {
+  clearTimeout(leaveTimer)
+  leaveTimer = setTimeout(() => { flyout.value = null }, 220)
+}
+function cancelLeave() { clearTimeout(leaveTimer) }
+watch(() => route.path, () => { flyout.value = null })
+watch(collapsed, (c) => { if (!c) flyout.value = null })
+
 function closeMenus() {
+  flyout.value = null
   servicesOpen.value = false
   userOpen.value = false
   searchOpen.value = false
@@ -407,6 +465,42 @@ onBeforeUnmount(() => {
 </script>
 
 <style>
+/* ---------- Rail d'icônes (menu réduit, style WacePay) ---------- */
+.siderail {
+  position: fixed; top: var(--nav-h); bottom: 0; left: 0; width: var(--rail-w, 76px); z-index: 41;
+  background: var(--surface, #fff); border-right: 1px solid var(--border, #e5e7eb);
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; overflow-y: auto;
+  animation: fpRailIn .18s ease-out;
+}
+.rail-btn, .rail-item {
+  position: relative; flex: none; width: 52px; height: 52px; border-radius: 14px; border: 0; background: none;
+  display: grid; place-items: center; cursor: pointer; color: var(--brand, #1e3a8a); transition: background .15s, color .15s, transform .15s;
+}
+.rail-btn svg, .rail-item svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.rail-toggle { color: var(--text-2, #6b7280); margin-bottom: 6px; }
+.rail-btn:hover, .rail-item:hover, .rail-item.hover { background: var(--surface-2, #f1f5f9); }
+.rail-item.active { background: #fdece2; color: var(--accent, #ea7a1a); }
+.rail-item:active { transform: scale(.94); }
+.rail-dot {
+  position: absolute; top: 5px; right: 4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--accent, #e11d2a); color: #fff; font-size: 10px; font-weight: 800; display: grid; place-items: center; line-height: 1;
+  box-shadow: 0 0 0 2px var(--surface, #fff);
+}
+.rail-fly {
+  position: fixed; left: calc(var(--rail-w, 76px) + 8px); z-index: 60; width: 270px; max-height: calc(100vh - 80px); overflow-y: auto;
+  background: #fff; border: 1px solid var(--border, #e5e7eb); border-radius: 14px; padding: 10px 8px;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .18); animation: fpFlyIn .14s ease-out;
+}
+.rail-fly h4 { margin: 2px 10px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--text-3, #9ca3af); }
+.rail-fly a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; color: #334155; font-size: 13.5px; font-weight: 500; text-decoration: none; }
+.rail-fly a svg { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--text-3, #9ca3af); }
+.rail-fly a:hover { background: var(--surface-2, #f1f5f9); color: var(--text, #111827); }
+.rail-fly a.active { background: var(--soft, #eef2ff); color: var(--brand, #1e3a8a); font-weight: 650; box-shadow: inset 3px 0 0 var(--accent, #ea7a1a); }
+.rail-fly a.active svg { color: var(--accent, #ea7a1a); }
+.rail-fly a .count { margin-left: auto; background: var(--accent, #e11d2a); color: #fff; font-size: 11px; font-weight: 800; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; }
+@keyframes fpRailIn { from { transform: translateX(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fpFlyIn { from { transform: translateX(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
+
 .bell-count { background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; border-radius: 10px; padding: 0 6px; margin-left: 2px; }
 .fp-toast { position: fixed; top: 70px; right: 20px; z-index: 200; max-width: 380px; background: #fff; border-left: 5px solid var(--brand); border-radius: 12px; box-shadow: 0 12px 30px rgba(15, 23, 42, .18); padding: 12px 16px; display: grid; gap: 2px; color: var(--text); text-decoration: none; animation: fpToast .25s ease-out; }
 .fp-sound-bar { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 210; background: var(--brand, #1e3a8a); color: #fff; border: 0; border-radius: 999px; padding: 12px 22px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 10px 28px rgba(15, 23, 42, .3); }
