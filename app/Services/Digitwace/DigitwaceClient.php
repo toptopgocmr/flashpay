@@ -221,6 +221,25 @@ class DigitwaceClient
         return null;
     }
 
+    /** Opérateur d'une ligne de couverture : nom du service, puis champs bruts operator / operatorCode / provider / network. */
+    public static function serviceOperator(object $row): ?string
+    {
+        if ($op = self::knownOperator((string) ($row->payer_name ?? ''))) {
+            return $op;
+        }
+        $raw = (array) ($row->raw ?? []);
+        foreach (['operator', 'operatorCode', 'operator_code', 'provider', 'network', 'paymentMethod'] as $k) {
+            $v = $raw[$k] ?? null;
+            if (is_array($v)) {
+                $v = $v['code'] ?? $v['name'] ?? null;
+            }
+            if (is_string($v) && ($op = self::knownOperator($v))) {
+                return $op;
+            }
+        }
+        return null;
+    }
+
     /** Opérateur (MTN, ORANGE…) d'un service synchronisé, pour payments/create. */
     public function operatorFor(string $serviceId): ?string
     {
@@ -263,7 +282,9 @@ class DigitwaceClient
         try {
             $rows = \App\Models\WacepayCoverage::where('country', strtoupper($country))->where($service, true)->get();
             $op = self::operatorCode($operator);
-            $opOf = fn ($r) => self::knownOperator((string) $r->payer_name);
+            // Opérateur du service : libellé, sinon champ operator du service WacePay
+            // (un service « Mobile Money SN » dont l'opérateur réel est MOOV ne doit pas servir pour un numéro Orange).
+            $opOf = fn ($r) => self::serviceOperator($r);
             $pick = $op ? $rows->first(fn ($r) => $opOf($r) === $op) : null;
             if (! $pick && $op && $service === 'payin' && $rows->contains(fn ($r) => $opOf($r) !== null)) {
                 // Collecte : un service MTN ne peut pas débiter un numéro Airtel (« Service does not match subscription »)
