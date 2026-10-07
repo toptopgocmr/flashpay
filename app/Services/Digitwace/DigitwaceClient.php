@@ -167,9 +167,10 @@ class DigitwaceClient
                 }
                 $k = (string) $id;
                 $prev = $out[$k] ?? null;
+                $deep = self::deepOperator($svc); // noms de champs WacePay variables : opérateur cherché dans tout le service
                 $out[$k] = ['payerCode' => $k, 'countryCode' => $iso,
-                    'payerName' => CoverageService::pick($svc, ['name', 'serviceName', 'label', 'operator']),
-                    'operatorCode' => CoverageService::pick($svc, ['operator', 'operatorCode', 'provider', 'network', 'paymentMethod']),
+                    'payerName' => CoverageService::pick($svc, ['name', 'serviceName', 'service_name', 'label', 'title', 'operator']) ?? $deep[1] ?? null,
+                    'operatorCode' => CoverageService::pick($svc, ['operator', 'operatorCode', 'provider', 'network', 'paymentMethod']) ?? $deep[0] ?? null,
                     'currency' => CoverageService::pick($svc, ['currency', 'currencyCode', 'country.currency']),
                     'type' => 'wallet'] + ($prev ?? []) + ['raw_service' => $svc];
                 $out[$k]['payin'] = ($prev['payin'] ?? false) || $flow === 'payin';
@@ -237,7 +238,42 @@ class DigitwaceClient
                 return $op;
             }
         }
-        return null;
+        return self::deepOperator($raw['raw_service'] ?? $raw)[0] ?? null;
+    }
+
+    /**
+     * Opérateur cité n'importe où dans un service WacePay (« Moov money (SENEGAL) », « ORANGE »…),
+     * quel que soit le nom du champ. Un seul opérateur distinct exigé, sinon null.
+     *
+     * @return array{0:string,1:string}|null [code, libellé]
+     */
+    public static function deepOperator(mixed $svc): ?array
+    {
+        $found = [];
+        $walk = function ($v, $key = '') use (&$walk, &$found) {
+            if (is_array($v)) {
+                foreach ($v as $k => $x) {
+                    $walk($x, (string) $k);
+                }
+                return;
+            }
+            if (! is_string($v) || $v === '' || strlen($v) > 80 || preg_match('/(^|_)(id|key|url|uri|secret|token|email|phone|msisdn|callback)$/i', $key)) {
+                return;
+            }
+            if ($op = self::knownOperator($v)) {
+                $label = trim(preg_replace('/\s*\([^)]*\)\s*$/', '', $v)) ?: $v;
+                // Libellé le plus parlant : « Moov money » plutôt que « MOOV »
+                if (! isset($found[$op]) || (strtoupper($found[$op]) === $found[$op] && strtoupper($label) !== $label)) {
+                    $found[$op] = $label;
+                }
+            }
+        };
+        $walk($svc);
+        if (count($found) !== 1) {
+            return null;
+        }
+        $op = array_key_first($found);
+        return [$op, $found[$op]];
     }
 
     /** Opérateur (MTN, ORANGE…) d'un service synchronisé, pour payments/create. */
