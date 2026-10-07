@@ -82,6 +82,32 @@ class AdminOpsController extends Controller
         return response()->json($q->paginate(30)->toArray() + ['counts' => $counts]);
     }
 
+    /** Règles anti-fraude effectives + valeurs par défaut (Console › Anti-fraude › Règles). */
+    public function fraudSettings(\App\Services\Compliance\FraudService $fraud)
+    {
+        return response()->json(['config' => $fraud->config(), 'defaults' => \App\Services\Compliance\FraudService::defaults(), 'labels' => \App\Services\Compliance\FraudService::RULES]);
+    }
+
+    public function updateFraudSettings(Request $request, \App\Services\Compliance\FraudService $fraud, \App\Services\Ops\PlatformSettings $settings)
+    {
+        $defaults = \App\Services\Compliance\FraudService::defaults();
+        $in = $request->validate(['block_minutes' => 'required|integer|min:5|max:10080', 'rules' => 'required|array']);
+        $rules = [];
+        foreach ($defaults['rules'] as $key => $def) {
+            $r = (array) ($in['rules'][$key] ?? []);
+            $clean = ['enabled' => (bool) ($r['enabled'] ?? $def['enabled']), 'action' => in_array($r['action'] ?? '', ['alert', 'block'], true) ? $r['action'] : $def['action'], 'score' => max(0, min(100, (int) ($r['score'] ?? $def['score'])))];
+            foreach ($def as $field => $value) {
+                if (! array_key_exists($field, $clean)) {
+                    $clean[$field] = max(1, (int) ($r[$field] ?? $value));
+                }
+            }
+            $rules[$key] = $clean;
+        }
+        $settings->set('fraud_rules', ['block_minutes' => (int) $in['block_minutes'], 'rules' => $rules], $request->user()->id);
+        Audit::log('fraud.settings', null, ['block_minutes' => (int) $in['block_minutes'], 'rules' => $rules]);
+        return response()->json(['config' => $fraud->config()]);
+    }
+
     public function reviewFraudAlert(Request $request, FraudAlert $alert)
     {
         $v = $request->validate(['decision' => 'required|in:cleared,confirmed', 'unblock' => 'nullable|boolean', 'note' => 'nullable|string|max:190']);

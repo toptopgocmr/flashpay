@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h1>Anti-fraude</h1>
-        <p>Alertes levées par les règles de vélocité et de seuil LCB-FT ; un compte en alerte est bloqué temporairement.</p>
+        <p>8 règles évaluées avant chaque opération sortante : alerte à vérifier ou blocage temporaire du compte. Seuils réglables dans l'onglet « Règles ».</p>
       </div>
       <div class="actions">
         <ExportButton filename="alertes-fraude" :columns="EXP_COLS" :fetch="expFetch" />
@@ -16,8 +16,47 @@
         <button v-for="t in ['open', 'cleared', 'confirmed']" :key="t" :class="{ on: status === t }" @click="status = t; load(1)">
           {{ LBL[t] }} <span class="n">{{ d?.counts?.[t] || 0 }}</span>
         </button>
+        <button :class="{ on: status === 'rules' }" @click="status = 'rules'; loadRules()">Règles <span class="n">{{ activeRules }}</span></button>
       </div>
-      <div class="container-body flush">
+
+      <!-- Réglages des règles -->
+      <div v-if="status === 'rules'" class="container-body">
+        <div v-if="!cfg" class="skeleton" style="height:120px"></div>
+        <template v-else>
+          <div class="fr-global">
+            <label>Durée du blocage temporaire
+              <span class="fr-in"><input type="number" min="5" v-model.number="cfg.block_minutes" /> min</span>
+            </label>
+            <small class="muted">Appliquée aux règles en mode « Bloquer » : l'opération est refusée et le compte suspendu pendant cette durée.</small>
+          </div>
+          <div class="fr-rules">
+            <div v-for="(r, key) in cfg.rules" :key="key" class="fr-rule" :class="{ off: !r.enabled }">
+              <div class="fr-head">
+                <label class="switch"><input type="checkbox" v-model="r.enabled" /><span></span></label>
+                <div class="fr-title"><strong>{{ RULE[key] || key }}</strong><small class="muted">{{ HELP[key] }}</small></div>
+                <select v-model="r.action" :disabled="!r.enabled">
+                  <option value="alert">Alerter</option>
+                  <option value="block">Bloquer</option>
+                </select>
+              </div>
+              <div class="fr-fields">
+                <label v-for="f in fieldsOf(r)" :key="f">{{ FIELD[f] || f }}
+                  <span class="fr-in"><input type="number" min="1" v-model.number="r[f]" :disabled="!r.enabled" /> {{ UNIT[f] || '' }}</span>
+                </label>
+                <label>Score
+                  <span class="fr-in"><input type="number" min="0" max="100" v-model.number="r.score" :disabled="!r.enabled" /> /100</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="fr-save">
+            <button class="btn-normal" @click="resetRules">Valeurs par défaut</button>
+            <button class="btn" :disabled="saving" @click="saveRules">{{ saving ? 'Enregistrement…' : 'Enregistrer les règles' }}</button>
+          </div>
+        </template>
+      </div>
+
+      <div v-else class="container-body flush">
         <table>
           <thead><tr><th>Règle</th><th>Utilisateur</th><th>Score</th><th>Détails</th><th>Opération</th><th>Bloqué jusqu'au</th><th>Date</th><th></th></tr></thead>
           <tbody>
@@ -59,7 +98,7 @@
           </tbody>
         </table>
       </div>
-      <Pager :meta="d" @go="load" />
+      <Pager v-if="status !== 'rules'" :meta="d" @go="load" />
     </section>
   </div>
 </template>
@@ -70,13 +109,55 @@ import DataChips from '../components/DataChips.vue'
 import Pager from '../components/Pager.vue'
 import { fetchAllPages, fmtDate, fmtPhone } from '../utils/export'
 import IconAction from '../components/IconAction.vue'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import api from '../services/api'
 import { date, money, errMsg } from '../utils/format'
-import { promptBox, toast } from '../utils/ui'
+import { confirmBox, promptBox, toast } from '../utils/ui'
 
 const LBL = { open: 'Ouvertes', cleared: 'Levées', confirmed: 'Confirmées' }
-const RULE = { velocity: 'Vélocité anormale', aml_threshold: 'Seuil LCB-FT dépassé' }
+const RULE = {
+  velocity: 'Vélocité anormale', aml_threshold: 'Seuil LCB-FT dépassé', structuring: 'Fractionnement sous le seuil LCB-FT',
+  new_beneficiaries: 'Trop de nouveaux bénéficiaires', new_device_large: 'Nouvel appareil + gros montant',
+  pin_failures: 'Échecs de PIN puis opération', new_account_large: 'Compte récent + gros montant', card_mismatch: 'Carte non liée utilisée',
+}
+const HELP = {
+  velocity: 'Un client lance trop d\'opérations en peu de temps.',
+  aml_threshold: 'Opération unique au-dessus du seuil de déclaration (LCB-FT).',
+  structuring: 'Plusieurs opérations « juste sous le seuil » dont le cumul le dépasse.',
+  new_beneficiaries: 'Envois vers beaucoup de numéros différents en peu de temps.',
+  new_device_large: 'Gros montant juste après la connexion d\'un nouvel appareil.',
+  pin_failures: 'Opération après plusieurs codes PIN erronés.',
+  new_account_large: 'Gros montant envoyé par un compte créé récemment.',
+  card_mismatch: 'Recharge payée avec une autre carte que la carte liée au profil.',
+}
+const FIELD = {
+  window_minutes: 'Fenêtre', max_operations: 'Opérations max', amount: 'Montant à partir de', hours: 'Période',
+  min_operations: 'Opérations min', near_percent: '« Proche du seuil » dès', max_beneficiaries: 'Bénéficiaires max',
+  device_minutes: 'Appareil connecté depuis moins de', failures: 'PIN erronés', account_days: 'Compte créé depuis moins de',
+}
+const UNIT = { window_minutes: 'min', amount: 'XAF', hours: 'h', near_percent: '% du seuil', device_minutes: 'min', account_days: 'jours' }
+const fieldsOf = (r) => Object.keys(r).filter((k) => !['enabled', 'action', 'score'].includes(k))
+const cfg = ref(null)
+const defaults = ref(null)
+const saving = ref(false)
+const activeRules = computed(() => cfg.value ? Object.values(cfg.value.rules).filter((r) => r.enabled).length : 8)
+async function loadRules() {
+  try {
+    const r = (await api.get('/admin/fraud-settings')).data
+    cfg.value = JSON.parse(JSON.stringify(r.config)); defaults.value = r.defaults
+  } catch (e) { toast(errMsg(e), 'err') }
+}
+async function saveRules() {
+  saving.value = true
+  try {
+    cfg.value = JSON.parse(JSON.stringify((await api.put('/admin/fraud-settings', cfg.value)).data.config))
+    toast('Règles anti-fraude enregistrées.')
+  } catch (e) { toast(errMsg(e), 'err') } finally { saving.value = false }
+}
+async function resetRules() {
+  if (!defaults.value || !(await confirmBox('Remettre toutes les règles à leurs valeurs par défaut ? (à enregistrer ensuite)'))) return
+  cfg.value = JSON.parse(JSON.stringify(defaults.value))
+}
 const d = ref(null)
 const status = ref('open')
 const initials = (s) => String(s || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('')
@@ -98,7 +179,7 @@ async function review(a, decision, unblock) {
     load(d.value?.current_page || 1)
   } catch (e) { toast(errMsg(e), 'err') }
 }
-onMounted(() => load())
+onMounted(() => { load(); loadRules() })
 
 // --- Export de la liste (tous les résultats filtrés)
 const EXP_COLS = [
@@ -122,4 +203,18 @@ const expFetch = (onP) => fetchAllPages('/admin/fraud-alerts', { status: status.
 .fr-score.hi b { color: var(--err); } .fr-score.hi .meter > span { background: var(--err); }
 .fr-score.mid b { color: var(--warn); } .fr-score.mid .meter > span { background: #f59e0b; }
 .muted { color: var(--text-3); font-size: 12px; }
+.fr-global { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+.fr-global label { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.fr-rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+.fr-rule { border: 1px solid var(--border, #e5e7eb); border-radius: 12px; padding: 14px; background: #fff; }
+.fr-rule.off { opacity: .6; }
+.fr-head { display: flex; align-items: flex-start; gap: 12px; }
+.fr-title { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.fr-head select { width: auto; }
+.fr-fields { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 12px; padding-left: 48px; }
+.fr-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2, #475569); }
+.fr-in { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }
+.fr-in input { width: 110px; }
+.fr-save { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+@media (max-width: 640px) { .fr-rules { grid-template-columns: 1fr; } .fr-fields { padding-left: 0; } }
 </style>

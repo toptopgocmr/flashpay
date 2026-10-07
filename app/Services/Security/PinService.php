@@ -50,6 +50,7 @@ class PinService
             throw new BusinessException('Code PIN requis pour confirmer l\'opération.', 'pin_required', 428);
         }
         if (! Hash::check($pin, $user->pin_hash)) {
+            \App\Services\Compliance\FraudService::recordPinFailure($user->id);
             $attempts = $user->pin_attempts + 1;
             $max = config('security.pin_max_attempts', 5);
             $locked = $attempts >= $max;

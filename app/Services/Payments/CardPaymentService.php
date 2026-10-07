@@ -122,8 +122,10 @@ class CardPaymentService
         if ($ok && $expected !== '' && $used !== null && $used !== $expected) {
             $tx->update(['meta' => array_merge($tx->meta ?? [], ['card_mismatch' => true, 'card_used_last4' => $used])]);
             try {
-                app(\App\Services\Notifications\NotificationService::class)->toAdmins('fraud',
-                    "Recharge {$tx->reference} : carte •••• {$used} utilisée au lieu de la carte liée •••• {$expected}", null, ['severity' => 'warning']);
+                $owner = \App\Models\User::find($tx->initiated_by);
+                if ($owner) {
+                    app(\App\Services\Compliance\FraudService::class)->cardMismatch($owner, $tx, $used, $expected);
+                }
             } catch (\Throwable) {
             }
         }

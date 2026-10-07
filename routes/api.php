@@ -426,6 +426,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/agents/{agent}/hierarchy', [AdminOpsController::class, 'setSuperAgent'])->whereNumber('agent');
         Route::post('/users/{user}/wallet/adjust', [AdminOpsController::class, 'adjustWallet']);
         Route::get('/fraud-alerts', [AdminOpsController::class, 'fraudAlerts']);
+        Route::get('/fraud-settings', [AdminOpsController::class, 'fraudSettings']);
+        Route::put('/fraud-settings', [AdminOpsController::class, 'updateFraudSettings']);
         Route::post('/fraud-alerts/{alert}', [AdminOpsController::class, 'reviewFraudAlert']);
         Route::post('/users/{user}/unblock', [AdminOpsController::class, 'unblockUser']);
         Route::get('/audit-logs', [AdminOpsController::class, 'auditLogs']);

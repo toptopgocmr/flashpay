@@ -30,12 +30,17 @@ class ComplianceGuard
             $wallet = Wallet::with('user')->find($p['source_wallet_id']);
             if ($wallet && $wallet->user) {
                 if (! in_array($type, LimitService::EXEMPT_TYPES, true)) {
-                    $this->fraud->evaluate($wallet->user, (int) $p['amount'], (string) $type, $p['currency'] ?? null);
+                    $this->fraud->evaluate($wallet->user, (int) $p['amount'], (string) $type, $p['currency'] ?? null, ['destination' => $p['destination_account'] ?? null]);
                 }
                 $this->limits->assertOutgoing($wallet->user, $wallet, (int) $p['amount'] + (int) ($p['fee'] ?? 0), $p['scope'] ?? null, $type);
             }
         } elseif (! empty($p['initiated_by']) && ($u = User::find($p['initiated_by']))) {
-            $this->fraud->assertNotBlocked($u);
+            // Payé par mobile money / carte : mêmes règles anti-fraude pour les opérations sortantes
+            if (in_array($type, FraudService::OUTGOING_TYPES, true)) {
+                $this->fraud->evaluate($u, (int) $p['amount'], (string) $type, $p['currency'] ?? null, ['destination' => $p['destination_account'] ?? null]);
+            } else {
+                $this->fraud->assertNotBlocked($u);
+            }
         }
 
         if (($p['destination_rail'] ?? null) === 'wallet' && ! empty($p['destination_wallet_id'])) {
