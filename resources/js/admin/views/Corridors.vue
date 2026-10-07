@@ -100,7 +100,7 @@
                   <span v-if="c.source === 'wacepay'" class="wace-tag" title="Pays ajouté par la synchronisation WacePay">via WacePay</span>
                   <span v-if="c.overridden" class="changed" :title="'Défaut : collecte ' + (c.default_collect ? 'ouverte' : 'fermée') + ', versement ' + (c.default_payout ? 'ouvert' : 'fermé')">modifié</span></td>
                 <td class="mono" style="white-space:nowrap;">{{ c.dial }} · {{ c.local_length }} ch.</td>
-                <td><span v-for="o in c.operators" :key="o.corridor" class="op" :title="'Préfixes : ' + o.prefixes.join(', ')">{{ o.label }}</span></td>
+                <td><span v-for="o in c.operators" :key="o.corridor" class="op" :title="(o.prefixes.length ? 'Préfixes : ' + o.prefixes.join(', ') : 'Préfixes non renseignés') + (o.wacepay ? ' · WacePay : ' + [o.wacepay.payin && 'collecte', o.wacepay.payout && 'versement'].filter(Boolean).join(' + ') : '')">{{ o.label }}</span><span v-for="l in (c.operators_off || [])" :key="'off-' + l" class="op op-off" title="Non proposé par WacePay dans ce pays : numéros refusés">{{ l }}</span></td>
                 <td class="c"><label class="switch"><input type="checkbox" :checked="c.collect" @change="update(c, { collect: $event.target.checked })" /><span></span></label></td>
                 <td class="c"><label class="switch"><input type="checkbox" :checked="c.payout" @change="update(c, { payout: $event.target.checked })" /><span></span></label></td>
                 <td class="partner-cell">
@@ -513,4 +513,5 @@ tr.add td { background: var(--surface-2); }
 .wbal-err .why { margin: 4px 0 6px; color: #991b1b; }
 .wbal-err ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 .wbal-err code { background: #fff; padding: 0 4px; border-radius: 4px; word-break: break-all; }
+.op-off { text-decoration: line-through; opacity: .55; }
 </style>

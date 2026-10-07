@@ -56,7 +56,76 @@ class PeexCorridors
                 }
             }
         }
+        foreach ($all as $iso => &$c) {
+            $c = $this->applyWacepayOperators((string) $iso, $c);
+        }
+        unset($c);
         return $all;
+    }
+
+    /**
+     * Pays confié à WacePay : les opérateurs sont ceux de la couverture WacePay
+     * synchronisée (ex. Sénégal : Orange + Moov), pas la liste PEEX de config/corridors.php.
+     * Passerelle WacePay pour les deux flux → les opérateurs absents chez WacePay sont retirés
+     * (operators_off) ; flux partagé PEEX / WacePay → liste conservée, opérateurs annotés.
+     * Couverture non synchronisée → liste de config inchangée.
+     */
+    protected function applyWacepayOperators(string $iso, array $c): array
+    {
+        $collectWace = ($c['collect_partner'] ?? 'peex') === 'digitwace';
+        $payoutWace = ($c['payout_partner'] ?? 'peex') === 'digitwace';
+        if (! $collectWace && ! $payoutWace) {
+            return $c;
+        }
+        $wace = self::wacepayOperators()[$iso] ?? [];
+        if (! $wace) {
+            return $c;
+        }
+        $both = $collectWace && $payoutWace;
+        $ops = [];
+        $off = [];
+        foreach ((array) ($c['operators'] ?? []) as $key => $op) {
+            $code = \App\Services\Digitwace\DigitwaceClient::operatorCode($op['label'] ?? '');
+            if ($code && isset($wace[$code])) {
+                $ops[$key] = $op + ['wacepay' => $wace[$code]];
+                unset($wace[$code]);
+            } elseif ($both) {
+                $off[$key] = $op;
+            } else {
+                $ops[$key] = $op;
+            }
+        }
+        // Opérateurs WacePay absents de la config (préfixes inconnus : opérateur choisi par le client)
+        foreach ($wace as $code => $w) {
+            $ops[strtolower($code) . '-' . strtolower($iso)] = ['label' => $w['label'], 'rail' => 'digitwace', 'prefixes' => [], 'wacepay' => $w];
+        }
+        $c['operators'] = $ops;
+        $c['operators_off'] = $off;
+        return $c;
+    }
+
+    /** Couverture WacePay par pays et opérateur : [ISO => [ORANGE => {label, payin, payout}]]. */
+    public static function wacepayOperators(): array
+    {
+        try {
+            return Cache::remember('flashpay:wacepay_operators', 300, function () {
+                $out = [];
+                foreach (\App\Models\WacepayCoverage::where(fn ($q) => $q->where('payin', true)->orWhere('payout', true))->get() as $r) {
+                    $code = \App\Services\Digitwace\DigitwaceClient::serviceOperator($r);
+                    if (! $code || ! $r->country) {
+                        continue;
+                    }
+                    $iso = strtoupper($r->country);
+                    $prev = $out[$iso][$code] ?? ['label' => trim((string) $r->payer_name) ?: ucfirst(strtolower($code)), 'payin' => false, 'payout' => false];
+                    $prev['payin'] = $prev['payin'] || (bool) $r->payin;
+                    $prev['payout'] = $prev['payout'] || (bool) $r->payout;
+                    $out[$iso][$code] = $prev;
+                }
+                return $out;
+            });
+        } catch (\Throwable) {
+            return []; // table absente
+        }
     }
 
     /** Pays ajoutés par la synchro WacePay / la console (table corridor_countries). */
@@ -97,6 +166,7 @@ class PeexCorridors
     {
         Cache::forget('flashpay:corridor_settings');
         Cache::forget('flashpay:corridor_countries');
+        Cache::forget('flashpay:wacepay_operators');
     }
 
     public function country(string $iso): array
@@ -177,6 +247,15 @@ class PeexCorridors
 
         [$corridor, $operator, $rail] = $this->operatorFor($c, $local);
 
+        // Pays confié à WacePay : un numéro d'un opérateur non couvert par WacePay est refusé tout de suite
+        if (! $corridor && ! empty($c['operators_off'])) {
+            [$offKey, $offLabel] = $this->operatorFor(['operators' => $c['operators_off']], $local);
+            if ($offKey) {
+                $avail = implode(', ', array_column($c['operators'], 'label'));
+                throw new PeexException("{$offLabel} n'est pas disponible pour {$c['name']} (passerelle WacePay)." . ($avail ? " Opérateurs acceptés : {$avail}." : ''));
+            }
+        }
+
         $result = [
             'country' => $iso,
             'country_name' => $c['name'],
@@ -253,7 +332,10 @@ class PeexCorridors
                 'payout_partner' => $c['payout_partner'] ?? 'peex',
                 'operators' => collect($c['operators'])->map(fn ($op, $key) => [
                     'corridor' => $key, 'label' => $op['label'], 'rail' => $op['rail'], 'prefixes' => $op['prefixes'],
+                    'wacepay' => $op['wacepay'] ?? null,
                 ])->values()->all(),
+                // Opérateurs de la config non couverts par WacePay (pays entièrement confié à WacePay)
+                'operators_off' => collect($c['operators_off'] ?? [])->map(fn ($op) => $op['label'])->values()->all(),
             ];
         }
         return $out;
