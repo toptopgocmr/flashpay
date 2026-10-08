@@ -81,6 +81,13 @@ class DigitwaceConnector implements PaymentRailConnector
                 $r = $this->client->payoutDirect($reference, $payer, $amountMinor, $route['phone'],
                     $meta['beneficiary_verified_name'] ?? $meta['beneficiary_name'] ?? null);
                 $req->update(['wace_id' => $r['wace_id'], 'status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'last_response' => $r['raw'], 'last_checked_at' => now()]);
+                // Requête + réponse de payout/execute gardées sur la transaction (les vérifications de statut écrasent last_response)
+                if ($tx) {
+                    $tx->forceFill(['meta' => array_merge($tx->meta ?? [], ['wacepay_payout' => [
+                        'at' => now()->toIso8601String(), 'endpoint' => 'POST payout/execute', 'service_id' => $payer,
+                        'sent' => $r['sent'] ?? null, 'response' => $r['raw'], 'wace_id' => $r['wace_id'],
+                    ]])])->save();
+                }
 
                 return ['status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'external_ref' => $r['wace_id'] ?: $reference, 'raw' => $r['raw']];
             }

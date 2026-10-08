@@ -446,22 +446,55 @@ class DigitwaceClient
     public function payoutDirect(string $reference, string $subscriptionId, int $amount, string $phone, ?string $name = null): array
     {
         return Cache::lock('digitwace:queue', 60)->block((int) $this->cfg('queue_wait_seconds', 45), function () use ($reference, $subscriptionId, $amount, $phone, $name) {
-            $json = $this->call('post', 'payout', array_filter([
+            $body = array_filter([
                 'amount' => $amount,
                 'recipientMsisdn' => '+' . preg_replace('/\D/', '', $phone),
                 'recipientName' => $name ? mb_substr($name, 0, 100) : null,
                 'payoutSubscriptionId' => $subscriptionId,
                 'callbackUrl' => $this->callbackUrl(),
-            ], fn ($v) => $v !== null && $v !== ''));
-
-            $id = data_get($json, 'data.id') ?? data_get($json, 'data.transactionId') ?? data_get($json, 'data._id') ?? data_get($json, 'id') ?? data_get($json, 'transactionId');
+            ], fn ($v) => $v !== null && $v !== '');
+            $json = $this->call('post', 'payout', $body);
 
             return [
-                'status' => self::normalize(data_get($json, 'data.status') ?? 'pending'),
-                'wace_id' => $id !== null ? (string) $id : null,
+                'status' => self::normalize(data_get($json, 'data.status') ?? data_get($json, 'data.transaction.status') ?? 'pending'),
+                'wace_id' => self::payoutIdOf($json),
                 'raw' => $json,
+                'sent' => self::redact($body),
             ];
         });
+    }
+
+    /**
+     * Identifiant WacePay d'un versement dans la réponse de payout/execute : clés connues,
+     * puis toute clé « id / transactionId / payoutId / trans_code / transactionCode » trouvée
+     * dans data (objets imbriqués compris). Sans identifiant, le suivi est impossible
+     * (refresh-status/{id} répond « Payout transaction not found »).
+     */
+    public static function payoutIdOf(mixed $json): ?string
+    {
+        foreach (['data.id', 'data._id', 'data.transactionId', 'data.payoutId', 'data.trans_code', 'data.transCode', 'data.transactionCode',
+            'data.transaction.id', 'data.transaction._id', 'data.transaction.transactionId', 'data.payout.id', 'data.payout._id',
+            'id', '_id', 'transactionId', 'payoutId', 'trans_code', 'transactionCode'] as $k) {
+            $v = data_get($json, $k);
+            if (is_scalar($v) && (string) $v !== '' && ! is_bool($v)) {
+                return (string) $v;
+            }
+        }
+        $found = null;
+        $walk = function ($v) use (&$walk, &$found) {
+            if (! is_array($v) || $found !== null) {
+                return;
+            }
+            foreach ($v as $k => $x) {
+                if (is_scalar($x) && ! is_bool($x) && (string) $x !== '' && preg_match('/^(_?id|transaction_?id|payout_?id|trans_?code|transaction_?code)$/i', (string) $k)) {
+                    $found = (string) $x;
+                    return;
+                }
+                $walk($x);
+            }
+        };
+        $walk(data_get($json, 'data') ?? $json);
+        return $found;
     }
 
     /**
@@ -771,6 +804,9 @@ class DigitwaceClient
 
     // ------------------------------------------------------------ HTTP
 
+    /** Appels dont la requête et la réponse sont toujours journalisées. */
+    protected const TRACED = ['payin', 'payin_status', 'payout', 'payout_refresh', 'payout_tx'];
+
     /** Appel authentifié ; un 401 renouvelle le jeton une fois. */
     public function call(string $method, string $endpoint, array $data = [], array $params = [], array $headers = []): array
     {
@@ -793,8 +829,11 @@ class DigitwaceClient
         Log::log($failed ? 'warning' : 'info', 'WacePay ' . strtoupper($method) . ' ' . $endpoint, array_filter([
             'http' => $res->status(), 'code' => $code, 'ref' => $data['referenceId'] ?? $headers['referenceId'] ?? $headers['X-Reference-Id'] ?? $data[$this->cfg('fields.transaction.reference')] ?? null,
             // En cas d'échec : réponse complète de WacePay + champs envoyés (sans valeurs sensibles)
-            'body' => $failed ? mb_substr((string) $res->body(), 0, 1500) : null,
-            'sent' => $failed && $method !== 'get' ? self::redact($data) : null,
+            // Versements et collectes : réponse et champs envoyés toujours journalisés (rapports WacePay)
+            'path' => $failed || in_array($endpoint, self::TRACED, true) ? $path : null,
+            'body' => $failed || in_array($endpoint, self::TRACED, true) ? mb_substr((string) $res->body(), 0, 2500) : null,
+            'sent' => ($failed || in_array($endpoint, self::TRACED, true)) && $method !== 'get' ? self::redact($data) : null,
+            'headers' => isset($headers['wp-subscription-key']) ? ['wp-subscription-key' => $headers['wp-subscription-key']] : null,
         ], fn ($v) => $v !== null));
 
         if ($failed) {
