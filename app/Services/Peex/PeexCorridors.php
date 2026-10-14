@@ -28,6 +28,9 @@ class PeexCorridors
     public const PARTNERS = [
         'peex' => ['name' => 'PEEX', 'flows' => ['collect', 'payout']],
         'digitwace' => ['name' => 'WacePay (Digitwace)', 'flows' => ['payout']],
+        'notchpay' => ['name' => 'Notch Pay', 'flows' => ['collect', 'payout']],
+        'wacepay_remit' => ['name' => 'WacePay (international)', 'flows' => ['payout']],
+        'terrapay' => ['name' => 'TerraPay', 'flows' => ['payout']],
     ];
 
     public static function partnerName(?string $key): ?string

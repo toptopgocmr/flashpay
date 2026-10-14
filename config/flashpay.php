@@ -37,6 +37,22 @@ return [
             'driver' => \App\Services\Digitwace\DigitwaceConnector::class,
             'enabled' => (bool) env('DIGITWACE_ENABLED', false),
         ],
+        // Notch Pay : collecte (direct charge mobile money) et versements (transfers)
+        // pour les pays où la console confie les flux à Notch Pay.
+        'notchpay' => [
+            'driver' => \App\Services\NotchPay\NotchPayConnector::class,
+            'enabled' => (bool) env('NOTCHPAY_ENABLED', false),
+        ],
+        // Transferts internationaux (remittance) : WacePay API v2 (wallet, banque, retrait cash)
+        // et TerraPay (wallet, banque). Versement uniquement : la source est le wallet FlashPay.
+        'wacepay_remit' => [
+            'driver' => \App\Services\Remit\WacepayRemitConnector::class,
+            'enabled' => (bool) env('WACEPAY_REMIT_ENABLED', false),
+        ],
+        'terrapay' => [
+            'driver' => \App\Services\Remit\TerrapayConnector::class,
+            'enabled' => (bool) env('TERRAPAY_ENABLED', false),
+        ],
     ],
 
     /*
@@ -50,6 +66,105 @@ return [
     | les « Static Outbound IPs »), sinon WacePay répond 4001.
     | Chemins et noms de champs : à aligner sur « Read the docs » du tableau de bord.
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Transferts internationaux (remittance) — WacePay API v2 et TerraPay
+    |--------------------------------------------------------------------------
+    | Types : P2P (particulier → particulier), P2B (particulier → entreprise),
+    | B2P (entreprise → particulier), B2B (entreprise → entreprise).
+    | Moyens de réception : wallet mobile, compte bancaire, retrait cash (WacePay).
+    | La source est toujours le wallet FlashPay du client (débité montant + frais).
+    */
+    'remit' => [
+        // Partenaire par pays de destination : « FR=terrapay,CI=wacepay_remit,*=wacepay_remit »
+        'partners' => collect(explode(',', (string) env('REMIT_PARTNERS', '*=wacepay_remit')))->filter(fn ($p) => str_contains($p, '='))
+            ->mapWithKeys(fn ($p) => [strtoupper(trim(explode('=', $p, 2)[0])) => strtolower(trim(explode('=', $p, 2)[1]))])->all(),
+        // Pays de destination proposés dans l'app (vide = catalogue complet de RemitCountries)
+        'countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('REMIT_COUNTRIES', ''))))),
+        // Niveau KYC minimum pour envoyer à l'international
+        'min_kyc_tier' => (int) env('REMIT_MIN_KYC_TIER', 1),
+        'min_amount' => (int) env('REMIT_MIN_AMOUNT', 1000),
+        'max_amount' => (int) env('REMIT_MAX_AMOUNT', 5000000),
+        // Pays / devise d'envoi (FlashPay)
+        'from_country' => strtoupper((string) env('REMIT_FROM_COUNTRY', 'CG')),
+        'from_currency' => strtoupper((string) env('REMIT_FROM_CURRENCY', 'XAF')),
+    ],
+
+    'wacepay_remit' => [
+        'enabled' => (bool) env('WACEPAY_REMIT_ENABLED', false),
+        // Sandbox : https://sandbox.wacepay.com/api/v1 — production : à fournir par WacePay
+        'base_url' => env('WACEPAY_REMIT_BASE_URL', 'https://sandbox.wacepay.com/api/v1'),
+        // Couple e-mail / mot de passe fourni par WacePay (variables Railway uniquement, jamais dans Git)
+        'email' => env('WACEPAY_REMIT_EMAIL', ''),
+        'password' => env('WACEPAY_REMIT_PASSWORD', ''),
+        'timeout' => (int) env('WACEPAY_REMIT_TIMEOUT', 40),
+        'token_ttl_minutes' => (int) env('WACEPAY_REMIT_TOKEN_TTL', 55), // jeton valable 3600 s
+        // Confirmer automatiquement les transactions « WAITING CONFIRMATION » (POST /transaction/confirm)
+        'auto_confirm' => (bool) env('WACEPAY_REMIT_AUTO_CONFIRM', true),
+        'check_balance' => (bool) env('WACEPAY_REMIT_CHECK_BALANCE', true),
+        'default_civility' => env('WACEPAY_REMIT_DEFAULT_CIVILITY', 'Single'),
+        'default_address' => env('WACEPAY_REMIT_DEFAULT_ADDRESS', 'Brazzaville'),
+    ],
+
+    'terrapay' => [
+        'enabled' => (bool) env('TERRAPAY_ENABLED', false),
+        // UAT : https://uat-connect.terrapay.com:21211 — production : URL fournie par TerraPay
+        'base_url' => env('TERRAPAY_BASE_URL', 'https://uat-connect.terrapay.com:21211'),
+        'username' => env('TERRAPAY_USERNAME', ''),
+        // Mot de passe en clair (haché SHA-256 à l'envoi) ou déjà haché si TERRAPAY_PASSWORD_HASHED=true
+        'password' => env('TERRAPAY_PASSWORD', ''),
+        'password_hashed' => (bool) env('TERRAPAY_PASSWORD_HASHED', false),
+        'origin_country' => strtoupper((string) env('TERRAPAY_ORIGIN_COUNTRY', env('REMIT_FROM_COUNTRY', 'CG'))),
+        // Devise de règlement avec TerraPay (devis « sendingCurrency ») ; vide = devise du wallet (XAF)
+        'sending_currency' => env('TERRAPAY_SENDING_CURRENCY'),
+        'timeout' => (int) env('TERRAPAY_TIMEOUT', 40),
+        // Vérifier le compte du bénéficiaire (wallet / banque) avant de débiter le client
+        'verify_account' => (bool) env('TERRAPAY_VERIFY_ACCOUNT', true),
+        // Chemin du statut d'une transaction (standard GSMA) — à ajuster si TerraPay indique un autre chemin
+        'status_path' => env('TERRAPAY_STATUS_PATH', 'eig/gsma/transactions/{ref}'),
+        // Valeur « type » de la transaction (inttransfer par défaut ; p2p, b2p… si TerraPay les active)
+        'types' => [
+            'p2p' => env('TERRAPAY_TYPE_P2P', 'inttransfer'),
+            'p2b' => env('TERRAPAY_TYPE_P2B', 'inttransfer'),
+            'b2p' => env('TERRAPAY_TYPE_B2P', 'inttransfer'),
+            'b2b' => env('TERRAPAY_TYPE_B2B', 'inttransfer'),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Notch Pay (https://developer.notchpay.co)
+    |--------------------------------------------------------------------------
+    | Clés : Business Suite Notch Pay › Settings › API Keys (mode Sandbox ou Production).
+    |  - NOTCHPAY_PUBLIC_KEY  (pk_test_… / pk_…)  : en-tête Authorization
+    |  - NOTCHPAY_PRIVATE_KEY (sk_test_… / sk_…)  : en-tête X-Grant (transferts, solde)
+    |  - NOTCHPAY_HASH_KEY    (hsk_test_… / hsk_…): vérification HMAC-SHA256 des webhooks
+    | Transferts : l'IP SORTANTE du serveur doit être autorisée dans le tableau de bord
+    | (Railway : « Static Outbound IPs »).
+    | Webhook à déclarer (Settings › Webhooks) : {APP_URL}/api/webhooks/notchpay
+    */
+    'notchpay' => [
+        'enabled' => (bool) env('NOTCHPAY_ENABLED', false),
+        'base_url' => env('NOTCHPAY_BASE_URL', 'https://api.notchpay.co'),
+        'public_key' => env('NOTCHPAY_PUBLIC_KEY', ''),
+        'private_key' => env('NOTCHPAY_PRIVATE_KEY', ''),
+        'hash_key' => env('NOTCHPAY_HASH_KEY', ''),
+        'timeout' => (int) env('NOTCHPAY_TIMEOUT', 30),
+        // E-mail envoyé à Notch Pay quand le client n'en a pas (champ requis : e-mail OU téléphone)
+        'default_email' => env('NOTCHPAY_DEFAULT_EMAIL', 'clients@flashpay.cg'),
+        // Pays proposés pour Notch Pay dans la console (ISO2). Complété par la synchro des canaux (GET /channels).
+        'countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('NOTCHPAY_COUNTRIES', 'CM,CI,SN,GH,KE,UG'))))),
+        // Canaux forcés : « CM:MTN=cm.mtn,CM:ORANGE=cm.orange,SN:WAVE=sn.wave » (sinon {pays}.{opérateur})
+        'channel_map' => collect(explode(',', (string) env('NOTCHPAY_CHANNELS', '')))->filter(fn ($p) => str_contains($p, '='))
+            ->mapWithKeys(fn ($p) => [strtoupper(trim(explode('=', $p, 2)[0])) => strtolower(trim(explode('=', $p, 2)[1]))])->all(),
+        // Vérifier le solde Notch Pay avant chaque versement (bloque si connu et insuffisant)
+        'check_balance' => (bool) env('NOTCHPAY_CHECK_BALANCE', true),
+        'low_balance_alert' => (int) env('NOTCHPAY_LOW_BALANCE_ALERT', 100000),
+        // Webhook entrant
+        'callback_url' => env('NOTCHPAY_CALLBACK_URL'),
+        'webhook_ips' => env('NOTCHPAY_WEBHOOK_IPS', ''),
+    ],
+
     'digitwace' => [
         'enabled' => (bool) env('DIGITWACE_ENABLED', false),
         // Doc : https://docs.digitwace.com — API PayIn : https://payinws.wacepay.com/api/v1

@@ -27,6 +27,7 @@ class FraudService
     public const OUTGOING_TYPES = [
         'p2p', 'transfer', 'withdrawal', 'qr_payment', 'nfc_payment', 'collection', 'merchant_payment',
         'cash_pickup', 'cash_out', 'bank_transfer', 'gift', 'split_payment', 'bill_payment',
+        'international_transfer',
     ];
 
     public const RULES = [

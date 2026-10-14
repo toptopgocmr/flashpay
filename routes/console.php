@@ -16,6 +16,11 @@ Schedule::command('digitwace:sync')->everyMinute()->withoutOverlapping()->append
 // Couverture WacePay (pays / opérateurs / collecte / versement), chaque nuit.
 Schedule::command('digitwace:sync coverage')->dailyAt('03:10')->withoutOverlapping()->appendOutputTo($scheduleOut);
 
+// Statuts Notch Pay en attente (complément du webhook) et canaux disponibles.
+Schedule::command('notchpay:sync')->everyMinute()->withoutOverlapping()->appendOutputTo($scheduleOut);
+Schedule::command('remit:sync')->everyMinute()->withoutOverlapping()->appendOutputTo($scheduleOut);
+Schedule::command('notchpay:sync channels')->dailyAt('03:20')->withoutOverlapping()->appendOutputTo($scheduleOut);
+
 // Remboursement des bons de retrait expirés (cash pickup / GAB).
 Schedule::command('vouchers:expire')->everyTenMinutes()->withoutOverlapping()->appendOutputTo($scheduleOut);
 

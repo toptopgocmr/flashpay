@@ -82,7 +82,9 @@ class PricingAdminController extends Controller
             }, []);
 
         $coverage = app(\App\Services\Digitwace\CoverageService::class)->byCountry();
-        $list = collect($this->corridors->catalog())->map(function ($c) use ($defaults, $overrides, $usage, $coverage) {
+        $notchCountries = app(\App\Services\NotchPay\NotchPayClient::class)->countries();
+        $notchChannels = app(\App\Services\NotchPay\NotchPayClient::class)->knownChannels();
+        $list = collect($this->corridors->catalog())->map(function ($c) use ($defaults, $overrides, $usage, $coverage, $notchCountries, $notchChannels) {
             $d = $defaults[$c['country']] ?? [];
             $o = $overrides[$c['country']] ?? null;
             return $c + [
@@ -93,6 +95,8 @@ class PricingAdminController extends Controller
                 // Services proposés par WacePay dans ce pays (synchro getPayerCode)
                 'wacepay' => $coverage[$c['country']] ?? null,
                 'payout_partner_name' => PeexCorridors::partnerName($c['payout_partner']),
+                // Notch Pay disponible dans ce pays (NOTCHPAY_COUNTRIES + canaux synchronisés)
+                'notchpay' => in_array($c['country'], $notchCountries, true) ? ['channels' => $notchChannels[$c['country']] ?? []] : null,
                 'overridden' => (bool) $o,
                 'note' => $o?->note,
                 'updated_at' => $o?->updated_at,
@@ -103,6 +107,7 @@ class PricingAdminController extends Controller
         $rates = ExchangeRate::orderBy('base')->orderBy('quote')->get();
 
         $wace = app(\App\Services\Digitwace\DigitwaceClient::class);
+        $notch = app(\App\Services\NotchPay\NotchPayClient::class);
         $partners = [
             [
                 'key' => 'peex', 'name' => 'PEEX', 'flows' => ['collect', 'payout'],
@@ -127,6 +132,20 @@ class PricingAdminController extends Controller
                 'coverage_payout' => collect($coverage)->where('payout', true)->count(),
                 'coverage_synced_at' => cache('wacepay:coverage:synced_at'),
                 'webhook' => $wace->callbackUrl(),
+            ],
+            [
+                'key' => 'notchpay', 'name' => 'Notch Pay', 'flows' => ['collect', 'payout'],
+                'ready' => $notch->enabled() && (bool) config('flashpay.rails.notchpay.enabled'),
+                'mode' => $notch->enabled() ? ($notch->sandbox() ? 'Sandbox' : 'Production') : 'clés API à saisir',
+                'sandbox' => $notch->sandbox(),
+                'private_key' => (bool) config('flashpay.notchpay.private_key'),
+                'hash_key' => (bool) config('flashpay.notchpay.hash_key'),
+                'collect_countries' => $list->where('collect', true)->where('collect_partner', 'notchpay')->count(),
+                'payout_countries' => $list->where('payout', true)->where('payout_partner', 'notchpay')->count(),
+                'coverage_countries' => count($notchCountries),
+                'coverage_list' => $notchCountries,
+                'coverage_synced_at' => cache('notchpay:channels:synced_at'),
+                'webhook' => $notch->callbackUrl(),
             ],
         ];
 
@@ -157,10 +176,10 @@ class PricingAdminController extends Controller
             'payout' => 'sometimes|boolean',
             'payout_api' => 'sometimes|nullable|in:disbursement,remittance',
             // Partenaire qui gère les flux : collecte = PEEX (seul partenaire de collecte), versement = PEEX ou WacePay
-            'collect_partner' => 'sometimes|nullable|in:peex,digitwace',
-            'payout_partner' => 'sometimes|nullable|in:peex,digitwace',
+            'collect_partner' => 'sometimes|nullable|in:peex,digitwace,notchpay',
+            'payout_partner' => 'sometimes|nullable|in:peex,digitwace,notchpay',
             // Passerelle unique : collecte ET versement confiés au même partenaire
-            'partner' => 'sometimes|in:peex,digitwace',
+            'partner' => 'sometimes|in:peex,digitwace,notchpay',
             'note' => 'sometimes|nullable|string|max:190',
         ]);
         if (isset($v['partner'])) {
@@ -185,11 +204,18 @@ class PricingAdminController extends Controller
             }
         }
 
+        // Notch Pay n'est proposé que dans ses pays (NOTCHPAY_COUNTRIES + canaux synchronisés)
+        if (in_array('notchpay', [$v['collect_partner'] ?? null, $v['payout_partner'] ?? null], true)
+            && ! in_array($iso, app(\App\Services\NotchPay\NotchPayClient::class)->countries(), true)) {
+            return response()->json(['message' => "Notch Pay ne couvre pas {$iso} (pays Notch Pay : " . implode(', ', app(\App\Services\NotchPay\NotchPayClient::class)->countries()) . ').'], 422);
+        }
+
         CorridorSetting::updateOrCreate(['country' => $iso], $v + ['updated_by' => $request->user()->id]);
         PeexCorridors::flushOverrides();
         \App\Support\Audit::log('corridor.update', null, ['country' => $iso] + $v, $request->user()->id);
 
         $waceOff = ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled();
+        $notchOff = ! app(\App\Services\NotchPay\NotchPayClient::class)->enabled();
         $message = match (true) {
             isset($v['payout_partner'], $v['collect_partner']) && $v['payout_partner'] === $v['collect_partner'] =>
                 'Tous les flux de ' . $iso . ' (collecte, versement, vérifications, soldes) passent désormais par ' . PeexCorridors::partnerName($v['payout_partner']) . '.'
@@ -200,8 +226,29 @@ class PricingAdminController extends Controller
                 . ($v['collect_partner'] === 'digitwace' && $waceOff ? ' Attention : WacePay n\'est pas encore configuré, les recharges / paiements depuis ce pays seront refusés.' : ''),
             default => 'Corridor mis à jour.',
         };
+        if ($notchOff && in_array('notchpay', [$v['collect_partner'] ?? null, $v['payout_partner'] ?? null], true)) {
+            $message .= ' Attention : Notch Pay n\'est pas encore configuré, les opérations confiées à Notch Pay seront refusées.';
+        }
 
         return response()->json(['message' => $message, 'corridor' => collect($this->corridors->catalog())->firstWhere('country', $iso)]);
+    }
+
+    /** Solde du compte FlashPay chez Notch Pay (?refresh=1 force l'appel). */
+    public function notchpayBalances(Request $request)
+    {
+        return response()->json(app(\App\Services\NotchPay\NotchPayBalanceService::class)->balances($request->boolean('refresh')));
+    }
+
+    /** Synchronise les canaux Notch Pay (GET /channels). */
+    public function syncNotchpay()
+    {
+        try {
+            $c = app(\App\Services\NotchPay\NotchPayClient::class)->syncChannels();
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Synchronisation Notch Pay impossible : ' . $e->getMessage()], 422);
+        }
+        \App\Support\Audit::log('notchpay.channels_sync', null, ['countries' => array_keys($c)], request()->user()?->id);
+        return response()->json(['message' => $c ? 'Canaux Notch Pay : ' . count($c) . ' pays (' . implode(', ', array_keys($c)) . ').' : 'Aucun canal renvoyé par Notch Pay.', 'channels' => $c]);
     }
 
     /** Soldes du compte FlashPay chez WacePay (?refresh=1 force l'appel). */

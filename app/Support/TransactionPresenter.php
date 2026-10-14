@@ -166,7 +166,7 @@ class TransactionPresenter
     /** « PEEX », « WacePay (Digitwace) », « PEEX → WacePay (Digitwace) » ; null si 100 % interne. */
     public static function partner(Transaction $tx): ?string
     {
-        $map = ['peex' => 'peex', 'digitwace' => 'digitwace'];
+        $map = ['peex' => 'peex', 'digitwace' => 'digitwace', 'notchpay' => 'notchpay', 'wacepay_remit' => 'wacepay_remit', 'terrapay' => 'terrapay'];
         $in = $map[$tx->source_rail] ?? null;
         $out = $map[$tx->destination_rail] ?? null;
         $names = array_values(array_unique(array_filter([
@@ -193,8 +193,20 @@ class TransactionPresenter
             $out = ['rail' => $rail, 'partner' => null, 'operator' => null, 'account' => $account];
             $hosted = $leg_in && in_array($rail, ['card', 'bank'], true) && ($tx->meta['card_driver'] ?? null) === 'wacepay';
             switch ($rail) {
+                case 'wacepay_remit':
+                case 'terrapay':
+                    $out['partner'] = \App\Services\Peex\PeexCorridors::partnerName($rail);
+                    $m = $tx->meta['remit'] ?? [];
+                    $out['country'] = $m['country'] ?? null;
+                    $out['operator'] = match ($m['method'] ?? 'wallet') {
+                        'bank' => 'Compte bancaire' . (! empty($m['account']['bank_name']) ? ' · ' . $m['account']['bank_name'] : ''),
+                        'cash' => 'Retrait cash' . (! empty($m['account']['city']) ? ' · ' . $m['account']['city'] : ''),
+                        default => 'Mobile money' . (! empty($m['service']['name']) ? ' · ' . $m['service']['name'] : ''),
+                    } . ' (' . ($m['country'] ?? '?') . ')';
+                    break;
                 case 'peex':
                 case 'digitwace':
+                case 'notchpay':
                     $out['partner'] = \App\Services\Peex\PeexCorridors::partnerName($rail);
                     if ($account) {
                         try {
@@ -286,7 +298,7 @@ class TransactionPresenter
             $tx->source_rail === 'card' => 'Carte bancaire',
             $tx->source_rail === 'wallet', $tx->source_rail === 'treasury' => 'Wallet',
             $tx->source_rail === 'cash' => 'Cash',
-            in_array($tx->source_rail, ['peex', 'digitwace', 'mobile'], true) => 'Mobile',
+            in_array($tx->source_rail, ['peex', 'digitwace', 'notchpay', 'mobile'], true) => 'Mobile',
             default => ucfirst((string) $tx->source_rail),
         };
         if ($tx->source_rail === 'treasury') {
@@ -297,7 +309,8 @@ class TransactionPresenter
             'cash', 'atm' => 'Cash',
             'bank' => 'Banque',
             'card' => 'Carte bancaire',
-            'peex', 'digitwace', 'mobile' => 'Mobile',
+            'peex', 'digitwace', 'notchpay', 'mobile' => 'Mobile',
+            'wacepay_remit', 'terrapay' => 'International',
             default => ucfirst((string) $tx->destination_rail),
         };
         if (in_array($tx->type, self::PAYMENT_TYPES, true) && ! empty($meta['merchant_id'])) {

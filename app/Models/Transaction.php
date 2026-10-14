@@ -81,7 +81,7 @@ class Transaction extends Model
     public const TYPE_LABELS = [
         'p2p' => "Envoi d'argent", 'transfer' => "Envoi d'argent", 'merchant_payment' => 'Paiement marchand',
         'cash_in' => 'Recharge', 'deposit' => 'Recharge', 'withdrawal' => 'Retrait', 'cash_out' => 'Retrait chez un agent',
-        'cash_pickup' => 'Retrait avec code', 'bank_transfer' => 'Virement bancaire', 'gift' => 'Cadeau envoyé',
+        'cash_pickup' => 'Retrait avec code', 'bank_transfer' => 'Virement bancaire', 'gift' => 'Cadeau envoyé', 'international_transfer' => 'Transfert international',
         'gift_claim' => 'Cadeau reçu', 'gift_refund' => 'Cadeau remboursé', 'refund' => 'Remboursement',
         'split_payment' => 'Contribution à une cagnotte', 'float_topup' => 'Approvisionnement agent', 'adjustment' => 'Ajustement',
     ];
@@ -138,6 +138,16 @@ class Transaction extends Model
     public function digitwaceRequests()
     {
         return $this->hasMany(DigitwaceRequest::class);
+    }
+
+    public function notchpayRequests()
+    {
+        return $this->hasMany(NotchPayRequest::class);
+    }
+
+    public function remitRequests()
+    {
+        return $this->hasMany(RemitRequest::class);
     }
 
     public function notes()

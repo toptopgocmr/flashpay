@@ -161,6 +161,9 @@ class QuoteService
         if ($src['type'] === 'mobile' && $collectBy === 'digitwace' && ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled()) {
             $problems[] = "Collecte depuis {$src['country_name']} confiée à WacePay, mais WacePay n'est pas configuré.";
         }
+        if ($src['type'] === 'mobile' && $collectBy === 'notchpay' && ! app(\App\Services\NotchPay\NotchPayClient::class)->enabled()) {
+            $problems[] = "Collecte depuis {$src['country_name']} confiée à Notch Pay, mais Notch Pay n'est pas configuré.";
+        }
 
         if ($dst['type'] === 'mobile' && $payoutBy === 'peex') {
             $v = $guard->verifyAccount($dst, 'destination');
@@ -187,6 +190,17 @@ class QuoteService
                 }
             }
         }
+        if ($dst['type'] === 'mobile' && $payoutBy === 'notchpay') {
+            if (! app(\App\Services\NotchPay\NotchPayClient::class)->enabled() || ! config('flashpay.notchpay.private_key')) {
+                $problems[] = "Versements vers {$dst['country_name']} confiés à Notch Pay, mais Notch Pay n'est pas configuré.";
+            } elseif (config('flashpay.notchpay.check_balance', true)) {
+                $avail = app(\App\Services\NotchPay\NotchPayBalanceService::class)->availableFor($dst['currency']);
+                if ($avail !== null && $avail < $outAmount) {
+                    $this->codes[] = 'payout_unavailable';
+                    $problems[] = "Les envois vers {$dst['country_name']} sont momentanément suspendus (réapprovisionnement du service de versement en cours). Réessayez plus tard ou envoyez un montant plus petit.";
+                }
+            }
+        }
         // Remboursement automatique d'une collecte PEEX = versement PEEX vers le payeur.
         // (Collecte WacePay : remboursement sur le wallet FlashPay du client.)
         if ($src['type'] === 'mobile' && $dst['type'] === 'mobile' && $collectBy === 'peex' && ! $src['payout']) {
@@ -201,7 +215,8 @@ class QuoteService
             return 'peex';
         }
         try {
-            return ($this->corridors->country($iso)[$field] ?? 'peex') === 'digitwace' ? 'digitwace' : 'peex';
+            $p = $this->corridors->country($iso)[$field] ?? 'peex';
+            return in_array($p, ['digitwace', 'notchpay'], true) ? $p : 'peex';
         } catch (\Throwable) {
             return 'peex';
         }

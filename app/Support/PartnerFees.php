@@ -30,6 +30,8 @@ class PartnerFees
         'digitwace_collect' => 'WacePay — collecte mobile money',
         'digitwace_payout' => 'WacePay — versement',
         'digitwace_card' => 'WacePay — carte / compte bancaire',
+        'notchpay_collect' => 'Notch Pay — collecte mobile money',
+        'notchpay_payout' => 'Notch Pay — versement',
         'card' => 'Carte (autre prestataire)',
     ];
 
@@ -126,6 +128,7 @@ class PartnerFees
         $legs = [];
         $peex = $tx->relationLoaded('peexRequests') ? $tx->peexRequests : PeexRequest::where('transaction_id', $tx->id)->get();
         $wace = $tx->relationLoaded('digitwaceRequests') ? $tx->digitwaceRequests : DigitwaceRequest::where('transaction_id', $tx->id)->get();
+        $notch = $tx->relationLoaded('notchpayRequests') ? $tx->notchpayRequests : \App\Models\NotchPayRequest::where('transaction_id', $tx->id)->get();
         $meta = $tx->meta ?? [];
         $hosted = ($meta['card_driver'] ?? null) === 'wacepay';
 
@@ -141,6 +144,10 @@ class PartnerFees
                 $key = $srcRail === 'digitwace' ? 'digitwace_collect' : 'digitwace_card';
                 $legs[] = self::leg('collect', 'WacePay', $key, $req?->wace_id ?? $tx->source_external_ref, $req?->status,
                     (int) $tx->amount + (int) $tx->fee, $tx->currency, self::reported($req, 'wace'), $rates, self::countryOf($tx, 'in'));
+            } elseif ($srcRail === 'notchpay') {
+                $req = $notch->first(fn ($r) => $r->operation === 'payin');
+                $legs[] = self::leg('collect', 'Notch Pay', 'notchpay_collect', $req?->notch_ref ?? $tx->source_external_ref, $req?->status,
+                    (int) $tx->amount + (int) $tx->fee, $tx->currency, self::reported($req, 'notch'), $rates, self::countryOf($tx, 'in'));
             } elseif ($srcRail === 'card') {
                 $legs[] = self::leg('collect', 'Carte', 'card', $tx->source_external_ref, null,
                     (int) $tx->amount + (int) $tx->fee, $tx->currency, null, $rates);
@@ -158,6 +165,10 @@ class PartnerFees
             $req = $wace->first(fn ($r) => $r->operation === 'payout');
             $legs[] = self::leg('payout', 'WacePay', 'digitwace_payout', $req?->wace_id ?? $tx->destination_external_ref, $req?->status,
                 $out, $outCur, self::reported($req, 'wace'), $rates, self::countryOf($tx, 'out'));
+        } elseif ($tx->destination_rail === 'notchpay') {
+            $req = $notch->first(fn ($r) => $r->operation === 'payout');
+            $legs[] = self::leg('payout', 'Notch Pay', 'notchpay_payout', $req?->notch_ref ?? $tx->destination_external_ref, $req?->status,
+                $out, $outCur, self::reported($req, 'notch'), $rates, self::countryOf($tx, 'out'));
         }
 
         // 3. Remboursements PEEX (automatiques ou manuels) : coût supplémentaire

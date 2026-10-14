@@ -60,6 +60,8 @@ Route::prefix('v1')->middleware('merchant.api')->group(function () {
 // Callbacks PEEX (Basic Auth) — une URL par service, + URL générique
 // Webhook Digitwace / WacePay (statut des versements) — vérifié par signature puis revalidé via l'API
 Route::post('/webhooks/digitwace', \App\Http\Controllers\Api\DigitwaceWebhookController::class)->middleware('throttle:120,1')->name('webhooks.digitwace');
+// Webhook Notch Pay (payment.* / transfer.*) — signature x-notch-signature puis revalidation via l'API
+Route::post('/webhooks/notchpay', \App\Http\Controllers\Api\NotchPayWebhookController::class)->middleware('throttle:120,1')->name('webhooks.notchpay');
 
 Route::post('/webhooks/peex/{service?}', [WebhookController::class, 'peex'])
     ->where('service', 'collect|disbursement|remittance')
@@ -189,6 +191,16 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/vouchers', [CashController::class, 'vouchers']);
         Route::post('/vouchers', [CashController::class, 'createVoucher'])->middleware(['cap:withdraw,settlement', 'one_op', 'pin', 'idempotent']);
         Route::post('/vouchers/{voucher}/cancel', [CashController::class, 'cancelVoucher'])->middleware('pin');
+        // Transferts internationaux P2P / P2B / B2P / B2B (WacePay API v2, TerraPay)
+        Route::prefix('international')->controller(\App\Http\Controllers\Api\InternationalTransferController::class)->group(function () {
+            Route::get('/options', 'options');
+            Route::get('/services', 'services')->middleware('throttle:30,1');
+            Route::post('/banks', 'banks')->middleware('throttle:30,1');
+            Route::post('/cash-points', 'cashPoints')->middleware('throttle:30,1');
+            Route::get('/lists', 'lists');
+            Route::post('/quote', 'quote')->middleware('throttle:60,1');
+            Route::post('/send', 'send')->middleware(['cap:send', 'one_op', 'pin', 'idempotent']);
+        });
     });
 
     // --- PEEX : corridors & frais (tous profils) ---
@@ -375,6 +387,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/corridors/{iso}', [PricingAdminController::class, 'updateCorridor'])->where('iso', '[A-Za-z]{2}');
         Route::post('/corridors-sync/wacepay', [PricingAdminController::class, 'syncWacepay']);
         Route::get('/digitwace/balances', [PricingAdminController::class, 'wacepayBalances']);
+        Route::get('/notchpay/balances', [PricingAdminController::class, 'notchpayBalances']);
+        Route::post('/corridors-sync/notchpay', [PricingAdminController::class, 'syncNotchpay'])->middleware('throttle:5,1');
         Route::get('/digitwace/diagnose', [PricingAdminController::class, 'diagnoseWacepay'])->middleware('throttle:10,1');
         Route::post('/digitwace/discover', [PricingAdminController::class, 'discoverWacepay'])->middleware('throttle:3,1');
         Route::delete('/digitwace/discover', [PricingAdminController::class, 'resetWacepayEndpoint']);

@@ -38,7 +38,7 @@ class BeneficiaryBook
             $deliver = 'wallet';
             $country ??= $wallet->country;
             $operator = 'Wallet FlashPay';
-        } elseif ($tx->destination_account && in_array($tx->destination_rail, ['peex', 'digitwace', 'mobile'], true)) {
+        } elseif ($tx->destination_account && in_array($tx->destination_rail, ['peex', 'digitwace', 'notchpay', 'mobile'], true)) {
             $phone = (string) $tx->destination_account;
             $name = $m['beneficiary_name'] ?? $m['beneficiary_verified_name'] ?? null;
             $deliver = 'mobile';

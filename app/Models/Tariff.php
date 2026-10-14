@@ -20,6 +20,7 @@ class Tariff extends Model
         'atm' => 'Retrait au GAB',
         'card' => 'Frais carte Visa / Mastercard',
         'bank_transfer' => 'Virement bancaire (règlement marchand)',
+        'international_transfer' => 'Transfert international (WacePay / TerraPay)',
     ];
 
     public const SCOPES = ['national', 'regional', 'international'];
