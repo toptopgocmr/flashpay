@@ -59,6 +59,7 @@ class InternationalTransferService
         protected WacepayRemitClient $wace,
         protected TerrapayClient $terra,
         protected PawapayClient $pawa,
+        protected RemitProfileService $profiles,
     ) {
     }
 
@@ -72,7 +73,9 @@ class InternationalTransferService
             if (! $p || ! $this->partnerReady($p)) {
                 continue;
             }
-            $countries[] = $c + ['partner' => $p, 'partner_name' => $this->partnerName($p), 'methods' => RemitCountries::methodsOf($p)];
+            $countries[] = $c + ['partner' => $p, 'partner_name' => $this->partnerName($p), 'methods' => RemitCountries::methodsOf($p),
+                'beneficiary_kyc' => self::beneficiaryKycRequired($iso, $p),
+                'postal_code_required' => in_array($iso, (array) config('flashpay.remit.postal_code_countries', []), true)];
         }
         $merchant = method_exists($user, 'merchant') ? $user->merchant : null;
         [$first, $last] = self::splitName((string) $user->full_name);
@@ -88,7 +91,9 @@ class InternationalTransferService
             'currency' => $this->walletOf($user)?->currency ?? config('flashpay.remit.from_currency', 'XAF'),
             'min_amount' => (int) config('flashpay.remit.min_amount', 1000),
             'max_amount' => (int) config('flashpay.remit.max_amount', 5000000),
-            // Pré-remplissage de l'expéditeur (modifiable dans l'app)
+            // Profil « international » (KYC expéditeur collecté une fois) : complet, manquant, pièce expirée
+            'profile' => $this->profileSummary($user),
+            // Entreprise (B2P / B2B) : pré-remplissage depuis le profil marchand
             'sender' => array_filter([
                 'first_name' => $first, 'last_name' => $last, 'phone' => $user->phone, 'email' => $user->email,
                 'id_number' => $user->id_number,
@@ -194,8 +199,18 @@ class InternationalTransferService
         if ($amount > (int) config('flashpay.remit.max_amount', 5000000)) {
             $problems[] = 'Montant maximum par transfert : ' . number_format((int) config('flashpay.remit.max_amount', 5000000), 0, ',', ' ') . " {$currency}.";
         }
+        $codes = [];
         if ((int) ($user->kyc_tier ?? 0) < (int) config('flashpay.remit.min_kyc_tier', 1)) {
             $problems[] = 'Complétez la vérification de votre identité (Profil › Plafonds) pour envoyer à l\'international.';
+            $codes[] = 'kyc_tier';
+        }
+        $profile = $this->profiles->status($user, $c['iso']);
+        if ($profile['expired']) {
+            $problems[] = 'Votre pièce d\'identité est expirée : mettez-la à jour dans « Activer l\'international » avant d\'envoyer.';
+            $codes[] = 'id_expired';
+        } elseif (! $profile['complete']) {
+            $problems[] = 'Activez l\'international : il manque ' . implode(', ', array_values($profile['missing'])) . '.';
+            $codes[] = 'profile_incomplete';
         }
 
         $fee = $this->fees->fee('international_transfer', 'international', $amount) ?: $this->fees->fee('p2p', 'international', $amount);
@@ -231,6 +246,7 @@ class InternationalTransferService
             'estimated' => $c['partner'] === 'wacepay_remit', // montant final fixé par le partenaire (change WacePay)
             'available' => empty($problems),
             'problems' => array_values(array_unique($problems)),
+            'problem_codes' => $codes,
             'async' => true,
         ];
     }
@@ -251,11 +267,25 @@ class InternationalTransferService
         $country = $q['country'];
         $method = $q['method'];
 
-        $sender = $this->normalizeParty((array) ($in['sender'] ?? []), $types['sender'], 'expéditeur');
-        $sender += ['phone' => $user->phone, 'email' => $user->email];
-        $sender['country'] ??= config('flashpay.remit.from_country', 'CG');
+        // Expéditeur = profil « international » (jamais les champs d'identité envoyés par l'app) ;
+        // entreprise (B2P / B2B) : raison sociale + RCCM saisis, gérant = titulaire du profil
+        $sender = $this->profiles->sender($user);
+        if ($types['sender'] === 'B') {
+            $biz = $this->normalizeParty((array) ($in['sender'] ?? []), 'B', 'expéditeur');
+            $sender = ['type' => 'B'] + array_intersect_key($biz, array_flip(['business_name', 'business_type', 'registration_number', 'registered_at', 'business_description'])) + $sender;
+            $sender['type'] = 'B';
+        }
         $ben = $this->normalizeParty((array) ($in['beneficiary'] ?? []), $types['beneficiary'], 'bénéficiaire');
         $ben['country'] = $country['iso'];
+        if ($country['beneficiary_kyc'] ?? self::beneficiaryKycRequired($country['iso'], $q['partner'])) {
+            foreach ($types['beneficiary'] === 'B'
+                ? ['address' => 'l\'adresse de l\'entreprise bénéficiaire', 'city' => 'la ville du bénéficiaire']
+                : ['date_of_birth' => 'la date de naissance du bénéficiaire', 'id_type' => 'le type de pièce du bénéficiaire', 'id_number' => 'le numéro de pièce du bénéficiaire', 'address' => 'l\'adresse du bénéficiaire', 'city' => 'la ville du bénéficiaire'] as $k => $label) {
+                if (empty($ben[$k])) {
+                    throw new PeexException("Pour {$country['name']}, indiquez {$label}.");
+                }
+            }
+        }
         $account = $this->normalizeAccount((array) ($in['account'] ?? []), $method, $country, $ben);
         if (empty($ben['phone'])) {
             $ben['phone'] = $account['msisdn'] ?? null;
@@ -352,6 +382,32 @@ class InternationalTransferService
 
     // ------------------------------------------------------------ Utilitaires
 
+    /** Résumé du profil international pour l'app. */
+    public function profileSummary(User $user): array
+    {
+        $st = $this->profiles->status($user);
+        $d = $st['data'];
+        return [
+            'complete' => $st['complete'],
+            'expired' => $st['expired'],
+            'expires_soon' => $st['expires_soon'],
+            'missing' => array_values($st['missing']),
+            'name' => trim(($d['first_name'] ?? '') . ' ' . ($d['last_name'] ?? '')),
+            'id_type' => $d['id_type'] ?? null,
+            'id_number_masked' => isset($d['id_number']) ? str_repeat('•', max(0, mb_strlen($d['id_number']) - 3)) . mb_substr($d['id_number'], -3) : null,
+            'id_expiry' => $d['id_expiry'] ?? null,
+            'city' => $d['city'] ?? null,
+            'country' => $d['country'] ?? null,
+            'email' => $d['email'] ?? null,
+        ];
+    }
+
+    /** TerraPay exige l'identité complète du bénéficiaire pour certains pays (REMIT_BENEFICIARY_KYC_COUNTRIES). */
+    public static function beneficiaryKycRequired(string $iso, ?string $partner): bool
+    {
+        return $partner === 'terrapay' && in_array(strtoupper($iso), (array) config('flashpay.remit.beneficiary_kyc_countries', []), true);
+    }
+
     protected function normalizeParty(array $p, string $type, string $who): array
     {
         $p = array_map(fn ($v) => is_string($v) ? trim($v) : $v, $p);
@@ -371,19 +427,9 @@ class InternationalTransferService
                 throw new PeexException("Indiquez le prénom et le nom de l'{$who}.");
             }
         }
-        if ($who === 'expéditeur') {
-            // KYC exigé par les partenaires : pièce du particulier, ou du gérant + date d'immatriculation pour une entreprise
-            $required = $type === 'B'
-                ? ['registered_at' => 'date d\'immatriculation de l\'entreprise', 'date_of_birth' => 'date de naissance du gérant', 'id_expiry' => 'date d\'expiration de la pièce du gérant']
-                : ['id_number' => 'numéro de pièce d\'identité', 'date_of_birth' => 'date de naissance', 'id_expiry' => 'date d\'expiration de la pièce'];
-            foreach ($required as $k => $label) {
-                if (empty($p[$k])) {
-                    throw new PeexException("Indiquez : {$label} (exigé pour les transferts internationaux).");
-                }
-            }
-            if (! empty($p['id_expiry']) && strtotime((string) $p['id_expiry']) < strtotime('today')) {
-                throw new PeexException('Votre pièce d\'identité est expirée : mettez-la à jour pour envoyer à l\'international.');
-            }
+        if ($who === 'expéditeur' && $type === 'B' && empty($p['registered_at'])) {
+            // KYC entreprise : date d'immatriculation (l'identité du gérant vient du profil international)
+            throw new PeexException('Indiquez : date d\'immatriculation de l\'entreprise (exigé pour les transferts internationaux).');
         }
         return array_filter($p, fn ($v) => $v !== null && $v !== '');
     }

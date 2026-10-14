@@ -71,6 +71,7 @@ class PawapayConnector extends RemitConnector
                 'phone' => preg_replace('/\D/', '', (string) ($s['phone'] ?? $tx->initiator?->phone)),
                 'address' => (string) ($s['address'] ?? $s['city'] ?? 'N/A'),
                 'city' => (string) ($s['city'] ?? config('flashpay.wacepay_remit.default_address', 'Brazzaville')),
+                'postal_code' => $s['postal_code'] ?? null,
                 'country' => PawapayClient::iso3($senderIso) ?? 'COG',
                 'id_type' => (($s['type'] ?? 'P') === 'B') ? self::ID_TYPES['RCCM'] : (self::ID_TYPES[strtoupper((string) ($s['id_type'] ?? 'CNI'))] ?? 'NATIONAL_ID'),
                 'id_number' => (string) ((($s['type'] ?? 'P') === 'B') ? ($s['registration_number'] ?? '') : ($s['id_number'] ?? '')),

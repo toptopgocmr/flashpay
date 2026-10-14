@@ -191,14 +191,19 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/vouchers', [CashController::class, 'vouchers']);
         Route::post('/vouchers', [CashController::class, 'createVoucher'])->middleware(['cap:withdraw,settlement', 'one_op', 'pin', 'idempotent']);
         Route::post('/vouchers/{voucher}/cancel', [CashController::class, 'cancelVoucher'])->middleware('pin');
+        // « Activer l'international » : KYC de l'expéditeur collecté une fois
+        Route::get('/international/profile', [\App\Http\Controllers\Api\RemitProfileController::class, 'show']);
+        Route::put('/international/profile', [\App\Http\Controllers\Api\RemitProfileController::class, 'update'])->middleware('throttle:30,1,remit-profile');
+        Route::post('/international/profile/email-code', [\App\Http\Controllers\Api\RemitProfileController::class, 'sendEmailCode'])->middleware('throttle:5,1,remit-email-code');
+        Route::post('/international/profile/email-verify', [\App\Http\Controllers\Api\RemitProfileController::class, 'verifyEmail'])->middleware('throttle:10,1,remit-email-verify');
         // Transferts internationaux P2P / P2B / B2P / B2B (WacePay API v2, TerraPay)
         Route::prefix('international')->controller(\App\Http\Controllers\Api\InternationalTransferController::class)->group(function () {
             Route::get('/options', 'options');
-            Route::get('/services', 'services')->middleware('throttle:30,1');
-            Route::post('/banks', 'banks')->middleware('throttle:30,1');
-            Route::post('/cash-points', 'cashPoints')->middleware('throttle:30,1');
+            Route::get('/services', 'services')->middleware('throttle:30,1,remit-services');
+            Route::post('/banks', 'banks')->middleware('throttle:30,1,remit-banks');
+            Route::post('/cash-points', 'cashPoints')->middleware('throttle:30,1,remit-cash');
             Route::get('/lists', 'lists');
-            Route::post('/quote', 'quote')->middleware('throttle:60,1');
+            Route::post('/quote', 'quote')->middleware('throttle:60,1,remit-quote');
             Route::post('/send', 'send')->middleware(['cap:send', 'one_op', 'pin', 'idempotent']);
         });
     });
@@ -388,10 +393,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/corridors-sync/wacepay', [PricingAdminController::class, 'syncWacepay']);
         Route::get('/digitwace/balances', [PricingAdminController::class, 'wacepayBalances']);
         Route::get('/notchpay/balances', [PricingAdminController::class, 'notchpayBalances']);
-        Route::post('/corridors-sync/notchpay', [PricingAdminController::class, 'syncNotchpay'])->middleware('throttle:5,1');
+        Route::post('/corridors-sync/notchpay', [PricingAdminController::class, 'syncNotchpay'])->middleware('throttle:5,1,notchpay-sync');
         // Transferts internationaux : partenaires de remittance et partenaire par pays
         Route::get('/remit/overview', [\App\Http\Controllers\Api\RemitAdminController::class, 'overview']);
-        Route::get('/remit/balances', [\App\Http\Controllers\Api\RemitAdminController::class, 'balances'])->middleware('throttle:20,1');
+        Route::get('/remit/balances', [\App\Http\Controllers\Api\RemitAdminController::class, 'balances'])->middleware('throttle:20,1,remit-balances');
         Route::post('/remit/countries/{iso}', [\App\Http\Controllers\Api\RemitAdminController::class, 'updateCountry'])->where('iso', '[A-Za-z]{2}');
         Route::get('/digitwace/diagnose', [PricingAdminController::class, 'diagnoseWacepay'])->middleware('throttle:10,1');
         Route::post('/digitwace/discover', [PricingAdminController::class, 'discoverWacepay'])->middleware('throttle:3,1');

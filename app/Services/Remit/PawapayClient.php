@@ -125,7 +125,7 @@ class PawapayClient
                     'senderDetails' => array_filter([
                         'firstName' => $s['first_name'], 'lastName' => $s['last_name'],
                         'nationality' => $s['nationality'], 'phoneNumber' => $s['phone'],
-                        'address' => array_filter(['addressLine' => $s['address'], 'postalCode' => $s['postal_code'] ?? '00000', 'city' => $s['city'], 'country' => $s['country']]),
+                        'address' => array_filter(['addressLine' => $s['address'], 'postalCode' => ($s['postal_code'] ?? null) ?: '00000', 'city' => $s['city'], 'country' => $s['country']]),
                         'identification' => ['type' => $s['id_type'], 'number' => $s['id_number']],
                         'dateOfBirth' => $s['date_of_birth'] ?? null,
                         'gender' => $s['gender'] ?? null,

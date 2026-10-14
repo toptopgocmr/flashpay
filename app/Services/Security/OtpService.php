@@ -9,7 +9,7 @@ use App\Services\Notifications\NotificationService;
 /** Codes à usage unique envoyés par SMS (inscription, nouvel appareil, PIN, opérations sensibles). */
 class OtpService
 {
-    public const PURPOSES = ['register', 'login_device', 'sensitive', 'pin_reset', 'checkout', 'cash_in'];
+    public const PURPOSES = ['register', 'login_device', 'sensitive', 'pin_reset', 'checkout', 'cash_in', 'email_verify'];
 
     public function __construct(protected NotificationService $notify)
     {

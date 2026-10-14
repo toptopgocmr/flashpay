@@ -102,10 +102,11 @@ class TerrapayConnector extends RemitConnector
             'idDocument' => $idNumber ? [array_filter([
                 'idType' => self::ID_TYPES[$idType] ?? strtolower($idType),
                 'idNumber' => (string) $idNumber,
+                'issueDate' => $business ? null : ($p['id_issue_date'] ?? null),
                 'expiryDate' => $business ? ($p['registration_expiry'] ?? null) : ($p['id_expiry'] ?? null),
-                'issuerCountry' => $country,
+                'issuerCountry' => strtoupper((string) ($business ? $country : ($p['id_issuer_country'] ?? $country))),
             ])] : null,
-            'postalAddress' => array_filter(['addressLine1' => $p['address'] ?? $p['city'] ?? null, 'city' => $p['city'] ?? null, 'country' => $country]),
+            'postalAddress' => array_filter(['addressLine1' => $p['address'] ?? $p['city'] ?? null, 'city' => $p['city'] ?? null, 'postalCode' => $p['postal_code'] ?? null, 'country' => $country]),
             'subjectName' => $name,
             'emailAddress' => $p['email'] ?? null,
             'occupation' => $sender && ! $business ? ($p['occupation'] ?? null) : null,

@@ -87,7 +87,22 @@ class InternationalTransferTest extends TestCase
         $u = User::create(['full_name' => 'Basile Test Expediteur', 'phone' => '242069887766', 'password' => 'secret123', 'kyc_tier' => 2]);
         $u->assignRole('client');
         Wallet::create(['user_id' => $u->id, 'balance' => $balance, 'currency' => 'XAF', 'country' => 'CG']);
+        $this->activate($u);
         return $u->fresh();
+    }
+
+    /** « Activer l'international » : profil + pièces (passeport, selfie). */
+    protected function activate(User $u): void
+    {
+        $this->actingAs($u, 'sanctum')->putJson('/api/pay/international/profile', [
+            'first_name' => 'Basile', 'last_name' => 'Test', 'gender' => 'M', 'date_of_birth' => '1990-01-01', 'place_of_birth' => 'Brazzaville',
+            'nationality' => 'CG', 'occupation' => 'Informaticien', 'email' => 'basile@test.cg',
+            'id_type' => 'PP', 'id_number' => 'X123', 'id_issuer_country' => 'CG', 'id_issue_date' => '2020-01-01', 'id_expiry' => now()->addYear()->toDateString(),
+            'country' => 'CG', 'city' => 'Brazzaville', 'district' => 'Centre-ville', 'street' => 'Avenue de la Paix',
+        ])->assertOk();
+        foreach (['passport', 'selfie'] as $t) {
+            \App\Models\KycDocument::create(['user_id' => $u->id, 'type' => $t, 'path' => "kyc/{$t}.jpg", 'status' => 'pending']);
+        }
     }
 
     protected function sender(array $extra = []): array
@@ -300,5 +315,73 @@ class InternationalTransferTest extends TestCase
         Artisan::call('remit:sync');
         $this->assertSame('reversed', $tx->fresh()->status);
         $this->assertSame(500000, (int) $c->wallet->fresh()->balance);
+    }
+
+    public function test_activation_profile_is_required_and_expired_id_blocks(): void
+    {
+        $u = User::create(['full_name' => 'Awa Nouvelle', 'phone' => '242069111222', 'password' => 'secret123', 'kyc_tier' => 2]);
+        $u->assignRole('client');
+        Wallet::create(['user_id' => $u->id, 'balance' => 300000, 'currency' => 'XAF', 'country' => 'CG']);
+        $this->actingAs($u, 'sanctum');
+
+        // Profil vide : l'app propose « Activer l'international », le devis est bloqué
+        $o = $this->getJson('/api/pay/international/options')->assertOk();
+        $this->assertFalse($o->json('profile.complete'));
+        $q = $this->postJson('/api/pay/international/quote', ['amount' => 10000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p'])->assertOk();
+        $this->assertFalse($q->json('available'));
+        $this->assertContains('profile_incomplete', $q->json('problem_codes'));
+
+        // Contrôles : majeur, pièce non expirée
+        $this->putJson('/api/pay/international/profile', ['date_of_birth' => now()->subYears(16)->toDateString()])->assertStatus(422);
+        $this->putJson('/api/pay/international/profile', ['id_expiry' => now()->subDay()->toDateString()])->assertStatus(422);
+
+        // Enregistrement par étapes
+        $this->putJson('/api/pay/international/profile', ['first_name' => 'Awa', 'last_name' => 'Nouvelle', 'gender' => 'F', 'date_of_birth' => '1995-05-05', 'nationality' => 'cg', 'email' => 'awa@test.cg'])->assertOk();
+        $this->putJson('/api/pay/international/profile', ['id_type' => 'CNI', 'id_number' => 'CG-778899', 'id_expiry' => now()->addYears(2)->toDateString()])->assertOk();
+        $r = $this->putJson('/api/pay/international/profile', ['country' => 'CG', 'city' => 'Pointe-Noire', 'district' => 'Tié-Tié', 'street' => 'Rue 12', 'gps_lat' => -4.79, 'gps_lng' => 11.86])->assertOk();
+        $this->assertFalse($r->json('complete'));
+        $this->assertSame(['doc_front', 'doc_back', 'doc_selfie'], array_keys($r->json('missing'))); // CNI : recto + verso + selfie
+        $this->assertSame('Rue 12, Tié-Tié', $r->json('data.address'));
+        $this->assertSame('CG', $r->json('data.nationality'));
+        $this->assertEqualsWithDelta(-4.79, $r->json('gps.lat'), 0.0001);
+
+        foreach (['id_card', 'id_card_back', 'selfie'] as $t) {
+            \App\Models\KycDocument::create(['user_id' => $u->id, 'type' => $t, 'path' => "kyc/{$t}.jpg", 'status' => 'pending']);
+        }
+        $this->assertTrue($this->getJson('/api/pay/international/profile')->json('complete'));
+        // Code postal exigé vers les États-Unis
+        $this->assertSame(['postal_code' => 'code postal'], $this->getJson('/api/pay/international/profile?country=US')->json('missing'));
+
+        // E-mail vérifié par code (exigé si REMIT_REQUIRE_EMAIL_VERIFIED)
+        config(['flashpay.remit.require_email_verified' => true, 'security.otp_debug' => true]);
+        $this->assertArrayHasKey('email_verified', $this->getJson('/api/pay/international/profile')->json('missing'));
+        $code = $this->postJson('/api/pay/international/profile/email-code')->assertOk()->json('debug_code');
+        $this->postJson('/api/pay/international/profile/email-verify', ['code' => '000000'])->assertStatus(422);
+        $this->postJson('/api/pay/international/profile/email-verify', ['code' => $code])->assertOk()->assertJsonPath('complete', true);
+
+        // Données d'identité chiffrées en base
+        $raw = \Illuminate\Support\Facades\DB::table('remit_profiles')->where('user_id', $u->id)->value('data');
+        $this->assertStringNotContainsString('CG-778899', $raw);
+
+        // Le devis passe ; l'expéditeur envoyé au partenaire vient du profil, pas de la requête
+        $q = $this->postJson('/api/pay/international/quote', ['amount' => 10000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p'])->assertOk();
+        $this->assertTrue($q->json('available'), implode(' ', (array) $q->json('problems')));
+        $this->postJson('/api/pay/international/send', [
+            'amount' => 10000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p', 'service' => ['code' => 'OM', 'name' => 'ORANGE MONEY'],
+            'sender' => ['first_name' => 'Faux', 'last_name' => 'Nom', 'id_number' => 'FAKE'],
+            'beneficiary' => ['first_name' => 'Koffi', 'last_name' => 'Yao'], 'account' => ['msisdn' => '0707070707'],
+        ])->assertStatus(202);
+        $sender = collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/sender/create'));
+        $this->assertSame('Awa', $sender['firstName']);
+        $this->assertSame('CG-778899', $sender['idNumber']);
+        $this->assertSame('CNI', $sender['idType']);
+        $this->assertSame('F', $sender['gender']);
+        $this->assertSame('Pointe-Noire', $sender['city']);
+
+        // Pièce expirée ensuite : transfert bloqué
+        \App\Models\RemitProfile::where('user_id', $u->id)->first()->forceFill(['data' => array_merge(\App\Models\RemitProfile::where('user_id', $u->id)->first()->data, ['id_expiry' => now()->subDay()->toDateString()])])->save();
+        $q = $this->postJson('/api/pay/international/quote', ['amount' => 10000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p'])->assertOk();
+        $this->assertContains('id_expired', $q->json('problem_codes'));
+        $this->assertTrue($this->getJson('/api/pay/international/options')->json('profile.expired'));
     }
 }

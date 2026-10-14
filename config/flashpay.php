@@ -87,6 +87,14 @@ return [
         'countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('REMIT_COUNTRIES', ''))))),
         // Niveau KYC minimum pour envoyer à l'international
         'min_kyc_tier' => (int) env('REMIT_MIN_KYC_TIER', 1),
+        // Profil « Activer l'international » : pièces (recto / verso / selfie) envoyées exigées
+        'require_documents' => (bool) env('REMIT_REQUIRE_DOCUMENTS', true),
+        // E-mail vérifié par code exigé (activer quand l'envoi d'e-mails est configuré : MAIL_MAILER…)
+        'require_email_verified' => (bool) env('REMIT_REQUIRE_EMAIL_VERIFIED', false),
+        // Code postal de l'expéditeur exigé pour ces pays de destination (TerraPay)
+        'postal_code_countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('REMIT_POSTAL_CODE_COUNTRIES', 'US,CA,GB'))))),
+        // Identité complète du bénéficiaire exigée par TerraPay pour ces pays (date de naissance, pièce, adresse)
+        'beneficiary_kyc_countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('REMIT_BENEFICIARY_KYC_COUNTRIES', 'IN,PK,BD,PH,NP,LK,CN'))))),
         'min_amount' => (int) env('REMIT_MIN_AMOUNT', 1000),
         'max_amount' => (int) env('REMIT_MAX_AMOUNT', 5000000),
         // Pays / devise d'envoi (FlashPay)
