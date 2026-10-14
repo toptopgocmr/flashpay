@@ -229,7 +229,7 @@ class WacepayAdminController extends Controller
                 }
             }
             $r->refresh();
-            $out[] = ['partner' => $r->partner === 'terrapay' ? 'TerraPay' : 'WacePay (international)', 'reference' => $r->reference, 'id' => $r->partner_ref,
+            $out[] = ['partner' => \App\Services\Remit\RemitCountries::partnerName($r->partner) . ' (international)', 'reference' => $r->reference, 'id' => $r->partner_ref,
                 'operation' => 'remit_' . ($r->method ?: 'wallet') . ' ' . strtoupper((string) $r->business_type), 'status' => $r->status,
                 'raw_status' => $r->raw_status, 'message' => $r->message, 'final' => (bool) $r->finalized_at, 'checked_at' => $r->last_checked_at?->toIso8601String(),
                 'response' => $r->last_response, 'callback' => null];

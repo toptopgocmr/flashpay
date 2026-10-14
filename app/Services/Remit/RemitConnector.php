@@ -27,6 +27,12 @@ abstract class RemitConnector implements PaymentRailConnector
     /** Statut chez le partenaire. @return array{status:string, raw_status:?string, raw:array} */
     abstract public function partnerStatus(RemitRequest $req): array;
 
+    /** Référence partenaire connue d'avance (sinon null) : permet de vérifier une issue incertaine. */
+    public function partnerRefFor(string $reference): ?string
+    {
+        return null;
+    }
+
     public function collect(string $msisdnOrAccount, int $amountMinor, string $currency, string $reference): array
     {
         throw new RemitException('Collecte non proposée par ' . $this->railName() . ' (versement international uniquement).', null, null, [], true);
@@ -61,12 +67,13 @@ abstract class RemitConnector implements PaymentRailConnector
         } catch (RemitException $e) {
             $definitive = $e->isDefinitive();
             $req->update(['status' => $definitive ? 'failed' : 'pending', 'message' => mb_substr($e->getMessage(), 0, 250),
-                'last_response' => $e->response ?: null, 'last_checked_at' => now()]);
+                'last_response' => $e->response ?: null, 'last_checked_at' => now(),
+                'partner_ref' => $definitive ? null : $this->partnerRefFor($reference)]);
             Log::warning($this->railName() . ' : transfert ' . ($definitive ? 'refusé' : 'incertain'), ['reference' => $reference, 'error' => $e->getMessage()]);
 
             return ['status' => $definitive ? 'failed' : 'pending', 'external_ref' => $reference, 'raw' => ['error' => $e->getMessage()]];
         } catch (\Throwable $e) {
-            $req->update(['status' => 'pending', 'message' => mb_substr($e->getMessage(), 0, 250), 'last_checked_at' => now()]);
+            $req->update(['status' => 'pending', 'message' => mb_substr($e->getMessage(), 0, 250), 'last_checked_at' => now(), 'partner_ref' => $this->partnerRefFor($reference)]);
             return ['status' => 'pending', 'external_ref' => $reference, 'raw' => ['error' => $e->getMessage()]];
         }
     }

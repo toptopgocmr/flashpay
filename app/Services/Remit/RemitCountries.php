@@ -56,21 +56,56 @@ class RemitCountries
         return self::all()[strtoupper($iso)] ?? null;
     }
 
-    /** Partenaire du pays (wacepay_remit | terrapay), selon REMIT_PARTNERS (clé « * » = défaut). */
+    /** Partenaires de remittance : nom et moyens de réception. */
+    public const PARTNERS = [
+        'wacepay_remit' => ['name' => 'WacePay', 'methods' => ['wallet', 'bank', 'cash']],
+        'terrapay' => ['name' => 'TerraPay', 'methods' => ['wallet', 'bank']],
+        'pawapay' => ['name' => 'PawaPay', 'methods' => ['wallet']],
+    ];
+
+    /**
+     * Partenaire du pays : choix de la console (Pays & change › International), sinon
+     * REMIT_PARTNERS (clé « * » = défaut). « off » = transferts fermés vers ce pays.
+     */
     public static function partnerFor(string $iso): ?string
+    {
+        $iso = strtoupper($iso);
+        $console = self::overrides();
+        if (array_key_exists($iso, $console)) {
+            $p = $console[$iso];
+        } else {
+            $map = (array) config('flashpay.remit.partners', []);
+            $p = $map[$iso] ?? $map['*'] ?? null;
+        }
+        return isset(self::PARTNERS[$p]) ? $p : null;
+    }
+
+    /** Partenaire par défaut (REMIT_PARTNERS) sans le choix de la console. */
+    public static function defaultPartnerFor(string $iso): ?string
     {
         $map = (array) config('flashpay.remit.partners', []);
         $p = $map[strtoupper($iso)] ?? $map['*'] ?? null;
-        return in_array($p, ['wacepay_remit', 'terrapay'], true) ? $p : null;
+        return isset(self::PARTNERS[$p]) ? $p : null;
+    }
+
+    /** Choix enregistrés dans la console : [ISO => partenaire | off] */
+    public static function overrides(): array
+    {
+        try {
+            return (array) app(\App\Services\Ops\PlatformSettings::class)->get('remit_partners', []);
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    public static function partnerName(?string $p): string
+    {
+        return self::PARTNERS[$p]['name'] ?? (string) $p;
     }
 
     /** Moyens de réception proposés par partenaire. */
     public static function methodsOf(?string $partner): array
     {
-        return match ($partner) {
-            'wacepay_remit' => ['wallet', 'bank', 'cash'],
-            'terrapay' => ['wallet', 'bank'],
-            default => [],
-        };
+        return self::PARTNERS[$partner]['methods'] ?? [];
     }
 }

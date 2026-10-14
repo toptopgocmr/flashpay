@@ -35,10 +35,11 @@ class NotchPayClient
         return (bool) $this->cfg('enabled') && (bool) $this->cfg('public_key');
     }
 
-    /** Mode test : clés pk_test_… / sk_test_… */
+    /** Mode test : clés pk_test.… / sk_test.… */
     public function sandbox(): bool
     {
-        return str_contains((string) $this->cfg('public_key'), '_test_');
+        // pk_test.… (format actuel) ou pk_test_… : clé de test
+        return (bool) preg_match('/^pk_test[._]/', (string) $this->cfg('public_key'));
     }
 
     public function callbackUrl(): string

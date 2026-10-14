@@ -53,6 +53,10 @@ return [
             'driver' => \App\Services\Remit\TerrapayConnector::class,
             'enabled' => (bool) env('TERRAPAY_ENABLED', false),
         ],
+        'pawapay' => [
+            'driver' => \App\Services\Remit\PawapayConnector::class,
+            'enabled' => (bool) env('PAWAPAY_ENABLED', false),
+        ],
     ],
 
     /*
@@ -106,6 +110,18 @@ return [
         'default_address' => env('WACEPAY_REMIT_DEFAULT_ADDRESS', 'Brazzaville'),
     ],
 
+    'pawapay' => [
+        'enabled' => (bool) env('PAWAPAY_ENABLED', false),
+        // Sandbox : https://api.sandbox.pawapay.io — production : https://api.pawapay.io
+        'base_url' => env('PAWAPAY_BASE_URL', 'https://api.sandbox.pawapay.io'),
+        // Jeton API (tableau de bord pawaPay › API Tokens) — variables Railway uniquement
+        'token' => env('PAWAPAY_API_TOKEN', ''),
+        // remittance = API Remittances (KYC expéditeur, transferts internationaux) ; payout = API Payouts
+        'mode' => env('PAWAPAY_MODE', 'remittance'),
+        'balances_path' => env('PAWAPAY_BALANCES_PATH', 'v2/wallet-balances'),
+        'timeout' => (int) env('PAWAPAY_TIMEOUT', 40),
+    ],
+
     'terrapay' => [
         'enabled' => (bool) env('TERRAPAY_ENABLED', false),
         // UAT : https://uat-connect.terrapay.com:21211 — production : URL fournie par TerraPay
@@ -136,9 +152,9 @@ return [
     | Notch Pay (https://developer.notchpay.co)
     |--------------------------------------------------------------------------
     | Clés : Business Suite Notch Pay › Settings › API Keys (mode Sandbox ou Production).
-    |  - NOTCHPAY_PUBLIC_KEY  (pk_test_… / pk_…)  : en-tête Authorization
-    |  - NOTCHPAY_PRIVATE_KEY (sk_test_… / sk_…)  : en-tête X-Grant (transferts, solde)
-    |  - NOTCHPAY_HASH_KEY    (hsk_test_… / hsk_…): vérification HMAC-SHA256 des webhooks
+    |  - NOTCHPAY_PUBLIC_KEY  (pk_test.… / pk_live.…)  : en-tête Authorization
+    |  - NOTCHPAY_PRIVATE_KEY (sk_test.… / sk_live.…)  : en-tête X-Grant (transferts, solde)
+    |  - NOTCHPAY_HASH_KEY    (hsk_test.… / hsk_live.…): vérification HMAC-SHA256 des webhooks
     | Transferts : l'IP SORTANTE du serveur doit être autorisée dans le tableau de bord
     | (Railway : « Static Outbound IPs »).
     | Webhook à déclarer (Settings › Webhooks) : {APP_URL}/api/webhooks/notchpay

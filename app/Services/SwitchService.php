@@ -48,6 +48,9 @@ class SwitchService
         if ($rail === 'terrapay' && config('flashpay.rails.terrapay.enabled', false)) {
             return app(\App\Services\Remit\TerrapayConnector::class);
         }
+        if ($rail === 'pawapay' && config('flashpay.rails.pawapay.enabled', false)) {
+            return app(\App\Services\Remit\PawapayConnector::class);
+        }
         // PEEX : collecte et versements (le wallet interne n'a pas de connecteur).
         if ($rail !== 'peex' || ! config('flashpay.rails.peex.enabled', false)) {
             throw new \InvalidArgumentException("Rail de paiement non disponible : {$rail}");

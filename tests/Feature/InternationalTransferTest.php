@@ -20,6 +20,7 @@ class InternationalTransferTest extends TestCase
     protected string $waceStatus = 'WAITING CONFIRMATION';
     protected string $terraStatus = '3050:Remit Acknowledged.';
     protected string $terraAccount = 'available';
+    protected string $pawaStatus = 'PROCESSING';
 
     protected function setUp(): void
     {
@@ -31,6 +32,8 @@ class InternationalTransferTest extends TestCase
             'flashpay.wacepay_remit.base_url' => 'https://sandbox.wace.test/api/v1', 'flashpay.wacepay_remit.email' => 'p@wace.test', 'flashpay.wacepay_remit.password' => 'pwd',
             'flashpay.rails.terrapay.enabled' => true, 'flashpay.terrapay.enabled' => true,
             'flashpay.terrapay.base_url' => 'https://uat.terra.test:21211', 'flashpay.terrapay.username' => 'fp', 'flashpay.terrapay.password' => 'secret',
+            'flashpay.rails.pawapay.enabled' => true, 'flashpay.pawapay.enabled' => true,
+            'flashpay.pawapay.base_url' => 'https://api.sandbox.pawa.test', 'flashpay.pawapay.token' => 'PTOK',
             'flashpay.remit.partners' => ['FR' => 'terrapay', '*' => 'wacepay_remit'],
             'flashpay.remit.min_kyc_tier' => 0,
         ]);
@@ -65,6 +68,15 @@ class InternationalTransferTest extends TestCase
                     'receivingAmount' => (string) $req['requestAmount'], 'receivingCurrency' => 'EUR', 'fxRate' => '0.001524']], 'quotationReference' => 'QT1', 'quotationStatus' => '2000:Quote Success']),
                 str_ends_with($u, '/eig/gsma/transactions') => Http::response(['transactionStatus' => '3050:Remit Acknowledged.', 'transactionReference' => 'TPKM1']),
                 str_contains($u, '/eig/gsma/transactions/TPKM1') => Http::response(['transactionStatus' => $this->terraStatus, 'transactionReference' => 'TPKM1']),
+                // ---- pawaPay
+                str_ends_with($u, '/v2/predict-provider') => Http::response(['country' => 'CMR', 'provider' => 'MTN_MOMO_CMR', 'phoneNumber' => '237670000000']),
+                str_contains($u, '/v2/active-conf') => Http::response(['countries' => [['country' => 'CMR', 'providers' => [
+                    ['provider' => 'MTN_MOMO_CMR', 'currencies' => [['currency' => 'XAF', 'operationTypes' => ['REMITTANCE' => ['status' => 'OPERATIONAL']]]]],
+                    ['provider' => 'ORANGE_CMR', 'currencies' => [['currency' => 'XAF', 'operationTypes' => ['REMITTANCE' => ['status' => 'OPERATIONAL']]]]],
+                ]]]]),
+                str_ends_with($u, '/v2/remittances') => Http::response(['remittanceId' => $req['remittanceId'], 'status' => 'ACCEPTED', 'created' => now()->toIso8601String()]),
+                str_contains($u, '/v2/remittances/') => Http::response(['status' => 'FOUND', 'data' => ['status' => $this->pawaStatus]]),
+                str_contains($u, '/v2/wallet-balances') => Http::response(['balances' => [['country' => 'CMR', 'balance' => '500000', 'currency' => 'XAF']]]),
                 default => Http::response(['message' => 'not found ' . $u], 404),
             };
         });
@@ -227,5 +239,66 @@ class InternationalTransferTest extends TestCase
         $this->terraStatus = '3000:Remit Success';
         Artisan::call('remit:sync');
         $this->assertSame('successful', $tx->fresh()->status);
+    }
+
+    public function test_admin_assigns_pawapay_to_cameroon_and_client_sends_via_pawapay(): void
+    {
+        $admin = User::create(['full_name' => 'Super', 'phone' => '242069990123', 'password' => bcrypt('x'), 'status' => 'active']);
+        $admin->assignRole('super_admin');
+        $this->actingAs($admin, 'sanctum');
+
+        $o = $this->getJson('/api/admin/remit/overview')->assertOk();
+        $this->assertSame(['wacepay_remit', 'terrapay', 'pawapay'], collect($o->json('partners'))->pluck('key')->all());
+        $cm = collect($o->json('countries'))->firstWhere('iso', 'CM');
+        $this->assertSame('wacepay_remit', $cm['partner']);
+        $this->assertContains('pawapay', $cm['available']);
+        $this->assertNotContains('pawapay', collect($o->json('countries'))->firstWhere('iso', 'FR')['available']);
+
+        $this->postJson('/api/admin/remit/countries/FR', ['partner' => 'pawapay'])->assertStatus(422);
+        $this->postJson('/api/admin/remit/countries/CM', ['partner' => 'pawapay'])->assertOk();
+        $this->postJson('/api/admin/remit/countries/GA', ['partner' => 'off'])->assertOk();
+        $o = $this->getJson('/api/admin/remit/overview')->assertOk();
+        $this->assertSame('pawapay', collect($o->json('countries'))->firstWhere('iso', 'CM')['partner']);
+        $this->assertNull(collect($o->json('countries'))->firstWhere('iso', 'GA')['partner']);
+        $this->assertSame(['ok' => true, 'accounts' => [['country' => 'CMR', 'currency' => 'XAF', 'balance' => 500000]]], $this->getJson('/api/admin/remit/balances')->json('pawapay'));
+
+        // Côté client : Cameroun via pawaPay (mobile money seulement), Gabon fermé
+        $c = $this->client();
+        $this->actingAs($c, 'sanctum');
+        $opts = $this->getJson('/api/pay/international/options')->assertOk();
+        $this->assertSame(['wallet'], collect($opts->json('countries'))->firstWhere('iso', 'CM')['methods']);
+        $this->assertNull(collect($opts->json('countries'))->firstWhere('iso', 'GA'));
+        $svc = $this->getJson('/api/pay/international/services?country=CM')->assertOk();
+        $this->assertSame('MTN_MOMO_CMR', $svc->json('methods.wallet.1.code'));
+
+        $r = $this->postJson('/api/pay/international/send', [
+            'amount' => 50000, 'country' => 'CM', 'method' => 'wallet', 'business_type' => 'p2p',
+            'sender' => $this->sender(),
+            'beneficiary' => ['first_name' => 'Paul', 'last_name' => 'Biya Nkodo'],
+            'account' => ['msisdn' => '670000000'],
+            'why' => ['reason' => 'Family Maintainance', 'origin_fund' => 'Salary', 'relation' => 'Brother'],
+        ])->assertStatus(202);
+        $tx = Transaction::findOrFail($r->json('id'));
+        $this->assertSame('pawapay', $tx->destination_rail);
+
+        $send = collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/v2/remittances'));
+        $this->assertSame('Bearer PTOK', $send->header('Authorization')[0]);
+        $this->assertSame('MTN_MOMO_CMR', $send['recipient']['accountDetails']['provider']);
+        $this->assertSame('237670000000', $send['recipient']['accountDetails']['phoneNumber']);
+        $this->assertSame('50000', $send['amount']);
+        $this->assertSame('XAF', $send['currency']);
+        $this->assertSame('FAMILY_SUPPORT', $send['sender']['transactionDetails']['purposeOfFunds']);
+        $this->assertSame('SALARY', $send['sender']['transactionDetails']['sourceOfFunds']);
+        $this->assertSame('PASSPORT', $send['sender']['senderDetails']['identification']['type']);
+        $this->assertSame('COG', $send['sender']['senderDetails']['nationality']);
+        $this->assertSame($tx->reference, $send['sender']['transactionDetails']['transactionReference']);
+        $this->assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', $send['remittanceId']);
+
+        Artisan::call('remit:sync');
+        $this->assertSame('processing', $tx->fresh()->status);
+        $this->pawaStatus = 'FAILED';
+        Artisan::call('remit:sync');
+        $this->assertSame('reversed', $tx->fresh()->status);
+        $this->assertSame(500000, (int) $c->wallet->fresh()->balance);
     }
 }

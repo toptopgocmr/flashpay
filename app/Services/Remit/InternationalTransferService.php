@@ -58,6 +58,7 @@ class InternationalTransferService
         protected FxService $fx,
         protected WacepayRemitClient $wace,
         protected TerrapayClient $terra,
+        protected PawapayClient $pawa,
     ) {
     }
 
@@ -106,6 +107,19 @@ class InternationalTransferService
         $p = $c['partner'];
         if ($p === 'terrapay') {
             return ['partner' => $p, 'methods' => ['wallet' => [['code' => '', 'name' => 'Mobile money (opérateur détecté automatiquement)']], 'bank' => [['code' => '', 'name' => 'Virement bancaire']]]];
+        }
+        if ($p === 'pawapay') {
+            $providers = [];
+            try {
+                $providers = $this->pawa->activeCountries()[PawapayClient::iso3($iso)] ?? [];
+            } catch (\Throwable) {
+                // configuration pawaPay illisible : opérateur détecté depuis le numéro
+            }
+            $list = [['code' => '', 'name' => 'Mobile money (opérateur détecté automatiquement)']];
+            foreach ($providers as $pr) {
+                $list[] = ['code' => $pr, 'name' => ucwords(strtolower(str_replace('_', ' ', preg_replace('/_[A-Z]{3}$/', '', $pr))))];
+            }
+            return ['partner' => $p, 'methods' => ['wallet' => $list]];
         }
         $out = ['wallet' => [], 'bank' => [], 'cash' => []];
         foreach ($this->wace->payoutServices($iso, $c['currency']) as $s) {
@@ -264,6 +278,11 @@ class InternationalTransferService
             'note' => isset($in['note']) ? mb_substr((string) $in['note'], 0, 140) : null,
         ];
 
+        // pawaPay : opérateur choisi dans l'app (sinon détecté depuis le numéro)
+        if ($q['partner'] === 'pawapay' && $method === 'wallet' && empty($remit['account']['provider']) && ! empty($remit['service']['code'])) {
+            $remit['account']['provider'] = $remit['service']['code'];
+        }
+
         // Vérifications chez le partenaire AVANT tout débit
         $this->preflight($remit, $user);
 
@@ -313,6 +332,12 @@ class InternationalTransferService
                 }
                 if ($remit['method'] === 'cash' && empty($remit['account']['city'])) {
                     throw new PeexException('Choisissez la ville de retrait.');
+                }
+            } elseif ($remit['partner'] === 'pawapay') {
+                // Numéro valide et opérateur reconnu par pawaPay, dans le bon pays
+                $pred = $this->pawa->predictProvider($remit['account']['msisdn']);
+                if ($pred['country'] && PawapayClient::iso3($remit['country']) && $pred['country'] !== PawapayClient::iso3($remit['country'])) {
+                    throw new PeexException('Ce numéro n\'appartient pas à un opérateur de ' . (RemitCountries::get($remit['country'])['name'] ?? $remit['country']) . '.');
                 }
             } elseif ($remit['partner'] === 'terrapay' && config('flashpay.terrapay.verify_account', true)) {
                 $acc = $this->terra->accountStatus(TerrapayConnector::credit($remit), TerrapayConnector::fullName($remit['beneficiary']), TerrapayConnector::fullName($remit['sender']));
@@ -416,13 +441,14 @@ class InternationalTransferService
         return match ($p) {
             'wacepay_remit' => config('flashpay.rails.wacepay_remit.enabled') && $this->wace->enabled(),
             'terrapay' => config('flashpay.rails.terrapay.enabled') && $this->terra->enabled(),
+            'pawapay' => config('flashpay.rails.pawapay.enabled') && $this->pawa->enabled(),
             default => false,
         };
     }
 
     public function partnerName(?string $p): string
     {
-        return ['wacepay_remit' => 'WacePay', 'terrapay' => 'TerraPay'][$p] ?? (string) $p;
+        return RemitCountries::partnerName($p);
     }
 
     protected function partnerBalanceProblem(string $partner, int $amount, string $currency): ?string

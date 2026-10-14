@@ -45,7 +45,7 @@ class RemitStatusHandler
     {
         $req->update(['status' => $status, 'finalized_at' => now()]);
         if ($tx = $req->transaction) {
-            $name = $req->partner === 'terrapay' ? 'TerraPay' : 'WacePay';
+            $name = RemitCountries::partnerName($req->partner);
             $status === 'successful'
                 ? $this->switch->onDestinationConfirmed($tx)
                 : $this->switch->onDestinationFailed($tx, $name . ' : ' . $reason);

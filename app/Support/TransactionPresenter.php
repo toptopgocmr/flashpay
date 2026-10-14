@@ -166,7 +166,7 @@ class TransactionPresenter
     /** « PEEX », « WacePay (Digitwace) », « PEEX → WacePay (Digitwace) » ; null si 100 % interne. */
     public static function partner(Transaction $tx): ?string
     {
-        $map = ['peex' => 'peex', 'digitwace' => 'digitwace', 'notchpay' => 'notchpay', 'wacepay_remit' => 'wacepay_remit', 'terrapay' => 'terrapay'];
+        $map = ['peex' => 'peex', 'digitwace' => 'digitwace', 'notchpay' => 'notchpay', 'wacepay_remit' => 'wacepay_remit', 'terrapay' => 'terrapay', 'pawapay' => 'pawapay'];
         $in = $map[$tx->source_rail] ?? null;
         $out = $map[$tx->destination_rail] ?? null;
         $names = array_values(array_unique(array_filter([
@@ -195,6 +195,7 @@ class TransactionPresenter
             switch ($rail) {
                 case 'wacepay_remit':
                 case 'terrapay':
+                case 'pawapay':
                     $out['partner'] = \App\Services\Peex\PeexCorridors::partnerName($rail);
                     $m = $tx->meta['remit'] ?? [];
                     $out['country'] = $m['country'] ?? null;
@@ -310,7 +311,7 @@ class TransactionPresenter
             'bank' => 'Banque',
             'card' => 'Carte bancaire',
             'peex', 'digitwace', 'notchpay', 'mobile' => 'Mobile',
-            'wacepay_remit', 'terrapay' => 'International',
+            'wacepay_remit', 'terrapay', 'pawapay' => 'International',
             default => ucfirst((string) $tx->destination_rail),
         };
         if (in_array($tx->type, self::PAYMENT_TYPES, true) && ! empty($meta['merchant_id'])) {

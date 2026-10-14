@@ -30,6 +30,7 @@ class PeexController extends Controller
                 ['key' => 'digitwace', 'name' => 'WacePay', 'sandbox' => (bool) config('flashpay.digitwace.sandbox', true), 'enabled' => app(\App\Services\Digitwace\DigitwaceClient::class)->enabled()],
                 ['key' => 'wacepay_remit', 'name' => 'WacePay (international)', 'sandbox' => app(\App\Services\Remit\WacepayRemitClient::class)->sandbox(), 'enabled' => app(\App\Services\Remit\WacepayRemitClient::class)->enabled()],
                 ['key' => 'terrapay', 'name' => 'TerraPay', 'sandbox' => app(\App\Services\Remit\TerrapayClient::class)->sandbox(), 'enabled' => app(\App\Services\Remit\TerrapayClient::class)->enabled()],
+                ['key' => 'pawapay', 'name' => 'PawaPay', 'sandbox' => app(\App\Services\Remit\PawapayClient::class)->sandbox(), 'enabled' => app(\App\Services\Remit\PawapayClient::class)->enabled()],
                 ['key' => 'notchpay', 'name' => 'Notch Pay', 'sandbox' => app(\App\Services\NotchPay\NotchPayClient::class)->sandbox(), 'enabled' => app(\App\Services\NotchPay\NotchPayClient::class)->enabled()],
             ],
             'corridors' => $this->corridors->catalog()]);

@@ -77,13 +77,15 @@
       <button class="gw-stat" :class="{ on: tab === 'corridors' && !flt.open }" @click="tab = 'corridors'; flt.open = ''"><span>Pays couverts</span><b>{{ n(kpi.countries) }}</b><small>{{ n(kpi.operators) }} opérateurs</small></button>
       <button class="gw-stat" :class="{ on: tab === 'corridors' && flt.open === 'collect' }" @click="tab = 'corridors'; flt.open = flt.open === 'collect' ? '' : 'collect'"><span>Collecte ouverte</span><b>{{ n(kpi.collect) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
       <button class="gw-stat" :class="{ on: tab === 'corridors' && flt.open === 'payout' }" @click="tab = 'corridors'; flt.open = flt.open === 'payout' ? '' : 'payout'"><span>Versement ouvert</span><b>{{ n(kpi.payout) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
+      <button class="gw-stat" :class="{ on: tab === 'remit' }" @click="tab = 'remit'"><span>International</span><b>{{ n(remit.kpi?.open) }} <small>/ {{ n(remit.kpi?.countries) }}</small></b><small>WacePay · TerraPay · PawaPay</small></button>
       <button class="gw-stat" :class="{ on: tab === 'rates' }" @click="tab = 'rates'"><span>Taux de change</span><b>{{ n(kpi.rates) }}</b><small :class="{ 't-warn': kpi.stale_rates }">{{ kpi.stale_rates ? kpi.stale_rates + ' à mettre à jour' : 'À jour' }}</small></button>
     </div>
 
     <section class="gw-section">
-    <GwHead :icon="tab === 'rates' ? 'swap' : 'globe'" :title="tab === 'rates' ? 'Taux de change' : 'Pays & corridors'">
+    <GwHead :icon="tab === 'rates' ? 'swap' : 'globe'" :title="tab === 'rates' ? 'Taux de change' : tab === 'remit' ? 'Transferts internationaux (remittance)' : 'Pays & corridors'">
       <div class="seg">
         <button :class="{ on: tab === 'corridors' }" @click="tab = 'corridors'">Pays</button>
+        <button :class="{ on: tab === 'remit' }" @click="tab = 'remit'">International</button>
         <button :class="{ on: tab === 'rates' }" @click="tab = 'rates'">Taux</button>
       </div>
     </GwHead>
@@ -173,6 +175,77 @@
         </div>
       </section>
       <div v-if="!Object.keys(byZone).length" class="container empty">Aucun pays ne correspond à ces filtres.</div>
+    </template>
+
+    <!-- ================= Transferts internationaux (remittance) ================= -->
+    <template v-else-if="tab === 'remit'">
+      <div class="gw-note mb">Transferts internationaux de l'app (P2P, P2B, B2P, B2B depuis le wallet FlashPay). Choisissez le partenaire qui paie chaque pays de destination. Les flux mobile money nationaux et régionaux restent réglés dans l'onglet « Pays ».</div>
+      <div class="gw-cols mb">
+        <div v-for="p in remit.partners" :key="p.key" class="gw-card pc" :class="'p-' + p.key">
+          <div class="gw-card-h">
+            <span class="pbadge" :class="'p-' + p.key">{{ p.name }}</span>
+            <div class="side">
+              <span class="gw-pill" :class="p.ready ? 'ok' : 'warn'">{{ p.ready ? 'Connecté' : 'Non configuré' }}</span>
+              <span class="gw-pill" :class="/sandbox/i.test(p.mode) ? 'info' : 'muted'">{{ p.mode }}</span>
+            </div>
+          </div>
+          <div class="gw-rows">
+            <div class="gw-row"><span class="gw-dot"></span>
+              <div class="gw-main"><b>Réception</b><small>{{ p.note }}</small></div>
+              <div class="gw-end"><span v-for="m in p.methods" :key="m" class="gw-pill muted">{{ methodLabel[m] || m }}</span></div></div>
+            <div class="gw-row"><span class="gw-dot" :class="{ off: !p.countries }"></span>
+              <div class="gw-main"><b>Pays confiés</b><small>{{ n(p.operations_30d) }} opération(s) sur 30 j</small></div>
+              <div class="gw-end"><b>{{ n(p.countries) }} pays</b></div></div>
+            <div v-if="rBal[p.key]" class="gw-row"><span class="gw-dot" :class="rBal[p.key].ok ? '' : 'err'"></span>
+              <div class="gw-main"><b>Solde</b><small v-if="!rBal[p.key].ok" class="t-err">{{ rBal[p.key].error }}</small></div>
+              <div class="gw-end">
+                <span v-for="a in rBal[p.key].accounts" :key="(a.country || '') + a.currency" class="gw-pill ok">{{ n(a.balance) }} {{ a.currency }}</span>
+                <span v-if="rBal[p.key].ok && !rBal[p.key].accounts.length" class="gw-pill muted">0</span>
+              </div></div>
+            <div v-if="p.missing.length" class="gw-row"><span class="gw-dot err"></span>
+              <div class="gw-main"><b>À renseigner sur Railway</b><small class="mono">{{ p.missing.join(' · ') }}</small></div></div>
+          </div>
+          <div class="gw-card-b pc-bottom">
+            <div class="pc-actions">
+              <button class="btn-normal sm" @click="rFlt.partner = rFlt.partner === p.key ? '' : p.key">{{ rFlt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section class="container gw-card mb">
+        <div class="container-head">
+          <div><h3>Pays de destination <span class="counter">({{ remitList.length }} pays)</span></h3></div>
+          <div class="search">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg>
+            <input v-model="rFlt.q" type="search" placeholder="Pays ou devise…" />
+          </div>
+        </div>
+        <div class="container-body flush" style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>Pays</th><th>Devise</th><th>Partenaire de remittance</th><th>Réception</th><th class="num">Activité 30 j</th><th></th></tr></thead>
+            <tbody>
+              <tr v-for="c in remitList" :key="c.iso" :class="{ off: !c.partner }">
+                <td><Flag :iso="c.iso" :size="15" /> <strong>{{ c.name }}</strong> <span class="stat-label">{{ c.iso }}</span>
+                  <span v-if="c.overridden" class="changed" :title="'Défaut : ' + (partnerLabel(c.default_partner) || 'aucun')">modifié</span></td>
+                <td class="mono">{{ c.currency }}</td>
+                <td class="partner-cell">
+                  <select class="api" :class="'p-' + (c.closed ? 'off' : (c.partner || 'off'))" :value="c.closed ? 'off' : (c.partner || 'off')" @change="setRemitPartner(c, $event.target.value)">
+                    <option v-for="p in remit.partners" :key="p.key" :value="p.key" :disabled="!c.available.includes(p.key)">{{ p.name }}{{ c.available.includes(p.key) ? '' : ' — non couvert' }}</option>
+                    <option value="off">Fermé</option>
+                  </select>
+                  <div v-if="c.partner && !remitReady(c.partner)" class="t-warn small">⚠ {{ c.partner_name }} non configuré : envois refusés</div>
+                  <div v-if="rowErr['R' + c.iso]" class="row-err">{{ rowErr['R' + c.iso] }}</div>
+                </td>
+                <td><span v-for="m in c.methods" :key="m" class="gw-pill muted">{{ methodLabel[m] || m }}</span><span v-if="!c.methods.length">—</span></td>
+                <td class="num">{{ c.usage.count ? n(c.usage.count) + ' op. · ' + short(c.usage.volume) : '—' }}</td>
+                <td><IconAction v-if="c.overridden" icon="undo" label="Rétablir le partenaire par défaut" @click="setRemitPartner(c, 'default')" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <div v-if="!remitList.length" class="container empty">Aucun pays ne correspond.</div>
     </template>
 
     <!-- ================= Taux de change ================= -->
@@ -296,6 +369,32 @@ async function syncNotchpay() {
   nSyncing.value = true
   try { await run(() => api.post('/admin/corridors-sync/notchpay')) } finally { nSyncing.value = false }
 }
+// ---- Transferts internationaux (remittance)
+const remit = ref({ partners: [], countries: [], kpi: {} })
+const rBal = ref({})
+const rFlt = reactive({ q: '', partner: '' })
+const methodLabel = { wallet: 'Mobile money', bank: 'Banque', cash: 'Retrait cash' }
+const remitReady = (k) => !!remit.value.partners.find((p) => p.key === k)?.ready
+const partnerLabel = (k) => remit.value.partners.find((p) => p.key === k)?.name || ''
+const remitList = computed(() => {
+  const q = rFlt.q.toLowerCase().trim()
+  return (remit.value.countries || []).filter((c) => (!rFlt.partner || c.partner === rFlt.partner)
+    && (!q || [c.name, c.iso, c.currency].join(' ').toLowerCase().includes(q)))
+})
+async function loadRemit() {
+  try {
+    remit.value = (await api.get('/admin/remit/overview')).data
+    if (remit.value.partners.some((p) => p.ready) && !Object.keys(rBal.value).length) {
+      api.get('/admin/remit/balances').then(({ data }) => { rBal.value = data || {} }).catch(() => {})
+    }
+  } catch (e) {
+    error.value = e.response?.data?.message || e.message
+  }
+}
+async function setRemitPartner(c, partner) {
+  if (partner === 'off' && !(await confirmBox('Les clients ne pourront plus envoyer d\'argent vers ce pays depuis l\'app.', { title: `Fermer les transferts vers ${c.name} ?`, confirmLabel: 'Fermer', danger: true }))) return loadRemit()
+  run(() => api.post(`/admin/remit/countries/${c.iso}`, { partner }), 'R' + c.iso)
+}
 async function syncWacepay() {
   syncing.value = true
   try { await run(() => api.post('/admin/corridors-sync/wacepay')) } finally { syncing.value = false }
@@ -338,6 +437,7 @@ async function load() {
     partners.value = c.data.partners || []
     if (partnerReady('digitwace') && !wBal.value) loadWaceBalances()
     if (partnerReady('notchpay') && !nBal.value) loadNotchBalances()
+    loadRemit()
     rates.value = r.data
   } catch (e) {
     error.value = e.response?.data?.message || e.message
@@ -486,6 +586,9 @@ onMounted(load)
 .pbadge { font-weight: 800; font-size: 13px; border-radius: 99px; padding: 3px 10px; color: #fff; background: #1e3a8a; }
 .pbadge.p-digitwace { background: #ea7a17; }
 .pbadge.p-notchpay { background: #0f766e; }
+.pbadge.p-wacepay_remit { background: #ea7a17; }
+.pbadge.p-terrapay { background: #7c3aed; }
+.pbadge.p-pawapay { background: #0e9f6e; }
 .partner-cell { min-width: 230px; }
 .partner-cell .api { width: 140px; }
 .pl { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
@@ -497,6 +600,10 @@ onMounted(load)
 .api.p-peex { border-color: #1e3a8a; color: #1e3a8a; font-weight: 700; }
 .api.p-digitwace { border-color: #ea7a17; color: #b45309; font-weight: 700; }
 .api.p-notchpay { border-color: #0f766e; color: #0f766e; font-weight: 700; }
+.api.p-wacepay_remit { border-color: #ea7a17; color: #b45309; font-weight: 700; }
+.api.p-terrapay { border-color: #7c3aed; color: #6d28d9; font-weight: 700; }
+.api.p-pawapay { border-color: #0e9f6e; color: #047857; font-weight: 700; }
+.api.p-off { border-color: #d1d5db; color: #9ca3af; }
 .small { font-size: 12px; }
 .coverage { display: grid; gap: 6px; font-size: 13px; background: #fff7ed; border-radius: 8px; padding: 8px 10px; }
 .coverage small { font-size: 11.5px; color: var(--text-2); }
