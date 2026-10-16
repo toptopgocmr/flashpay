@@ -187,6 +187,33 @@ class QuoteService
                 }
             }
         }
+        // PawaPay (passerelle nationale) : opérateur du numéro reconnu par pawaPay et solde suffisant, avant tout débit
+        $pawa = app(\App\Services\Remit\PawapayClient::class);
+        foreach ([[$src, $collectBy, 'source'], [$dst, $payoutBy, 'destination']] as [$e, $by, $side]) {
+            if ($e['type'] !== 'mobile' || $by !== 'pawapay') {
+                continue;
+            }
+            $what = $side === 'source' ? "Collecte depuis {$e['country_name']}" : "Versements vers {$e['country_name']}";
+            if (! $pawa->enabled() || ! config('flashpay.rails.pawapay_momo.enabled', false)) {
+                $this->codes[] = $side === 'source' ? 'collect_unavailable' : 'payout_unavailable';
+                $problems[] = "{$what} confiés à PawaPay, mais PawaPay n'est pas configuré.";
+                continue;
+            }
+            try {
+                $pawa->providerFor($e['phone']);
+            } catch (\App\Services\Remit\RemitException $ex) {
+                if ($ex->isDefinitive()) {
+                    $problems[] = "Numéro {$e['phone']} non reconnu par l'opérateur mobile money (PawaPay).";
+                }
+            }
+        }
+        if ($dst['type'] === 'mobile' && $payoutBy === 'pawapay' && $pawa->enabled() && config('flashpay.pawapay.check_balance', true)) {
+            $avail = $pawa->availableFor($dst['currency'], $dst['country']);
+            if ($avail !== null && $avail < $outAmount) {
+                $this->codes[] = 'payout_unavailable';
+                $problems[] = "Les envois vers {$dst['country_name']} sont momentanément suspendus (réapprovisionnement du service de versement en cours). Réessayez plus tard ou envoyez un montant plus petit.";
+            }
+        }
         // Remboursement automatique d'une collecte PEEX = versement PEEX vers le payeur.
         // (Collecte WacePay : remboursement sur le wallet FlashPay du client.)
         if ($src['type'] === 'mobile' && $dst['type'] === 'mobile' && $collectBy === 'peex' && ! $src['payout']) {
@@ -194,7 +221,7 @@ class QuoteService
         }
     }
 
-    /** Partenaire (peex | digitwace) qui gère ce flux pour le pays. */
+    /** Partenaire (peex | digitwace | pawapay) qui gère ce flux pour le pays. */
     protected function partnerFor(?string $iso, string $field): string
     {
         if (! $iso) {
@@ -202,7 +229,7 @@ class QuoteService
         }
         try {
             $p = $this->corridors->country($iso)[$field] ?? 'peex';
-            return $p === 'digitwace' ? 'digitwace' : 'peex';
+            return in_array($p, ['digitwace', 'pawapay'], true) ? $p : 'peex';
         } catch (\Throwable) {
             return 'peex';
         }

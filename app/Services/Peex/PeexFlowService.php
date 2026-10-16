@@ -47,6 +47,9 @@ class PeexFlowService
         } catch (\Throwable) {
             return $rail;
         }
+        if ($partner === 'pawapay') {
+            return $this->pawapayRail('Collecte depuis ce pays confiée à PawaPay');
+        }
         if ($partner !== 'digitwace') {
             return 'peex';
         }
@@ -69,6 +72,9 @@ class PeexFlowService
         } catch (\Throwable) {
             return $rail;
         }
+        if ($partner === 'pawapay') {
+            return $this->pawapayRail('Versements vers ce pays confiés à PawaPay');
+        }
         if ($partner !== 'digitwace') {
             return 'peex';
         }
@@ -78,6 +84,15 @@ class PeexFlowService
         }
 
         return 'digitwace';
+    }
+
+    /** pawaPay choisi pour le pays : refusé (jamais routé ailleurs en silence) s'il n'est pas configuré. */
+    protected function pawapayRail(string $what): string
+    {
+        if (! config('flashpay.rails.pawapay_momo.enabled', false) || ! app(\App\Services\Remit\PawapayClient::class)->enabled()) {
+            throw new PeexException($what . ', mais PawaPay n\'est pas encore configuré. Contactez le support FlashPay.');
+        }
+        return 'pawapay_momo';
     }
 
     // ------------------------------------------------------------ Devis
@@ -331,6 +346,13 @@ class PeexFlowService
             $need = (int) $q['gross_destination_amount'];
             $avail = app(\App\Services\Digitwace\WacepayBalanceService::class)->availableFor($q['receive_currency']);
             if ($avail !== null && $avail < $need) {
+                throw new PeexException('Service de versement momentanément indisponible vers ce pays (solde partenaire insuffisant). Réessayez plus tard.');
+            }
+        }
+        if ($dst['type'] === 'mobile' && $payoutRail === 'pawapay_momo' && config('flashpay.pawapay.check_balance', true)) {
+            \Illuminate\Support\Facades\Cache::forget('pawapay:balances');
+            $avail = app(\App\Services\Remit\PawapayClient::class)->availableFor($q['receive_currency'], $dst['country'] ?? null);
+            if ($avail !== null && $avail < (int) $q['gross_destination_amount']) {
                 throw new PeexException('Service de versement momentanément indisponible vers ce pays (solde partenaire insuffisant). Réessayez plus tard.');
             }
         }

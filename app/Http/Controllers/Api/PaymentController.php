@@ -189,6 +189,16 @@ class PaymentController extends Controller
                     }
                 }
             }
+            // pawaPay (passerelle nationale) : collecte / versement relus chez pawaPay
+            foreach (\App\Models\RemitRequest::where('transaction_id', $transaction->id)->where('partner', 'pawapay_momo')->whereNull('finalized_at')->get() as $req) {
+                if (\Illuminate\Support\Facades\Cache::add('pawapay:poll:' . $req->id, 1, 4)) {
+                    try {
+                        app(\App\Services\Remit\RemitStatusHandler::class)->refresh($req);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('pawaPay : vérification du statut impossible', ['reference' => $req->reference, 'error' => $e->getMessage()]);
+                    }
+                }
+            }
             $transaction->refresh();
             // Délai de validation dépassé : on conclut sans attendre le planificateur
             app(\App\Services\Peex\PendingTimeoutService::class)->expireIfStale($transaction);

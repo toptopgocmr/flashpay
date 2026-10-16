@@ -226,7 +226,7 @@ const escalatePartner = ref('peex')
 const escalateMessage = ref('')
 
 const ST = { successful: 'Réussi', pending: 'En cours', failed: 'Échoué', processing: 'En cours', reversed: 'Remboursé', paid: 'Réussi' }
-const RAILS = { wallet: 'Wallet FlashPay', peex: 'Mobile money (PEEX)', digitwace: 'Mobile money (WacePay)', wacepay_remit: 'International (WacePay)', terrapay: 'International (TerraPay)', pawapay: 'International (PawaPay)', card: 'Carte bancaire', bank: 'Banque', cash: 'Espèces', atm: 'GAB', treasury: 'Trésorerie FlashPay' }
+const RAILS = { wallet: 'Wallet FlashPay', peex: 'Mobile money (PEEX)', digitwace: 'Mobile money (WacePay)', wacepay_remit: 'International (WacePay)', terrapay: 'International (TerraPay)', pawapay: 'International (PawaPay)', pawapay_momo: 'Mobile money (PawaPay)', card: 'Carte bancaire', bank: 'Banque', cash: 'Espèces', atm: 'GAB', treasury: 'Trésorerie FlashPay' }
 const nf = new Intl.NumberFormat('fr-FR')
 const n = (v) => nf.format(v || 0)
 const money = (v, c) => nf.format(v || 0) + ' ' + (c || 'XAF')
@@ -329,7 +329,7 @@ function accountLabel(acc) {
   if (kind === 'flashpay') return { name: FP[rest] || 'FlashPay · ' + rest }
   if (kind === 'digitwace') return { name: 'WacePay · ' + phone(rest) }
   if (kind === 'wacepay_remit') return { name: 'WacePay international · ' + rest }
-  if (kind === 'pawapay') return { name: 'PawaPay · ' + phone(rest) }
+  if (kind === 'pawapay' || kind === 'pawapay_momo') return { name: 'PawaPay · ' + phone(rest) }
   if (kind === 'terrapay') return { name: 'TerraPay · ' + rest }
   if (kind === 'peex') return { name: 'PEEX · ' + phone(rest) }
   return { name: acc }

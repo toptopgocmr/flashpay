@@ -24,7 +24,7 @@
           </div>
           <div class="gw-rows">
             <div class="gw-row"><span class="gw-dot" :class="{ off: !p.flows.includes('collect') }"></span>
-              <div class="gw-main"><b>Collecte</b><small v-if="p.key === 'digitwace' && p.coverage_countries">{{ p.coverage_payin }} pays disponibles · choisir WacePay dans la liste des pays</small></div>
+              <div class="gw-main"><b>Collecte</b><small v-if="p.key === 'pawapay'">Mobile money · callback à saisir chez pawaPay</small><small v-else-if="p.key === 'digitwace' && p.coverage_countries">{{ p.coverage_payin }} pays disponibles · choisir WacePay dans la liste des pays</small></div>
               <div class="gw-end"><b>{{ p.flows.includes('collect') ? n(p.collect_countries) + ' pays' : '—' }}</b></div></div>
             <div class="gw-row"><span class="gw-dot" :class="{ off: !p.payout_countries }"></span>
               <div class="gw-main"><b>Versement</b><small v-if="p.key === 'digitwace' && p.coverage_countries">{{ p.coverage_payout }} pays disponibles</small></div>
@@ -50,7 +50,7 @@
             <GwField :value="p.webhook" />
             <div class="pc-actions">
               <button class="btn-normal sm" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
-              <router-link class="btn-normal sm" :to="p.key === 'digitwace' ? '/wacepay' : '/peex'">Ouvrir la passerelle</router-link>
+              <router-link v-if="p.key !== 'pawapay'" class="btn-normal sm" :to="p.key === 'digitwace' ? '/wacepay' : '/peex'">Ouvrir la passerelle</router-link>
             </div>
           </div>
         </div>
@@ -111,6 +111,7 @@
                     <select class="api" :class="'p-' + gw(c)" :value="gw(c)" @change="setGateway(c, $event.target.value)" title="Collecte, versement, vérifications et soldes passent par cette passerelle">
                       <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payin') && !waceOk(c, 'payout')">WacePay</option>
+                      <option value="pawapay" :disabled="!c.pawapay">PawaPay{{ c.pawapay ? '' : ' — non couvert' }}</option>
                       <option value="mixed" disabled>Mixte</option>
                     </select>
                     <button type="button" class="custom-btn" @click="custom[c.country] = !custom[c.country]">{{ custom[c.country] ? 'Masquer' : 'Par flux' }}</button>
@@ -121,6 +122,7 @@
                     <select class="api" :class="'p-' + c.collect_partner" :value="c.collect_partner" @change="update(c, { collect_partner: $event.target.value })">
                       <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payin')">WacePay{{ waceNote(c, 'payin') }}</option>
+                      <option value="pawapay" :disabled="!c.pawapay">PawaPay{{ c.pawapay ? '' : ' — non couvert' }}</option>
                     </select>
                   </div>
                   <div class="pl" :class="{ dim: !c.payout }">
@@ -128,6 +130,7 @@
                     <select class="api" :class="'p-' + c.payout_partner" :value="c.payout_partner" @change="update(c, { payout_partner: $event.target.value })">
                       <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payout')">WacePay{{ waceNote(c, 'payout') }}</option>
+                      <option value="pawapay" :disabled="!c.pawapay">PawaPay{{ c.pawapay ? '' : ' — non couvert' }}</option>
                     </select>
                   </div>
                   </template>
@@ -141,6 +144,7 @@
                     </select>
                   </div>
                   <div v-if="(c.payout_partner === 'digitwace' || c.collect_partner === 'digitwace') && !partnerReady('digitwace')" class="t-warn small">⚠ WacePay non configuré</div>
+                  <div v-if="(c.payout_partner === 'pawapay' || c.collect_partner === 'pawapay') && !partnerReady('pawapay')" class="t-warn small">⚠ PawaPay non configuré (PAWAPAY_ENABLED, PAWAPAY_API_TOKEN)</div>
                   <div v-if="(c.payout_partner === 'digitwace' && !waceOk(c, 'payout')) || (c.collect_partner === 'digitwace' && !waceOk(c, 'payin'))" class="t-warn small">
                     ⚠ WacePay non confirmé ici ({{ c.wacepay ? 'service absent' : 'couverture non synchronisée' }})
                   </div>

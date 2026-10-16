@@ -60,6 +60,8 @@ Route::prefix('v1')->middleware('merchant.api')->group(function () {
 // Callbacks PEEX (Basic Auth) — une URL par service, + URL générique
 // Webhook Digitwace / WacePay (statut des versements) — vérifié par signature puis revalidé via l'API
 Route::post('/webhooks/digitwace', \App\Http\Controllers\Api\DigitwaceWebhookController::class)->middleware('throttle:120,1')->name('webhooks.digitwace');
+// Callbacks pawaPay (dépôts / versements / remittances) — statut toujours relu via l'API pawaPay
+Route::post('/webhooks/pawapay', \App\Http\Controllers\Api\PawapayWebhookController::class)->middleware('throttle:240,1,pawapay-callback')->name('webhooks.pawapay');
 
 Route::post('/webhooks/peex/{service?}', [WebhookController::class, 'peex'])
     ->where('service', 'collect|disbursement|remittance')

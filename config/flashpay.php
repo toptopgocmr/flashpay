@@ -51,6 +51,12 @@ return [
             'driver' => \App\Services\Remit\PawapayConnector::class,
             'enabled' => (bool) env('PAWAPAY_ENABLED', false),
         ],
+        // pawaPay passerelle nationale : collecte (deposits) et versements (payouts) mobile money
+        // pour les pays confiés à pawaPay dans la console (Pays & change), ex. MTN / Airtel Congo.
+        'pawapay_momo' => [
+            'driver' => \App\Services\Remit\PawapayMomoConnector::class,
+            'enabled' => (bool) env('PAWAPAY_ENABLED', false),
+        ],
     ],
 
     /*
@@ -122,6 +128,11 @@ return [
         'mode' => env('PAWAPAY_MODE', 'remittance'),
         'balances_path' => env('PAWAPAY_BALANCES_PATH', 'v2/wallet-balances'),
         'timeout' => (int) env('PAWAPAY_TIMEOUT', 40),
+        // Passerelle nationale : solde pawaPay vérifié avant chaque versement
+        'check_balance' => (bool) env('PAWAPAY_CHECK_BALANCE', true),
+        // Collecte / versement inconnus chez pawaPay après ce délai : jamais arrivés → échec (remboursement)
+        'not_found_minutes' => (int) env('PAWAPAY_NOT_FOUND_MINUTES', 15),
+        // Callbacks (à saisir dans le tableau de bord pawaPay) : {APP_URL}/api/webhooks/pawapay
     ],
 
     'terrapay' => [

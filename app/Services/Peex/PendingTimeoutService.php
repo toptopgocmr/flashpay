@@ -67,6 +67,14 @@ class PendingTimeoutService
                 Log::info('WacePay : dernière vérification impossible avant expiration', ['reference' => $tx->reference, 'error' => $e->getMessage()]);
             }
         }
+        // Collecte pawaPay
+        foreach (\App\Models\RemitRequest::where('transaction_id', $tx->id)->where('partner', 'pawapay_momo')->where('method', 'deposit')->whereNull('finalized_at')->get() as $req) {
+            try {
+                app(\App\Services\Remit\RemitStatusHandler::class)->refresh($req);
+            } catch (\Throwable $e) {
+                Log::info('pawaPay : dernière vérification impossible avant expiration', ['reference' => $tx->reference, 'error' => $e->getMessage()]);
+            }
+        }
         $tx->refresh();
         if ($tx->status !== 'processing' || $tx->stage !== 'awaiting_source') {
             return false; // confirmée (ou refusée) entre-temps

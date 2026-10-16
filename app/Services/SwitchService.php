@@ -47,6 +47,10 @@ class SwitchService
         if ($rail === 'pawapay' && config('flashpay.rails.pawapay.enabled', false)) {
             return app(\App\Services\Remit\PawapayConnector::class);
         }
+        // pawaPay passerelle nationale : collecte (deposits) + versements (payouts) mobile money
+        if ($rail === 'pawapay_momo' && config('flashpay.rails.pawapay_momo.enabled', false)) {
+            return app(\App\Services\Remit\PawapayMomoConnector::class);
+        }
         // PEEX : collecte et versements (le wallet interne n'a pas de connecteur).
         if ($rail !== 'peex' || ! config('flashpay.rails.peex.enabled', false)) {
             throw new \InvalidArgumentException("Rail de paiement non disponible : {$rail}");
@@ -310,7 +314,7 @@ class SwitchService
 
         // Source carte bancaire ou collecte WacePay : montant ET frais recrédités
         // immédiatement sur le wallet FlashPay du client (aucun frais conservé).
-        if (in_array($tx->source_rail, ['card', 'bank', 'digitwace'], true) && ($wallet = $this->refundWalletOf($tx))) {
+        if (in_array($tx->source_rail, ['card', 'bank', 'digitwace', 'pawapay_momo'], true) && ($wallet = $this->refundWalletOf($tx))) {
             return DB::transaction(function () use ($tx, $wallet, $reason) {
                 $from = "{$tx->source_rail}:" . ($tx->source_account ?: 'client');
                 $this->walletService->credit($wallet, $tx->amount + $tx->fee);

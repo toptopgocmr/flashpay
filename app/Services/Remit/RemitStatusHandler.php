@@ -6,7 +6,8 @@ use App\Models\RemitRequest;
 use App\Services\SwitchService;
 
 /**
- * Applique le statut d'un transfert international à la transaction FlashPay.
+ * Applique le statut d'un transfert international (ou d'une collecte / d'un versement
+ * pawaPay national) à la transaction FlashPay.
  * On n'agit QUE sur un statut lu auprès de l'API du partenaire : PAID / 3000 → succès,
  * CANCEL / échec → remboursement automatique du wallet (montant + frais).
  */
@@ -45,7 +46,13 @@ class RemitStatusHandler
     {
         $req->update(['status' => $status, 'finalized_at' => now()]);
         if ($tx = $req->transaction) {
-            $name = RemitCountries::partnerName($req->partner);
+            $name = $req->partner === 'pawapay_momo' ? 'PawaPay' : RemitCountries::partnerName($req->partner);
+            if ($req->method === 'deposit') {
+                // Collecte pawaPay (passerelle nationale) : le paiement du client
+                return tap($req->fresh(), fn () => $status === 'successful'
+                    ? $this->switch->onSourceConfirmed($tx)
+                    : $this->switch->onSourceFailed($tx, $name . ' : ' . $reason));
+            }
             $status === 'successful'
                 ? $this->switch->onDestinationConfirmed($tx)
                 : $this->switch->onDestinationFailed($tx, $name . ' : ' . $reason);

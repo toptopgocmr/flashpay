@@ -92,6 +92,8 @@ class PricingAdminController extends Controller
                 'collect_partner_name' => PeexCorridors::partnerName($c['collect_partner']),
                 // Services proposés par WacePay dans ce pays (synchro getPayerCode)
                 'wacepay' => $coverage[$c['country']] ?? null,
+                // pawaPay : pays de son réseau mobile money (collecte + versement)
+                'pawapay' => isset(\App\Services\Remit\PawapayClient::ISO3[$c['country']]) && ! in_array($c['country'], ['FR', 'US', 'BE', 'GB'], true),
                 'payout_partner_name' => PeexCorridors::partnerName($c['payout_partner']),
                 'overridden' => (bool) $o,
                 'note' => $o?->note,
@@ -103,6 +105,7 @@ class PricingAdminController extends Controller
         $rates = ExchangeRate::orderBy('base')->orderBy('quote')->get();
 
         $wace = app(\App\Services\Digitwace\DigitwaceClient::class);
+        $pawa = app(\App\Services\Remit\PawapayClient::class);
         $partners = [
             [
                 'key' => 'peex', 'name' => 'PEEX', 'flows' => ['collect', 'payout'],
@@ -127,6 +130,15 @@ class PricingAdminController extends Controller
                 'coverage_payout' => collect($coverage)->where('payout', true)->count(),
                 'coverage_synced_at' => cache('wacepay:coverage:synced_at'),
                 'webhook' => $wace->callbackUrl(),
+            ],
+            [
+                'key' => 'pawapay', 'name' => 'PawaPay', 'flows' => ['collect', 'payout'],
+                'ready' => $pawa->enabled() && (bool) config('flashpay.rails.pawapay_momo.enabled'),
+                'mode' => $pawa->enabled() ? ($pawa->sandbox() ? 'Sandbox' : 'Production') : 'jeton API à saisir',
+                'sandbox' => $pawa->sandbox(),
+                'collect_countries' => $list->where('collect', true)->where('collect_partner', 'pawapay')->count(),
+                'payout_countries' => $list->where('payout', true)->where('payout_partner', 'pawapay')->count(),
+                'webhook' => url('/api/webhooks/pawapay'),
             ],
         ];
 
@@ -157,10 +169,10 @@ class PricingAdminController extends Controller
             'payout' => 'sometimes|boolean',
             'payout_api' => 'sometimes|nullable|in:disbursement,remittance',
             // Partenaire qui gère les flux : collecte = PEEX (seul partenaire de collecte), versement = PEEX ou WacePay
-            'collect_partner' => 'sometimes|nullable|in:peex,digitwace',
-            'payout_partner' => 'sometimes|nullable|in:peex,digitwace',
+            'collect_partner' => 'sometimes|nullable|in:peex,digitwace,pawapay',
+            'payout_partner' => 'sometimes|nullable|in:peex,digitwace,pawapay',
             // Passerelle unique : collecte ET versement confiés au même partenaire
-            'partner' => 'sometimes|in:peex,digitwace',
+            'partner' => 'sometimes|in:peex,digitwace,pawapay',
             'note' => 'sometimes|nullable|string|max:190',
         ]);
         if (isset($v['partner'])) {
@@ -169,6 +181,12 @@ class PricingAdminController extends Controller
                 return response()->json(['message' => "{$iso} n'est couvert que par WacePay : PEEX ne peut pas gérer ses flux."], 422);
             }
             unset($v['partner']);
+        }
+
+        // pawaPay : uniquement les pays de son réseau mobile money
+        if (in_array('pawapay', [$v['collect_partner'] ?? null, $v['payout_partner'] ?? null], true)
+            && (! isset(\App\Services\Remit\PawapayClient::ISO3[$iso]) || in_array($iso, ['FR', 'US', 'BE', 'GB'], true))) {
+            return response()->json(['message' => "PawaPay ne couvre pas {$iso}."], 422);
         }
 
         // WacePay n'est proposé que là où la couverture synchronisée l'annonce
@@ -190,14 +208,17 @@ class PricingAdminController extends Controller
         \App\Support\Audit::log('corridor.update', null, ['country' => $iso] + $v, $request->user()->id);
 
         $waceOff = ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled();
+        $pawaOff = ! app(\App\Services\Remit\PawapayClient::class)->enabled() || ! config('flashpay.rails.pawapay_momo.enabled');
+        $off = fn (?string $p) => ($p === 'digitwace' && $waceOff) || ($p === 'pawapay' && $pawaOff);
+        $offName = fn (?string $p) => $p === 'pawapay' ? 'PawaPay' : 'WacePay';
         $message = match (true) {
             isset($v['payout_partner'], $v['collect_partner']) && $v['payout_partner'] === $v['collect_partner'] =>
                 'Tous les flux de ' . $iso . ' (collecte, versement, vérifications, soldes) passent désormais par ' . PeexCorridors::partnerName($v['payout_partner']) . '.'
-                . ($v['payout_partner'] === 'digitwace' && $waceOff ? ' Attention : WacePay n\'est pas encore configuré, les opérations de ce pays seront refusées.' : ''),
+                . ($off($v['payout_partner']) ? ' Attention : ' . $offName($v['payout_partner']) . ' n\'est pas encore configuré, les opérations de ce pays seront refusées.' : ''),
             isset($v['payout_partner']) => 'Versements vers ' . $iso . ' gérés par ' . PeexCorridors::partnerName($v['payout_partner']) . '.'
-                . ($v['payout_partner'] === 'digitwace' && $waceOff ? ' Attention : WacePay n\'est pas encore configuré, les envois vers ce pays seront refusés.' : ''),
+                . ($off($v['payout_partner']) ? ' Attention : ' . $offName($v['payout_partner']) . ' n\'est pas encore configuré, les envois vers ce pays seront refusés.' : ''),
             isset($v['collect_partner']) => 'Collecte depuis ' . $iso . ' gérée par ' . PeexCorridors::partnerName($v['collect_partner']) . '.'
-                . ($v['collect_partner'] === 'digitwace' && $waceOff ? ' Attention : WacePay n\'est pas encore configuré, les recharges / paiements depuis ce pays seront refusés.' : ''),
+                . ($off($v['collect_partner']) ? ' Attention : ' . $offName($v['collect_partner']) . ' n\'est pas encore configuré, les recharges / paiements depuis ce pays seront refusés.' : ''),
             default => 'Corridor mis à jour.',
         };
 

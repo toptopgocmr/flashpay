@@ -13,7 +13,9 @@ use Illuminate\Support\Facades\Log;
  *   Authorization: Bearer <jeton API>
  *   POST /v2/predict-provider        { phoneNumber } → { country (ISO3), provider, phoneNumber }
  *   POST /v2/remittances             transfert international (KYC expéditeur + détails de l'opération)
- *   POST /v2/payouts                 versement simple (mode PAWAPAY_MODE=payout)
+ *   POST /v2/payouts                 versement simple (mode PAWAPAY_MODE=payout, et versements nationaux)
+ *   POST /v2/deposits                collecte mobile money (le client valide sur son téléphone)
+ *   GET  /v2/deposits|payouts/{id}   statut d'une collecte / d'un versement
  *   GET  /v2/remittances/{id}        { status: FOUND|NOT_FOUND, data: { status: ACCEPTED|ENQUEUED|PROCESSING|IN_RECONCILIATION|COMPLETED|FAILED } }
  *   GET  /v2/active-conf             pays / opérateurs / opérations ouvertes
  *   GET  /v2/wallet-balances         soldes par pays
@@ -148,13 +150,66 @@ class PawapayClient
     /** @return array{status:string, raw_status:?string, raw:array} */
     public function status(string $id): array
     {
-        $path = ($this->mode() === 'payout' ? 'v2/payouts/' : 'v2/remittances/') . rawurlencode($id);
-        $json = $this->send('get', $path);
+        return $this->operationStatus($this->mode() === 'payout' ? 'payouts' : 'remittances', $id);
+    }
+
+    /** Opérateur du numéro, gardé 10 min (évite un appel par devis). */
+    public function providerFor(string $msisdn): array
+    {
+        $digits = preg_replace('/\D/', '', $msisdn);
+        return Cache::remember('pawapay:provider:' . $digits, 600, fn () => $this->predictProvider($digits));
+    }
+
+    /**
+     * Collecte (deposit) ou versement national (payout) mobile money.
+     * @param 'deposits'|'payouts' $kind
+     * @param array{phone:string, provider:string, amount:int|float, currency:string, reference:string, message?:string, decimals?:int} $p
+     * @return array{reference:string, status:string, raw_status:?string, raw:array, sent:array}
+     */
+    public function initiate(string $kind, string $id, array $p): array
+    {
+        $party = ['type' => 'MMO', 'accountDetails' => ['phoneNumber' => preg_replace('/\D/', '', $p['phone']), 'provider' => $p['provider']]];
+        $body = [
+            $kind === 'deposits' ? 'depositId' : 'payoutId' => $id,
+            $kind === 'deposits' ? 'payer' : 'recipient' => $party,
+            'amount' => number_format((float) $p['amount'], $p['decimals'] ?? 0, '.', ''),
+            'currency' => strtoupper($p['currency']),
+            'clientReferenceId' => $p['reference'],
+            'customerMessage' => self::customerMessage((string) ($p['message'] ?? 'FlashPay')),
+        ];
+        $json = $this->send('post', 'v2/' . $kind, $body);
+        $status = strtoupper((string) data_get($json, 'status', ''));
+        if ($status === 'REJECTED') {
+            $code = (string) data_get($json, 'failureReason.failureCode', 'REJECTED');
+            throw new RemitException('pawaPay : ' . (data_get($json, 'failureReason.failureMessage') ?: $code), $code, null, $json, true);
+        }
+        return ['reference' => $id, 'status' => 'pending', 'raw_status' => $status ?: null, 'raw' => $json, 'sent' => $body];
+    }
+
+    /** @param 'deposits'|'payouts'|'remittances' $kind @return array{status:string, raw_status:?string, raw:array, failure:?string} */
+    public function operationStatus(string $kind, string $id): array
+    {
+        $json = $this->send('get', 'v2/' . $kind . '/' . rawurlencode($id));
         if (strtoupper((string) data_get($json, 'status')) === 'NOT_FOUND') {
-            return ['status' => 'pending', 'raw_status' => 'NOT_FOUND', 'raw' => $json];
+            return ['status' => 'pending', 'raw_status' => 'NOT_FOUND', 'raw' => $json, 'failure' => null];
         }
         $raw = strtoupper((string) data_get($json, 'data.status', ''));
-        return ['status' => self::mapStatus($raw), 'raw_status' => $raw ?: null, 'raw' => $json];
+        $failure = data_get($json, 'data.failureReason.failureMessage') ?: data_get($json, 'data.failureReason.failureCode');
+        return ['status' => self::mapStatus($raw), 'raw_status' => $raw ?: null, 'raw' => $json, 'failure' => $failure ? (string) $failure : null];
+    }
+
+    /** Solde disponible pour une devise (null = inconnu : on ne bloque pas). */
+    public function availableFor(string $currency, ?string $iso2 = null): ?float
+    {
+        try {
+            $list = Cache::remember('pawapay:balances', 60, fn () => $this->balances());
+        } catch (\Throwable) {
+            return null;
+        }
+        $iso3 = self::iso3($iso2);
+        $rows = collect($list)->filter(fn ($b) => strtoupper((string) $b['currency']) === strtoupper($currency)
+            && (! $iso3 || ! $b['country'] || strtoupper((string) $b['country']) === $iso3));
+        return $rows->isEmpty() ? null : (float) $rows->sum('balance');
     }
 
     /** Soldes : [{country, currency, balance}] */
