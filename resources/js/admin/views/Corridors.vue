@@ -372,6 +372,32 @@ const convResult = computed(() => {
   return null
 })
 
+// ---- Transferts internationaux (remittance)
+const remit = ref({ partners: [], countries: [], kpi: {} })
+const rBal = ref({})
+const rFlt = reactive({ q: '', partner: '' })
+const methodLabel = { wallet: 'Mobile money', bank: 'Banque', cash: 'Retrait cash' }
+const remitReady = (k) => !!remit.value.partners.find((p) => p.key === k)?.ready
+const partnerLabel = (k) => remit.value.partners.find((p) => p.key === k)?.name || ''
+const remitList = computed(() => {
+  const q = rFlt.q.toLowerCase().trim()
+  return (remit.value.countries || []).filter((c) => (!rFlt.partner || c.partner === rFlt.partner)
+    && (!q || [c.name, c.iso, c.currency].join(' ').toLowerCase().includes(q)))
+})
+async function loadRemit() {
+  try {
+    remit.value = (await api.get('/admin/remit/overview')).data
+    if (remit.value.partners.some((p) => p.ready) && !Object.keys(rBal.value).length) {
+      api.get('/admin/remit/balances').then(({ data }) => { rBal.value = data || {} }).catch(() => {})
+    }
+  } catch (e) {
+    error.value = e.response?.data?.message || e.message
+  }
+}
+async function setRemitPartner(c, partner) {
+  if (partner === 'off' && !(await confirmBox('Les clients ne pourront plus envoyer d\'argent vers ce pays depuis l\'app.', { title: `Fermer les transferts vers ${c.name} ?`, confirmLabel: 'Fermer', danger: true }))) return loadRemit()
+  run(() => api.post(`/admin/remit/countries/${c.iso}`, { partner }), 'R' + c.iso)
+}
 async function load() {
   error.value = ''
   try {
