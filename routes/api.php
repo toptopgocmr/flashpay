@@ -60,8 +60,6 @@ Route::prefix('v1')->middleware('merchant.api')->group(function () {
 // Callbacks PEEX (Basic Auth) — une URL par service, + URL générique
 // Webhook Digitwace / WacePay (statut des versements) — vérifié par signature puis revalidé via l'API
 Route::post('/webhooks/digitwace', \App\Http\Controllers\Api\DigitwaceWebhookController::class)->middleware('throttle:120,1')->name('webhooks.digitwace');
-// Webhook Notch Pay (payment.* / transfer.*) — signature x-notch-signature puis revalidation via l'API
-Route::post('/webhooks/notchpay', \App\Http\Controllers\Api\NotchPayWebhookController::class)->middleware('throttle:120,1')->name('webhooks.notchpay');
 
 Route::post('/webhooks/peex/{service?}', [WebhookController::class, 'peex'])
     ->where('service', 'collect|disbursement|remittance')
@@ -392,8 +390,6 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/corridors/{iso}', [PricingAdminController::class, 'updateCorridor'])->where('iso', '[A-Za-z]{2}');
         Route::post('/corridors-sync/wacepay', [PricingAdminController::class, 'syncWacepay']);
         Route::get('/digitwace/balances', [PricingAdminController::class, 'wacepayBalances']);
-        Route::get('/notchpay/balances', [PricingAdminController::class, 'notchpayBalances']);
-        Route::post('/corridors-sync/notchpay', [PricingAdminController::class, 'syncNotchpay'])->middleware('throttle:5,1,notchpay-sync');
         // Transferts internationaux : partenaires de remittance et partenaire par pays
         Route::get('/remit/overview', [\App\Http\Controllers\Api\RemitAdminController::class, 'overview']);
         Route::get('/remit/balances', [\App\Http\Controllers\Api\RemitAdminController::class, 'balances'])->middleware('throttle:20,1,remit-balances');

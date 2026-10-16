@@ -234,20 +234,6 @@ class WacepayAdminController extends Controller
                 'raw_status' => $r->raw_status, 'message' => $r->message, 'final' => (bool) $r->finalized_at, 'checked_at' => $r->last_checked_at?->toIso8601String(),
                 'response' => $r->last_response, 'callback' => null];
         }
-        $notch = app(\App\Services\NotchPay\NotchPayStatusHandler::class);
-        foreach (\App\Models\NotchPayRequest::where('transaction_id', $transaction->id)->orderBy('id')->get() as $r) {
-            if (! $r->finalized_at) {
-                try {
-                    $notch->refresh($r);
-                } catch (\Throwable $e) {
-                    $r->update(['message' => mb_substr('Vérification : ' . $e->getMessage(), 0, 250)]);
-                }
-            }
-            $r->refresh();
-            $out[] = ['partner' => 'Notch Pay', 'reference' => $r->reference, 'id' => $r->notch_ref, 'operation' => $r->operation, 'status' => $r->status,
-                'raw_status' => $r->raw_status, 'message' => $r->message, 'final' => (bool) $r->finalized_at, 'checked_at' => $r->last_checked_at?->toIso8601String(),
-                'response' => $r->last_response, 'callback' => $r->last_callback];
-        }
         $peex = app(\App\Services\Peex\PeexStatusHandler::class);
         foreach ($transaction->peexRequests()->orderBy('id')->get() as $r) {
             if (! $r->finalized_at) {

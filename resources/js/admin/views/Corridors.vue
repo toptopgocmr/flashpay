@@ -45,28 +45,12 @@
                 <div class="gw-main"><b>Cartes · Banque</b></div>
                 <div class="gw-end"><span class="gw-pill" :class="p.card ? 'ok' : 'muted'">Cartes</span><span class="gw-pill" :class="p.bank_debit ? 'ok' : 'muted'">Banque</span></div></div>
             </template>
-            <template v-if="p.key === 'notchpay'">
-              <div class="gw-row"><span class="gw-dot" :class="{ off: !p.coverage_countries }"></span>
-                <div class="gw-main"><b>Couverture</b><small>{{ (p.coverage_list || []).join(', ') || '—' }}{{ p.coverage_synced_at ? ' · canaux ' + dt(p.coverage_synced_at) : ' · canaux non synchronisés' }}</small></div>
-                <div class="gw-end"><b v-if="p.coverage_countries">{{ p.coverage_countries }} pays</b>
-                  <button class="btn-normal sm" :disabled="nSyncing || !p.ready" @click="syncNotchpay">{{ nSyncing ? '…' : 'Synchroniser' }}</button></div></div>
-              <div class="gw-row"><span class="gw-dot" :class="nBal?.ok ? '' : (nBal ? 'err' : 'wait')"></span>
-                <div class="gw-main"><b>Solde</b><small v-if="nBal && !nBal.ok" class="t-err">{{ nBal.error }}</small></div>
-                <div class="gw-end">
-                  <span v-for="a in nBal?.accounts || []" :key="a.currency" class="gw-pill" :class="a.low ? 'warn' : 'ok'">{{ n(a.balance) }} {{ a.currency }}</span>
-                  <span v-if="nBal?.ok && !nBal.accounts.length" class="gw-pill muted">0</span>
-                  <span v-if="!nBal" class="gw-pill muted">…</span>
-                </div></div>
-              <div class="gw-row"><span class="gw-dot" :class="{ off: !p.private_key || !p.hash_key }"></span>
-                <div class="gw-main"><b>Clés</b><small>publique · privée (versements, solde) · hash (webhook)</small></div>
-                <div class="gw-end"><span class="gw-pill" :class="p.ready ? 'ok' : 'muted'">pk</span><span class="gw-pill" :class="p.private_key ? 'ok' : 'warn'">sk</span><span class="gw-pill" :class="p.hash_key ? 'ok' : 'warn'">hsk</span></div></div>
-            </template>
           </div>
           <div class="gw-card-b pc-bottom">
             <GwField :value="p.webhook" />
             <div class="pc-actions">
               <button class="btn-normal sm" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
-              <router-link v-if="p.key !== 'notchpay'" class="btn-normal sm" :to="p.key === 'digitwace' ? '/wacepay' : '/peex'">Ouvrir la passerelle</router-link>
+              <router-link class="btn-normal sm" :to="p.key === 'digitwace' ? '/wacepay' : '/peex'">Ouvrir la passerelle</router-link>
             </div>
           </div>
         </div>
@@ -127,7 +111,6 @@
                     <select class="api" :class="'p-' + gw(c)" :value="gw(c)" @change="setGateway(c, $event.target.value)" title="Collecte, versement, vérifications et soldes passent par cette passerelle">
                       <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payin') && !waceOk(c, 'payout')">WacePay</option>
-                      <option value="notchpay" :disabled="!c.notchpay">Notch Pay</option>
                       <option value="mixed" disabled>Mixte</option>
                     </select>
                     <button type="button" class="custom-btn" @click="custom[c.country] = !custom[c.country]">{{ custom[c.country] ? 'Masquer' : 'Par flux' }}</button>
@@ -138,7 +121,6 @@
                     <select class="api" :class="'p-' + c.collect_partner" :value="c.collect_partner" @change="update(c, { collect_partner: $event.target.value })">
                       <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payin')">WacePay{{ waceNote(c, 'payin') }}</option>
-                      <option value="notchpay" :disabled="!c.notchpay">Notch Pay{{ c.notchpay ? '' : ' — non disponible ici' }}</option>
                     </select>
                   </div>
                   <div class="pl" :class="{ dim: !c.payout }">
@@ -146,7 +128,6 @@
                     <select class="api" :class="'p-' + c.payout_partner" :value="c.payout_partner" @change="update(c, { payout_partner: $event.target.value })">
                       <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payout')">WacePay{{ waceNote(c, 'payout') }}</option>
-                      <option value="notchpay" :disabled="!c.notchpay">Notch Pay{{ c.notchpay ? '' : ' — non disponible ici' }}</option>
                     </select>
                   </div>
                   </template>
@@ -163,8 +144,6 @@
                   <div v-if="(c.payout_partner === 'digitwace' && !waceOk(c, 'payout')) || (c.collect_partner === 'digitwace' && !waceOk(c, 'payin'))" class="t-warn small">
                     ⚠ WacePay non confirmé ici ({{ c.wacepay ? 'service absent' : 'couverture non synchronisée' }})
                   </div>
-                  <div v-if="c.notchpay?.channels?.length && (c.payout_partner === 'notchpay' || c.collect_partner === 'notchpay')" class="wace-avail">Notch Pay ici : {{ c.notchpay.channels.join(', ') }}</div>
-                  <div v-if="(c.payout_partner === 'notchpay' || c.collect_partner === 'notchpay') && !partnerReady('notchpay')" class="t-warn small">⚠ Notch Pay non configuré</div>
                   <div v-if="rowErr[c.country]" class="row-err">{{ rowErr[c.country] }}</div>
                 </td>
                 <td class="num">{{ c.usage.count ? n(c.usage.count) + ' op. · ' + short(c.usage.volume) : '—' }}</td>
@@ -358,43 +337,6 @@ function loadWaceBalances(refresh = false) {
     .catch((e) => { wBal.value = { ok: false, error: e.response?.data?.message || e.message, accounts: [] } })
     .finally(() => { wBalLoading.value = false })
 }
-const nBal = ref(null)
-const nSyncing = ref(false)
-function loadNotchBalances(refresh = false) {
-  api.get('/admin/notchpay/balances', { params: refresh ? { refresh: 1 } : {} })
-    .then(({ data }) => { nBal.value = data })
-    .catch((e) => { nBal.value = { ok: false, error: e.response?.data?.message || e.message, accounts: [] } })
-}
-async function syncNotchpay() {
-  nSyncing.value = true
-  try { await run(() => api.post('/admin/corridors-sync/notchpay')) } finally { nSyncing.value = false }
-}
-// ---- Transferts internationaux (remittance)
-const remit = ref({ partners: [], countries: [], kpi: {} })
-const rBal = ref({})
-const rFlt = reactive({ q: '', partner: '' })
-const methodLabel = { wallet: 'Mobile money', bank: 'Banque', cash: 'Retrait cash' }
-const remitReady = (k) => !!remit.value.partners.find((p) => p.key === k)?.ready
-const partnerLabel = (k) => remit.value.partners.find((p) => p.key === k)?.name || ''
-const remitList = computed(() => {
-  const q = rFlt.q.toLowerCase().trim()
-  return (remit.value.countries || []).filter((c) => (!rFlt.partner || c.partner === rFlt.partner)
-    && (!q || [c.name, c.iso, c.currency].join(' ').toLowerCase().includes(q)))
-})
-async function loadRemit() {
-  try {
-    remit.value = (await api.get('/admin/remit/overview')).data
-    if (remit.value.partners.some((p) => p.ready) && !Object.keys(rBal.value).length) {
-      api.get('/admin/remit/balances').then(({ data }) => { rBal.value = data || {} }).catch(() => {})
-    }
-  } catch (e) {
-    error.value = e.response?.data?.message || e.message
-  }
-}
-async function setRemitPartner(c, partner) {
-  if (partner === 'off' && !(await confirmBox('Les clients ne pourront plus envoyer d\'argent vers ce pays depuis l\'app.', { title: `Fermer les transferts vers ${c.name} ?`, confirmLabel: 'Fermer', danger: true }))) return loadRemit()
-  run(() => api.post(`/admin/remit/countries/${c.iso}`, { partner }), 'R' + c.iso)
-}
 async function syncWacepay() {
   syncing.value = true
   try { await run(() => api.post('/admin/corridors-sync/wacepay')) } finally { syncing.value = false }
@@ -436,7 +378,6 @@ async function load() {
     sandbox.value = c.data.sandbox
     partners.value = c.data.partners || []
     if (partnerReady('digitwace') && !wBal.value) loadWaceBalances()
-    if (partnerReady('notchpay') && !nBal.value) loadNotchBalances()
     loadRemit()
     rates.value = r.data
   } catch (e) {
@@ -585,7 +526,6 @@ onMounted(load)
 .diag-h .close { float: right; padding: 0 2px; color: var(--text-2); }
 .pbadge { font-weight: 800; font-size: 13px; border-radius: 99px; padding: 3px 10px; color: #fff; background: #1e3a8a; }
 .pbadge.p-digitwace { background: #ea7a17; }
-.pbadge.p-notchpay { background: #0f766e; }
 .pbadge.p-wacepay_remit { background: #ea7a17; }
 .pbadge.p-terrapay { background: #7c3aed; }
 .pbadge.p-pawapay { background: #0e9f6e; }
@@ -599,7 +539,6 @@ onMounted(load)
 .pl .lbl { width: 72px; font-size: 12px; color: var(--text-2); }
 .api.p-peex { border-color: #1e3a8a; color: #1e3a8a; font-weight: 700; }
 .api.p-digitwace { border-color: #ea7a17; color: #b45309; font-weight: 700; }
-.api.p-notchpay { border-color: #0f766e; color: #0f766e; font-weight: 700; }
 .api.p-wacepay_remit { border-color: #ea7a17; color: #b45309; font-weight: 700; }
 .api.p-terrapay { border-color: #7c3aed; color: #6d28d9; font-weight: 700; }
 .api.p-pawapay { border-color: #0e9f6e; color: #047857; font-weight: 700; }

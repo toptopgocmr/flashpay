@@ -37,12 +37,6 @@ return [
             'driver' => \App\Services\Digitwace\DigitwaceConnector::class,
             'enabled' => (bool) env('DIGITWACE_ENABLED', false),
         ],
-        // Notch Pay : collecte (direct charge mobile money) et versements (transfers)
-        // pour les pays où la console confie les flux à Notch Pay.
-        'notchpay' => [
-            'driver' => \App\Services\NotchPay\NotchPayConnector::class,
-            'enabled' => (bool) env('NOTCHPAY_ENABLED', false),
-        ],
         // Transferts internationaux (remittance) : WacePay API v2 (wallet, banque, retrait cash)
         // et TerraPay (wallet, banque). Versement uniquement : la source est le wallet FlashPay.
         'wacepay_remit' => [
@@ -153,40 +147,6 @@ return [
             'b2p' => env('TERRAPAY_TYPE_B2P', 'inttransfer'),
             'b2b' => env('TERRAPAY_TYPE_B2B', 'inttransfer'),
         ],
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Notch Pay (https://developer.notchpay.co)
-    |--------------------------------------------------------------------------
-    | Clés : Business Suite Notch Pay › Settings › API Keys (mode Sandbox ou Production).
-    |  - NOTCHPAY_PUBLIC_KEY  (pk_test.… / pk_live.…)  : en-tête Authorization
-    |  - NOTCHPAY_PRIVATE_KEY (sk_test.… / sk_live.…)  : en-tête X-Grant (transferts, solde)
-    |  - NOTCHPAY_HASH_KEY    (hsk_test.… / hsk_live.…): vérification HMAC-SHA256 des webhooks
-    | Transferts : l'IP SORTANTE du serveur doit être autorisée dans le tableau de bord
-    | (Railway : « Static Outbound IPs »).
-    | Webhook à déclarer (Settings › Webhooks) : {APP_URL}/api/webhooks/notchpay
-    */
-    'notchpay' => [
-        'enabled' => (bool) env('NOTCHPAY_ENABLED', false),
-        'base_url' => env('NOTCHPAY_BASE_URL', 'https://api.notchpay.co'),
-        'public_key' => env('NOTCHPAY_PUBLIC_KEY', ''),
-        'private_key' => env('NOTCHPAY_PRIVATE_KEY', ''),
-        'hash_key' => env('NOTCHPAY_HASH_KEY', ''),
-        'timeout' => (int) env('NOTCHPAY_TIMEOUT', 30),
-        // E-mail envoyé à Notch Pay quand le client n'en a pas (champ requis : e-mail OU téléphone)
-        'default_email' => env('NOTCHPAY_DEFAULT_EMAIL', 'clients@flashpay.cg'),
-        // Pays proposés pour Notch Pay dans la console (ISO2). Complété par la synchro des canaux (GET /channels).
-        'countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('NOTCHPAY_COUNTRIES', 'CM,CI,SN,GH,KE,UG'))))),
-        // Canaux forcés : « CM:MTN=cm.mtn,CM:ORANGE=cm.orange,SN:WAVE=sn.wave » (sinon {pays}.{opérateur})
-        'channel_map' => collect(explode(',', (string) env('NOTCHPAY_CHANNELS', '')))->filter(fn ($p) => str_contains($p, '='))
-            ->mapWithKeys(fn ($p) => [strtoupper(trim(explode('=', $p, 2)[0])) => strtolower(trim(explode('=', $p, 2)[1]))])->all(),
-        // Vérifier le solde Notch Pay avant chaque versement (bloque si connu et insuffisant)
-        'check_balance' => (bool) env('NOTCHPAY_CHECK_BALANCE', true),
-        'low_balance_alert' => (int) env('NOTCHPAY_LOW_BALANCE_ALERT', 100000),
-        // Webhook entrant
-        'callback_url' => env('NOTCHPAY_CALLBACK_URL'),
-        'webhook_ips' => env('NOTCHPAY_WEBHOOK_IPS', ''),
     ],
 
     'digitwace' => [

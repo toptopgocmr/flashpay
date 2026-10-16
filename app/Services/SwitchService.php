@@ -37,10 +37,6 @@ class SwitchService
         if ($rail === 'digitwace' && config('flashpay.rails.digitwace.enabled', false)) {
             return app(\App\Services\Digitwace\DigitwaceConnector::class);
         }
-        // Notch Pay : collecte + versements des pays confiés à Notch Pay
-        if ($rail === 'notchpay' && config('flashpay.rails.notchpay.enabled', false)) {
-            return app(\App\Services\NotchPay\NotchPayConnector::class);
-        }
         // Transferts internationaux (versement) : WacePay API v2 / TerraPay
         if ($rail === 'wacepay_remit' && config('flashpay.rails.wacepay_remit.enabled', false)) {
             return app(\App\Services\Remit\WacepayRemitConnector::class);
@@ -314,7 +310,7 @@ class SwitchService
 
         // Source carte bancaire ou collecte WacePay : montant ET frais recrédités
         // immédiatement sur le wallet FlashPay du client (aucun frais conservé).
-        if (in_array($tx->source_rail, ['card', 'bank', 'digitwace', 'notchpay'], true) && ($wallet = $this->refundWalletOf($tx))) {
+        if (in_array($tx->source_rail, ['card', 'bank', 'digitwace'], true) && ($wallet = $this->refundWalletOf($tx))) {
             return DB::transaction(function () use ($tx, $wallet, $reason) {
                 $from = "{$tx->source_rail}:" . ($tx->source_account ?: 'client');
                 $this->walletService->credit($wallet, $tx->amount + $tx->fee);

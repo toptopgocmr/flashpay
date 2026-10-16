@@ -47,9 +47,6 @@ class PeexFlowService
         } catch (\Throwable) {
             return $rail;
         }
-        if ($partner === 'notchpay') {
-            return $this->notchpayRail('Collecte depuis ce pays');
-        }
         if ($partner !== 'digitwace') {
             return 'peex';
         }
@@ -72,9 +69,6 @@ class PeexFlowService
         } catch (\Throwable) {
             return $rail;
         }
-        if ($partner === 'notchpay') {
-            return $this->notchpayRail('Versements vers ce pays', payout: true);
-        }
         if ($partner !== 'digitwace') {
             return 'peex';
         }
@@ -84,17 +78,6 @@ class PeexFlowService
         }
 
         return 'digitwace';
-    }
-
-    /** Notch Pay choisi mais pas configuré : on refuse plutôt que de router en silence ailleurs. */
-    protected function notchpayRail(string $what, bool $payout = false): string
-    {
-        $ok = config('flashpay.rails.notchpay.enabled', false) && app(\App\Services\NotchPay\NotchPayClient::class)->enabled()
-            && (! $payout || config('flashpay.notchpay.private_key'));
-        if (! $ok) {
-            throw new PeexException($what . ' confié(e) à Notch Pay, mais Notch Pay n\'est pas encore configuré. Contactez le support FlashPay.');
-        }
-        return 'notchpay';
     }
 
     // ------------------------------------------------------------ Devis
@@ -348,12 +331,6 @@ class PeexFlowService
             $need = (int) $q['gross_destination_amount'];
             $avail = app(\App\Services\Digitwace\WacepayBalanceService::class)->availableFor($q['receive_currency']);
             if ($avail !== null && $avail < $need) {
-                throw new PeexException('Service de versement momentanément indisponible vers ce pays (solde partenaire insuffisant). Réessayez plus tard.');
-            }
-        }
-        if ($dst['type'] === 'mobile' && $payoutRail === 'notchpay' && config('flashpay.notchpay.check_balance', true)) {
-            $avail = app(\App\Services\NotchPay\NotchPayBalanceService::class)->availableFor($q['receive_currency'], fresh: true);
-            if ($avail !== null && $avail < (int) $q['gross_destination_amount']) {
                 throw new PeexException('Service de versement momentanément indisponible vers ce pays (solde partenaire insuffisant). Réessayez plus tard.');
             }
         }

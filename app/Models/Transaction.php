@@ -140,11 +140,6 @@ class Transaction extends Model
         return $this->hasMany(DigitwaceRequest::class);
     }
 
-    public function notchpayRequests()
-    {
-        return $this->hasMany(NotchPayRequest::class);
-    }
-
     public function remitRequests()
     {
         return $this->hasMany(RemitRequest::class);
