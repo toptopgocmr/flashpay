@@ -7,17 +7,22 @@ use Illuminate\Database\Eloquent\Model;
 /** Palier de la grille des transferts internationaux (« * » = toutes les valeurs). */
 class RemitTariff extends Model
 {
-    protected $fillable = ['country', 'business_type', 'method', 'partner', 'min_amount', 'max_amount', 'fee_type', 'fee_value', 'min_fee', 'max_fee', 'active', 'label'];
+    protected $fillable = ['zone_id', 'country', 'business_type', 'method', 'partner', 'min_amount', 'max_amount', 'fee_type', 'fee_value', 'min_fee', 'max_fee', 'active', 'label'];
 
     protected function casts(): array
     {
-        return ['min_amount' => 'integer', 'max_amount' => 'integer', 'fee_value' => 'float', 'min_fee' => 'integer', 'max_fee' => 'integer', 'active' => 'boolean'];
+        return ['zone_id' => 'integer', 'min_amount' => 'integer', 'max_amount' => 'integer', 'fee_value' => 'float', 'min_fee' => 'integer', 'max_fee' => 'integer', 'active' => 'boolean'];
     }
 
-    /** Spécificité : le palier le plus précis l'emporte (pays > type > réception > partenaire). */
+    public function zone()
+    {
+        return $this->belongsTo(RemitZone::class);
+    }
+
+    /** Spécificité : le palier le plus précis l'emporte (pays > zone > type > réception > partenaire). */
     public function specificity(): int
     {
-        return ($this->country !== '*' ? 8 : 0) + ($this->business_type !== '*' ? 4 : 0) + ($this->method !== '*' ? 2 : 0) + ($this->partner !== '*' ? 1 : 0);
+        return ($this->country !== '*' ? 16 : 0) + ($this->zone_id ? 8 : 0) + ($this->business_type !== '*' ? 4 : 0) + ($this->method !== '*' ? 2 : 0) + ($this->partner !== '*' ? 1 : 0);
     }
 
     public function feeFor(int $amount): int

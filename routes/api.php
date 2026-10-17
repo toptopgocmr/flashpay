@@ -394,6 +394,12 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/remit-tariffs/simulate', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'simulate']);
         Route::post('/remit-tariffs/{remitTariff}/active', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'toggle'])->whereNumber('remitTariff');
         Route::delete('/remit-tariffs/{remitTariff}', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'destroy'])->whereNumber('remitTariff');
+        Route::post('/remit-zones', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'zoneUpsert']);
+        Route::delete('/remit-zones/{remitZone}', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'zoneDestroy'])->whereNumber('remitZone');
+        Route::post('/remit-taxes', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'taxUpsert']);
+        Route::delete('/remit-taxes/{remitTax}', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'taxDestroy'])->whereNumber('remitTax');
+        Route::post('/remit-currencies', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'currencyUpsert']);
+        Route::delete('/remit-currencies/{remitCurrency}', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'currencyDestroy'])->whereNumber('remitCurrency');
         Route::get('/corridors', [PricingAdminController::class, 'corridors']);
         Route::post('/corridors/{iso}', [PricingAdminController::class, 'updateCorridor'])->where('iso', '[A-Za-z]{2}');
         Route::post('/corridors-sync/wacepay', [PricingAdminController::class, 'syncWacepay']);
@@ -407,6 +413,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::delete('/digitwace/discover', [PricingAdminController::class, 'resetWacepayEndpoint']);
         // Passerelle PawaPay (collecte / versement mobile money, remittance)
         Route::get('/pawapay/overview', [\App\Http\Controllers\Api\PawapayAdminController::class, 'overview'])->middleware('throttle:30,1,pawapay-overview');
+        Route::get('/pawapay/balances', [\App\Http\Controllers\Api\PawapayAdminController::class, 'balances'])->middleware('throttle:30,1,pawapay-balances');
         Route::post('/pawapay/test-number', [\App\Http\Controllers\Api\PawapayAdminController::class, 'testNumber'])->middleware('throttle:20,1,pawapay-test');
         Route::post('/pawapay/requests/{remitRequest}/refresh', [\App\Http\Controllers\Api\PawapayAdminController::class, 'refresh'])->whereNumber('remitRequest');
         Route::get('/wacepay/overview', [\App\Http\Controllers\Api\WacepayAdminController::class, 'overview']);

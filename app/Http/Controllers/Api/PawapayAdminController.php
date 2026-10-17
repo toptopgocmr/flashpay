@@ -67,6 +67,24 @@ class PawapayAdminController extends Controller
         return response()->json($out);
     }
 
+    /** Soldes PawaPay par pays / devise (tableau de bord), 10 s max. */
+    public function balances(PawapayClient $client)
+    {
+        $out = ['configured' => $client->enabled(), 'sandbox' => $client->sandbox(), 'checked_at' => now()->toIso8601String(), 'accounts' => []];
+        if (! $client->enabled()) {
+            return response()->json($out + ['ok' => false, 'error' => 'PawaPay non configuré (PAWAPAY_ENABLED, PAWAPAY_API_TOKEN).']);
+        }
+        config(['flashpay.pawapay.timeout' => min(10, (int) config('flashpay.pawapay.timeout', 40))]);
+        try {
+            $iso2 = array_flip(PawapayClient::ISO3);
+            $out['accounts'] = collect($client->balances())->map(fn ($b) => $b + ['iso' => $iso2[strtoupper((string) $b['country'])] ?? null])->values()->all();
+            $out['total_xaf'] = collect($out['accounts'])->whereIn('currency', ['XAF', 'XOF'])->sum('balance');
+            return response()->json($out + ['ok' => true]);
+        } catch (\Throwable $e) {
+            return response()->json($out + ['ok' => false, 'error' => mb_substr($e->getMessage(), 0, 200)]);
+        }
+    }
+
     /** Test sans mouvement d'argent : opérateur reconnu pour un numéro (POST /v2/predict-provider). */
     public function testNumber(Request $request, PawapayClient $client)
     {

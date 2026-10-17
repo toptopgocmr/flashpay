@@ -213,11 +213,15 @@ class InternationalTransferService
             $codes[] = 'profile_incomplete';
         }
 
-        // Grille dédiée (Console › Tarifs internationaux) : pays, type, réception, partenaire, tranche
-        $priced = app(RemitFeeService::class)->compute($c['iso'], $bt, $method, $c['partner'] ?? null, $amount);
+        // Normes (Console › Tarifs internationaux) : zone + seuil, frais HT de la tranche, taxes → frais TTC
+        $pricing = app(RemitFeeService::class);
+        $priced = $pricing->compute($c['iso'], $bt, $method, $c['partner'] ?? null, $amount);
         $fee = $priced['fee'];
+        if ($priced['threshold'] && $amount > $priced['threshold']) {
+            $problems[] = 'Montant maximum par transfert vers ' . $priced['zone']->name . ' : ' . number_format($priced['threshold'], 0, ',', ' ') . " {$currency}.";
+        }
         try {
-            $fx = $this->fx->convert($amount, $currency, $c['currency']);
+            $fx = $pricing->convert($amount, $currency, $c['currency']);
         } catch (\RuntimeException $e) {
             $fx = ['amount' => 0, 'rate' => 0, 'margin_percent' => 0, 'from' => $currency, 'to' => $c['currency'], 'source' => 'indisponible'];
             $problems[] = "Taux de change {$currency} → {$c['currency']} non disponible pour le moment.";
@@ -241,6 +245,10 @@ class InternationalTransferService
             'amount' => $amount,
             'currency' => $currency,
             'fee' => $fee,
+            'fee_ht' => $priced['fee_ht'],
+            'taxes' => $priced['taxes'],
+            'taxes_total' => $priced['taxes_total'],
+            'zone' => $priced['zone'] ? ['id' => $priced['zone']->id, 'name' => $priced['zone']->name, 'threshold' => $priced['threshold']] : null,
             'tariff_id' => $priced['tariff']?->id,
             'total' => $amount + $fee,
             'fx' => $fx,
@@ -345,6 +353,7 @@ class InternationalTransferService
                 'business_type' => strtoupper($bt),
                 'payout_method' => $method,
                 'fx' => $converted ? $q['fx'] : null,
+                'pricing' => ['zone' => $q['zone']['name'] ?? null, 'fee_ht' => $q['fee_ht'], 'taxes' => $q['taxes'], 'fee_ttc' => $q['fee'], 'tariff_id' => $q['tariff_id']],
                 'remit' => $remit,
                 'purpose' => $remit['why']['reason'] ?? null,
                 'note' => $remit['note'],

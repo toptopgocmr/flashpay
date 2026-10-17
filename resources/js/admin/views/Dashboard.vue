@@ -70,6 +70,13 @@
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" :class="{ rot: waceLoading }"><path d="M14 8a6 6 0 1 1-2-4.5M14 2v4h-4"/></svg>
               </button>
             </template>
+            <template v-if="w.key === 'pawapay'">
+              <span class="muted" v-if="pawa?.checked_at">Vérifié à {{ new Date(pawa.checked_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }}</span>
+              <span v-if="pawa?.sandbox" class="status pending">Sandbox</span>
+              <button class="icon-btn" @click="loadPawa()" :disabled="pawaLoading" title="Rafraîchir les soldes">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" :class="{ rot: pawaLoading }"><path d="M14 8a6 6 0 1 1-2-4.5M14 2v4h-4"/></svg>
+              </button>
+            </template>
             <template v-if="w.key === 'peex'">
               <span class="muted" v-if="peex">Vérifié à {{ peexAt }}</span>
               <button class="icon-btn" @click="loadPeex(true)" :disabled="peexLoading" title="Rafraîchir les soldes">
@@ -213,6 +220,23 @@
                     <span v-if="a.low" class="t-warn"> · <StatusIcon kind="warn" /> Solde bas</span></div>
                 </router-link>
               </li>
+            </ul>
+          </div>
+
+          <!-- ---------- Soldes PawaPay ---------- -->
+          <div v-else-if="w.key === 'pawapay'">
+            <div v-if="pawa && !pawa.ok" class="flash err"><div>{{ pawa.configured === false ? 'PawaPay n’est pas encore configuré (variables Railway).' : 'Soldes PawaPay indisponibles : ' + pawa.error }}</div></div>
+            <router-link to="/pawapay" class="peex-total">
+              <span>Total chez PawaPay (XAF/XOF)</span>
+              <b :class="{ skeleton: !pawa }">{{ pawa?.ok ? xaf(pawa.total_xaf) : '—' }}</b>
+            </router-link>
+            <ul class="peex-list">
+              <li v-for="a in pawa?.accounts || []" :key="(a.country || '') + a.currency">
+                <router-link to="/pawapay">
+                  <div class="row1"><span class="lbl"><Flag v-if="a.iso" :iso="a.iso" :size="13" /> {{ a.iso || a.country }}</span><span class="amt">{{ n(a.balance) }} {{ a.currency }}</span></div>
+                </router-link>
+              </li>
+              <li v-if="pawa?.ok && !pawa.accounts.length" class="muted" style="padding:8px 0;">Aucun solde renvoyé par PawaPay.</li>
             </ul>
           </div>
 
@@ -398,6 +422,7 @@
 <script setup>
 import { computed, h, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import api from '../services/api'
+import Flag from '../components/Flag.vue'
 import { Bar, Doughnut } from 'vue-chartjs'
 import {
   Chart as ChartJS, Tooltip, Legend, BarElement, BarController, LineElement, LineController,
@@ -430,6 +455,7 @@ const W = {
   quick: { title: 'Récemment visités', about: 'Vos derniers écrans et les accès rapides.', size: 1 },
   peex: { title: 'Soldes PEEX', desc: 'Disponible = solde − montants engagés', about: 'Soldes des comptes FlashPay chez PEEX.', size: 2, foot: { to: '/peex', l: 'Passerelle PEEX' } },
   wacepay: { title: 'Soldes WacePay', desc: 'Disponible = solde − versements en cours', about: 'Soldes du compte FlashPay chez WacePay (Digitwace), par devise.', size: 2, foot: { to: '/corridors', l: 'Pays & partenaires' } },
+  pawapay: { title: 'Soldes PawaPay', desc: 'Solde du compte FlashPay chez PawaPay, par pays', about: 'Soldes PawaPay (collecte, versement, remittance mobile money).', size: 2, foot: { to: '/pawapay', l: 'Passerelle PawaPay' } },
   activity: { title: 'Activité', desc: 'Volume réussi et nombre de transactions par jour', about: 'Graphique quotidien du volume et du nombre.', size: 2 },
   network: { title: 'Réseau par rôle', about: 'Comptes des six profils de l’application mobile.', size: 2, foot: { to: '/roles', l: 'Rôles & habilitations' } },
   compare: { title: 'Période vs précédente', about: 'Comparaison des indicateurs avec la période précédente.', size: 2, flush: true },
@@ -438,7 +464,7 @@ const W = {
   agents: { title: 'Top 5 agents', about: 'Agents les plus actifs sur la période.', size: 2, flush: true, foot: { to: '/agents', l: 'Tous les agents' } },
   recent: { title: 'Transactions récentes', about: 'Les dernières opérations de la plateforme.', size: 4, flush: true, foot: { to: '/transactions', l: 'Voir toutes les transactions' } },
 }
-const DEFAULT_ORDER = ['kpi', 'status', 'health', 'todo', 'quick', 'peex', 'wacepay', 'activity', 'ops', 'network', 'compare', 'merchants', 'agents', 'recent']
+const DEFAULT_ORDER = ['kpi', 'status', 'health', 'todo', 'quick', 'peex', 'wacepay', 'pawapay', 'activity', 'ops', 'network', 'compare', 'merchants', 'agents', 'recent']
 const LS_KEY = 'fp_admin_dashboard_layout_v2'
 const SIZES = [{ v: 1, l: 'Petite (1/4)' }, { v: 2, l: 'Moyenne (1/2)' }, { v: 3, l: 'Grande (3/4)' }, { v: 4, l: 'Pleine largeur' }]
 
@@ -755,12 +781,23 @@ function loadWace(refresh = false) {
     .catch((e) => { wace.value = { ok: false, error: e.response?.data?.message || e.message, accounts: [] } })
     .finally(() => { waceLoading.value = false })
 }
+/* ------------------------------------------------------------------ Soldes PawaPay */
+const pawa = ref(null)
+const pawaLoading = ref(false)
+function loadPawa() {
+  pawaLoading.value = true
+  api.get('/admin/pawapay/balances')
+    .then(({ data }) => { pawa.value = data })
+    .catch((e) => { pawa.value = { ok: false, error: e.response?.data?.message || e.message, accounts: [] } })
+    .finally(() => { pawaLoading.value = false })
+}
 function loadNet() { api.get('/admin/roles').then(({ data }) => { net.value = data }).catch(() => {}) }
 
 async function load() {
   loadNet()
   loadPeex()
   loadWace()
+  loadPawa()
   loading.value = true
   error.value = ''
   try {

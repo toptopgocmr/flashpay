@@ -128,8 +128,8 @@
                 <select v-model="tin.service_id"><option value="">— choisir —</option><option v-for="s in walletPayin" :key="s.id" :value="s.id">{{ s.name || s.id }}{{ s.country ? ' · ' + s.country : '' }}</option></select></label>
               <label class="full">Numéro (customer_msisdn)
                 <div class="ph">
-                  <select v-model="tin.iso" :title="country(tin.iso)?.name"><option v-for="c in dialList" :key="c.iso" :value="c.iso">{{ c.flag }} +{{ c.dial }} · {{ c.name }}</option></select>
-                  <span class="dial">{{ country(tin.iso)?.flag }} +{{ country(tin.iso)?.dial }}</span>
+                  <select v-model="tin.iso" :title="country(tin.iso)?.name"><option v-for="c in dialList" :key="c.iso" :value="c.iso">{{ c.iso }} · +{{ c.dial }} · {{ c.name }}</option></select>
+                  <span class="dial"><Flag :iso="tin.iso" :size="13" /> +{{ country(tin.iso)?.dial }}</span>
                   <input v-model.trim="tin.local" inputmode="tel" :placeholder="sample(tin.iso)" />
                 </div>
                 <small class="hint">{{ fullPhone(tin) || '—' }}</small></label>
@@ -162,8 +162,8 @@
               <label>Devise<input v-model="tck.currency" maxlength="3" class="up" /></label>
               <label class="full">Téléphone du client
                 <div class="ph">
-                  <select v-model="tck.iso"><option v-for="c in dialList" :key="c.iso" :value="c.iso">{{ c.flag }} +{{ c.dial }} · {{ c.name }}</option></select>
-                  <span class="dial">{{ country(tck.iso)?.flag }} +{{ country(tck.iso)?.dial }}</span>
+                  <select v-model="tck.iso"><option v-for="c in dialList" :key="c.iso" :value="c.iso">{{ c.iso }} · +{{ c.dial }} · {{ c.name }}</option></select>
+                  <span class="dial"><Flag :iso="tck.iso" :size="13" /> +{{ country(tck.iso)?.dial }}</span>
                   <input v-model.trim="tck.local" inputmode="tel" :placeholder="sample(tck.iso)" />
                 </div></label>
               <label>Nom du client<input v-model="tck.name" /></label>
@@ -181,8 +181,8 @@
                 <select v-model="tout.service_id"><option value="">— choisir —</option><option v-for="s in payoutServices" :key="s.id" :value="s.id">{{ s.name || s.id }}{{ s.country ? ' · ' + s.country : '' }}</option></select></label>
               <label class="full">Numéro (recipientMsisdn)
                 <div class="ph">
-                  <select v-model="tout.iso"><option v-for="c in dialList" :key="c.iso" :value="c.iso">{{ c.flag }} +{{ c.dial }} · {{ c.name }}</option></select>
-                  <span class="dial">{{ country(tout.iso)?.flag }} +{{ country(tout.iso)?.dial }}</span>
+                  <select v-model="tout.iso"><option v-for="c in dialList" :key="c.iso" :value="c.iso">{{ c.iso }} · +{{ c.dial }} · {{ c.name }}</option></select>
+                  <span class="dial"><Flag :iso="tout.iso" :size="13" /> +{{ country(tout.iso)?.dial }}</span>
                   <input v-model.trim="tout.local" inputmode="tel" :placeholder="sample(tout.iso)" />
                 </div>
                 <small class="hint">{{ fullPhone(tout) || '—' }}</small></label>
@@ -237,6 +237,7 @@
 </template>
 
 <script setup>
+import Flag from '../components/Flag.vue'
 import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import api from '../services/api'
 import GwHead from '../components/GwHead.vue'

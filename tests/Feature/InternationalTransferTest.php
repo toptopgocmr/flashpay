@@ -124,24 +124,72 @@ class InternationalTransferTest extends TestCase
         $post(['country' => 'ZZ', 'fee_type' => 'percent', 'fee_value' => 2])->assertStatus(422);                       // pays inconnu
 
         $idx = $this->getJson('/api/admin/remit-tariffs')->assertOk();
-        $this->assertSame(4, $idx->json('kpi.tiers'));
+        $this->assertSame(4 + 5, $idx->json('kpi.tiers')); // + 5 paliers de référence par zone
         $this->assertGreaterThan(240, count($idx->json('countries')));
         // La grille générale ne montre plus les transferts internationaux
         $this->assertArrayNotHasKey('international_transfer', $this->getJson('/api/admin/tariffs')->json('operations'));
 
-        $sim = fn (string $c, string $bt, string $m, int $a) => $this->postJson('/api/admin/remit-tariffs/simulate', ['country' => $c, 'business_type' => $bt, 'method' => $m, 'amount' => $a])->json('fee');
+        $sim = fn (string $c, string $bt, string $m, int $a) => $this->postJson('/api/admin/remit-tariffs/simulate', ['country' => $c, 'business_type' => $bt, 'method' => $m, 'amount' => $a])->json('fee_ht');
         $this->assertSame(700, $sim('CI', 'p2p', 'wallet', 100000));   // pays + réception
         $this->assertSame(1500, $sim('CI', 'p2p', 'bank', 100000));    // pays
         $this->assertSame(2000, $sim('CI', 'b2b', 'bank', 300000));    // pays + type, plafonné
         $this->assertSame(3000, $sim('SN', 'p2p', 'wallet', 100000));  // toutes destinations
-        $this->assertSame(500, $sim('SN', 'p2p', 'wallet', 1000));     // minimum
+        $this->assertSame(6600, $sim('SN', 'p2p', 'wallet', 1000));    // zone Afrique de l'Ouest (1 – 60 000) plus précise que « toutes destinations »
+        $this->assertSame(1801, $sim('SN', 'p2p', 'wallet', 60001));   // hors tranche de zone : toutes destinations (3 %)
 
         // L'app applique la même grille
         $c = $this->client();
         $this->actingAs($c, 'sanctum');
         $q = $this->postJson('/api/pay/international/quote', ['amount' => 100000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p'])->assertOk();
-        $this->assertSame(700, $q->json('fee'));
-        $this->assertSame(100700, $q->json('total'));
+        $this->assertSame(700, $q->json('fee_ht'));
+        // TTC = 700 + TVA 18,9 % (132,3) + timbre 50 + COBAC 0,25 % (250) + TTF 1,5 % (1 500) = 2 632
+        $this->assertSame(2632, $q->json('fee'));
+        $this->assertSame(102632, $q->json('total'));
+    }
+
+    public function test_remittance_norms_zones_threshold_taxes_and_exchange_rates(): void
+    {
+        $admin = User::where('phone', '242060000000')->first();
+        $this->actingAs($admin, 'sanctum');
+        $idx = $this->getJson('/api/admin/remit-tariffs')->assertOk();
+        $this->assertSame(['CEMAC', 'Afrique de l\'Ouest', 'EUROPE', 'World/International'], collect($idx->json('zones'))->pluck('name')->all());
+        $this->assertSame(['COBAC', 'TIMBRE', 'TTF', 'TVA'], collect($idx->json('taxes'))->pluck('code')->all());
+
+        $sim = fn (string $c, int $a) => $this->postJson('/api/admin/remit-tariffs/simulate', ['country' => $c, 'business_type' => 'p2p', 'method' => 'wallet', 'amount' => $a])->assertOk();
+        // Grille de référence (SEND-PAZ) : CEMAC 0 – 25 000 → HT 2 975, TTC 3 587 à 4 025
+        $this->assertSame(2975, $sim('CM', 1)->json('fee_ht'));
+        $this->assertSame(3587, $sim('CM', 1)->json('fee'));
+        $this->assertSame(4025, $sim('CM', 25000)->json('fee'));
+        $this->assertSame(5600, $sim('CM', 25001)->json('fee'));   // 4 300 HT
+        $this->assertSame(7897, $sim('SN', 1)->json('fee'));       // Afrique de l'Ouest 6 600 HT
+        $this->assertSame(10612, $sim('FR', 60000)->json('fee'));  // Europe 8 000 HT
+        $this->assertSame('World/International', $sim('US', 100)->json('zone'));
+        $this->assertTrue($sim('SN', 1500000)->json('over_threshold')); // seuil 1 000 000
+
+        // Taux de change à partir du Congo : 1 EUR = 710 XAF
+        $eur = collect($idx->json('currencies'))->firstWhere('code', 'EUR');
+        $this->postJson('/api/admin/remit-currencies', ['id' => $eur['id'] ?? null, 'code' => 'EUR', 'symbol' => '€', 'xaf_value' => 710, 'active' => true])->assertCreated();
+        $this->assertSame(100, $sim('FR', 71000)->json('fx.amount'));
+
+        // Taxe propre à une zone, puis désactivée
+        $cemac = collect($idx->json('zones'))->firstWhere('name', 'CEMAC')['id'];
+        $tax = $this->postJson('/api/admin/remit-taxes', ['code' => 'TEST', 'label' => 'Test', 'type' => 'fixed', 'value' => 100, 'base' => 'amount', 'zone_id' => $cemac, 'active' => true])->assertCreated()->json('tax');
+        $this->assertSame('none', $tax['base']);
+        $this->assertSame(3687, $sim('CM', 1)->json('fee'));
+        $this->assertSame(7897, $sim('SN', 1)->json('fee'));
+        $this->deleteJson('/api/admin/remit-taxes/' . $tax['id'])->assertOk();
+        $this->postJson('/api/admin/remit-taxes', ['code' => 'COBAC', 'label' => 'x', 'type' => 'percent', 'value' => 1, 'base' => 'amount'])->assertStatus(422); // code déjà pris
+
+        // Un pays dans une seule zone ; seuil appliqué au devis de l'app
+        $this->postJson('/api/admin/remit-zones', ['name' => 'Doublon', 'countries' => ['CM']])->assertStatus(422);
+        $wa = collect($idx->json('zones'))->firstWhere('name', 'Afrique de l\'Ouest');
+        $this->postJson('/api/admin/remit-zones', ['id' => $wa['id'], 'name' => $wa['name'], 'threshold' => 50000, 'countries' => $wa['countries']])->assertCreated();
+        $c = $this->client();
+        $this->actingAs($c, 'sanctum');
+        $q = $this->postJson('/api/pay/international/quote', ['amount' => 60000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p'])->assertOk();
+        $this->assertFalse($q->json('available'));
+        $this->assertStringContainsString('Afrique de l\'Ouest', implode(' ', $q->json('problems')));
+        $this->assertSame(['COBAC', 'TIMBRE', 'TTF', 'TVA'], collect($q->json('taxes'))->pluck('code')->all());
     }
 
     public function test_options_quote_and_p2p_wallet_via_wacepay_then_paid(): void
