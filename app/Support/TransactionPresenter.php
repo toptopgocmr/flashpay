@@ -147,6 +147,7 @@ class TransactionPresenter
             ['Taux de change', ! empty($m['fx']['rate']) ? '1 ' . $cur . ' = ' . $m['fx']['rate'] . ' ' . ($tx->destination_currency ?? '') : null],
             ['Motif', $m['note'] ?? $m['purpose_label'] ?? $m['description'] ?? null],
             ['Raison', in_array($tx->status, ['failed', 'reversed'], true) ? $tx->failure_reason : null],
+            ['Remboursement', self::refundLine($tx, $money)],
             ['Référence', $tx->reference],
             ['Réf. opérateur', $tx->destination_external_ref ?: $tx->source_external_ref],
             ['Date', $tx->created_at?->timezone(config('app.display_timezone', 'Africa/Brazzaville'))->format('d/m/Y à H:i')],
@@ -161,6 +162,37 @@ class TransactionPresenter
             fn ($r) => ['label' => $r[0], 'value' => (string) $r[1]],
             array_filter($rows, fn ($r) => $r[1] !== null && $r[1] !== '' && ! in_array($r[0], $hidden, true)),
         ));
+    }
+
+    /**
+     * Ce qui est arrivé à l'argent d'une opération échouée : rien n'a été prélevé, remboursé (où, quand),
+     * remboursement en cours ou remboursement manuel par le support. Null pour une opération réussie.
+     */
+    public static function refundLine(Transaction $tx, callable $money): ?string
+    {
+        $m = $tx->meta ?? [];
+        $r = (array) ($m['outcome']['refund'] ?? []);
+        $total = (int) $tx->amount + (int) $tx->fee;
+        $tz = config('app.display_timezone', 'Africa/Brazzaville');
+        $when = function () use ($r, $tx, $tz) {
+            $at = ! empty($r['at']) ? \Illuminate\Support\Carbon::parse($r['at']) : $tx->updated_at;
+            return $at ? ' le ' . $at->timezone($tz)->format('d/m/Y à H:i') : '';
+        };
+        $place = function ($to) use ($tx, $m) {
+            if ($to === 'wallet' || str_starts_with((string) ($m['refunded_to'] ?? ''), 'wallet:')) {
+                return 'votre wallet FlashPay';
+            }
+            return $to ? self::phone((string) $to) : ($tx->source_rail === 'wallet' ? 'votre wallet FlashPay' : self::phone((string) $tx->source_account));
+        };
+
+        return match (true) {
+            $tx->status === 'reversed' => 'Remboursé : ' . $money($total) . ' (montant + frais) sur ' . $place($r['to'] ?? null) . $when(),
+            $tx->stage === 'awaiting_refund' => 'Remboursement en cours : ' . $money($total) . ' vers ' . $place($tx->source_account),
+            $tx->status === 'failed' && ($r['to'] ?? null) === 'manual' => 'Débit effectué : ' . $money($total) . ' remboursés par le support FlashPay (aucune action de votre part)',
+            $tx->status === 'failed' && empty($m['outcome']['debit']) => 'Aucun montant prélevé : rien à rembourser',
+            $tx->status === 'failed' => 'Remboursement en cours de traitement par le support FlashPay',
+            default => null,
+        };
     }
 
     /**

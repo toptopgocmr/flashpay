@@ -31,12 +31,50 @@ class TransactionController extends Controller
                 ->orWhere('initiated_by', $user->id));
 
         $transactions = $q->with(['sourceWallet.user:id,full_name,phone', 'destinationWallet.user:id,full_name,phone', 'initiator:id,full_name,phone'])
-            ->latest()
+            ->orderByDesc('created_at')->orderByDesc('id')
             ->paginate(20);
 
-        $transactions->getCollection()->transform(fn (Transaction $t) => $this->journalLine($t, $walletIds, $user->id));
+        $balances = $this->balancesAfter($user, $transactions->getCollection());
+        $transactions->getCollection()->transform(fn (Transaction $t) => $this->journalLine($t, $walletIds, $user->id)
+            + ($balances[$t->id] ?? []));
 
         return response()->json($transactions);
+    }
+
+    /**
+     * Solde du wallet principal après chaque opération du journal (du plus récent au plus ancien) :
+     * solde actuel moins les mouvements du wallet (grand livre) des opérations plus récentes.
+     * Une opération échouée ou remboursée laisse le solde inchangé.
+     * @return array<int, array{balance_after:int, balance_currency:string}>
+     */
+    protected function balancesAfter(User $user, $page): array
+    {
+        $wallet = $user->wallet;
+        if (! $wallet || $page->isEmpty()) {
+            return [];
+        }
+        $account = 'wallet:' . $wallet->id;
+        $net = fn ($q) => (int) $q->selectRaw("COALESCE(SUM(CASE WHEN ledger_entries.type = 'credit' THEN ledger_entries.amount ELSE -ledger_entries.amount END), 0) AS n")->value('n');
+        $entries = fn () => DB::table('ledger_entries')->join('transactions', 'transactions.id', '=', 'ledger_entries.transaction_id')
+            ->where('ledger_entries.account', $account);
+
+        // Mouvements des opérations plus récentes que la première ligne de la page
+        $first = $page->first();
+        $newer = $net($entries()->where(fn ($w) => $w->where('transactions.created_at', '>', $first->created_at)
+            ->orWhere(fn ($x) => $x->where('transactions.created_at', $first->created_at)->where('transactions.id', '>', $first->id))));
+        // Mouvement de chaque opération de la page
+        $byTx = $entries()->whereIn('ledger_entries.transaction_id', $page->pluck('id'))
+            ->groupBy('ledger_entries.transaction_id')
+            ->selectRaw("ledger_entries.transaction_id AS id, SUM(CASE WHEN ledger_entries.type = 'credit' THEN ledger_entries.amount ELSE -ledger_entries.amount END) AS n")
+            ->pluck('n', 'id');
+
+        $balance = (int) $wallet->balance - $newer;
+        $out = [];
+        foreach ($page as $t) {
+            $out[$t->id] = ['balance_after' => $balance, 'balance_currency' => $wallet->currency];
+            $balance -= (int) ($byTx[$t->id] ?? 0);
+        }
+        return $out;
     }
 
     public function show(Request $request, Transaction $transaction)
