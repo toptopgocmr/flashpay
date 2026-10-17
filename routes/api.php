@@ -388,6 +388,12 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
         Route::get('/tariffs', [PricingAdminController::class, 'tariffs']);
         Route::post('/tariffs/{tariff}/active', [PricingAdminController::class, 'toggleTariff']);
+        // Grille des transferts internationaux (à part de la grille nationale)
+        Route::get('/remit-tariffs', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'index']);
+        Route::post('/remit-tariffs', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'upsert']);
+        Route::post('/remit-tariffs/simulate', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'simulate']);
+        Route::post('/remit-tariffs/{remitTariff}/active', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'toggle'])->whereNumber('remitTariff');
+        Route::delete('/remit-tariffs/{remitTariff}', [\App\Http\Controllers\Api\RemitTariffAdminController::class, 'destroy'])->whereNumber('remitTariff');
         Route::get('/corridors', [PricingAdminController::class, 'corridors']);
         Route::post('/corridors/{iso}', [PricingAdminController::class, 'updateCorridor'])->where('iso', '[A-Za-z]{2}');
         Route::post('/corridors-sync/wacepay', [PricingAdminController::class, 'syncWacepay']);

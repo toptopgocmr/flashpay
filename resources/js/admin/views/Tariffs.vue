@@ -21,6 +21,8 @@
       <div class="kpi" v-go="'#tariff-sim'" title="Ouvrir le simulateur"><span>Taux de prélèvement moyen</span><b>{{ kpi.volume_30d ? (kpi.fees_30d * 100 / kpi.volume_30d).toFixed(2).replace('.', ',') + ' %' : '—' }}</b></div>
     </div>
 
+    <div class="flash info mb"><div>Les transferts internationaux (WacePay, TerraPay, PawaPay) ont leur propre grille, par pays et par type : <router-link to="/remit-tariffs">Tarifs internationaux →</router-link></div></div>
+
     <div class="zones mb">
       <span v-for="s in scopes" :key="s" class="zone"><b>{{ scopeLabel[s] }}</b> {{ scopeHint[s] }}</span>
     </div>

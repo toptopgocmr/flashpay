@@ -14,6 +14,7 @@ const routes = [
   { path: '/transactions', component: () => import('../views/Transactions.vue') },
   { path: '/transactions/:id', component: () => import('../views/TransactionDetail.vue') },
   { path: '/tariffs', component: () => import('../views/Tariffs.vue') },
+  { path: '/remit-tariffs', component: () => import('../views/RemitTariffs.vue') },
   { path: '/users', component: () => import('../views/Users.vue') },
   { path: '/accounts', component: () => import('../views/Accounts.vue') },
   { path: '/peex', component: () => import('../views/PeexSandbox.vue') },

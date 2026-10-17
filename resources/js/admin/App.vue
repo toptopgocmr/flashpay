@@ -221,6 +221,7 @@ const groups = [
   ] },
   { name: 'Tarifs & finance', icon: 'tag', links: [
     { to: '/tariffs', label: 'Grille tarifaire', desc: 'Frais par opération et par zone', icon: 'tag' },
+    { to: '/remit-tariffs', label: 'Tarifs internationaux', desc: 'Frais des transferts internationaux par pays et type', icon: 'tag' },
     { to: '/commissions', label: 'Commissions agents', desc: 'Barème par opération et palier', icon: 'tag' },
     { to: '/corridors', label: 'Pays & change', desc: 'Corridors, opérateurs, taux de change', icon: 'globe' },
     { to: '/reconciliation', label: 'Réconciliation', desc: 'Ledger, soldes, orphelines PEEX', icon: 'scale' },

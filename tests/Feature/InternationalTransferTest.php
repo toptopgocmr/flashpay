@@ -111,6 +111,39 @@ class InternationalTransferTest extends TestCase
             'date_of_birth' => '1990-01-01', 'gender' => 'M', 'nationality' => 'CG', 'address' => 'Centre-ville', 'city' => 'Brazzaville'];
     }
 
+    public function test_dedicated_international_tariff_grid_most_specific_rule_wins(): void
+    {
+        $admin = User::where('phone', '242060000000')->first();
+        $this->actingAs($admin, 'sanctum');
+        $post = fn (array $t) => $this->postJson('/api/admin/remit-tariffs', $t + ['business_type' => '*', 'method' => '*', 'partner' => '*', 'min_amount' => 0, 'max_amount' => 100000000, 'active' => true]);
+        $post(['country' => '*', 'fee_type' => 'percent', 'fee_value' => 3, 'min_fee' => 500])->assertCreated();          // toutes destinations
+        $post(['country' => 'CI', 'fee_type' => 'percent', 'fee_value' => 1.5])->assertCreated();                       // Côte d'Ivoire
+        $post(['country' => 'CI', 'method' => 'wallet', 'fee_type' => 'fixed', 'fee_value' => 700])->assertCreated();    // CI mobile money
+        $post(['country' => 'CI', 'business_type' => 'b2b', 'fee_type' => 'percent', 'fee_value' => 1, 'max_fee' => 2000])->assertCreated();
+        $post(['country' => 'CI', 'fee_type' => 'percent', 'fee_value' => 2])->assertStatus(422);                       // chevauchement
+        $post(['country' => 'ZZ', 'fee_type' => 'percent', 'fee_value' => 2])->assertStatus(422);                       // pays inconnu
+
+        $idx = $this->getJson('/api/admin/remit-tariffs')->assertOk();
+        $this->assertSame(4, $idx->json('kpi.tiers'));
+        $this->assertGreaterThan(240, count($idx->json('countries')));
+        // La grille générale ne montre plus les transferts internationaux
+        $this->assertArrayNotHasKey('international_transfer', $this->getJson('/api/admin/tariffs')->json('operations'));
+
+        $sim = fn (string $c, string $bt, string $m, int $a) => $this->postJson('/api/admin/remit-tariffs/simulate', ['country' => $c, 'business_type' => $bt, 'method' => $m, 'amount' => $a])->json('fee');
+        $this->assertSame(700, $sim('CI', 'p2p', 'wallet', 100000));   // pays + réception
+        $this->assertSame(1500, $sim('CI', 'p2p', 'bank', 100000));    // pays
+        $this->assertSame(2000, $sim('CI', 'b2b', 'bank', 300000));    // pays + type, plafonné
+        $this->assertSame(3000, $sim('SN', 'p2p', 'wallet', 100000));  // toutes destinations
+        $this->assertSame(500, $sim('SN', 'p2p', 'wallet', 1000));     // minimum
+
+        // L'app applique la même grille
+        $c = $this->client();
+        $this->actingAs($c, 'sanctum');
+        $q = $this->postJson('/api/pay/international/quote', ['amount' => 100000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p'])->assertOk();
+        $this->assertSame(700, $q->json('fee'));
+        $this->assertSame(100700, $q->json('total'));
+    }
+
     public function test_options_quote_and_p2p_wallet_via_wacepay_then_paid(): void
     {
         $c = $this->client();

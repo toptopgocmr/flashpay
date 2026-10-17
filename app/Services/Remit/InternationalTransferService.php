@@ -213,7 +213,9 @@ class InternationalTransferService
             $codes[] = 'profile_incomplete';
         }
 
-        $fee = $this->fees->fee('international_transfer', 'international', $amount) ?: $this->fees->fee('p2p', 'international', $amount);
+        // Grille dédiée (Console › Tarifs internationaux) : pays, type, réception, partenaire, tranche
+        $priced = app(RemitFeeService::class)->compute($c['iso'], $bt, $method, $c['partner'] ?? null, $amount);
+        $fee = $priced['fee'];
         try {
             $fx = $this->fx->convert($amount, $currency, $c['currency']);
         } catch (\RuntimeException $e) {
@@ -239,6 +241,7 @@ class InternationalTransferService
             'amount' => $amount,
             'currency' => $currency,
             'fee' => $fee,
+            'tariff_id' => $priced['tariff']?->id,
             'total' => $amount + $fee,
             'fx' => $fx,
             'receive_amount' => (int) $fx['amount'],
