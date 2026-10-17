@@ -72,6 +72,11 @@ class PartnerFeesQuoteWorldTest extends TestCase
         $this->assertTrue(User::where('phone', '33612345678')->exists());
         // EUR pas encore géré pour les wallets : wallet ouvert en devise de base
         $this->assertSame('XAF', User::where('phone', '33612345678')->first()->wallet->currency);
+        // … mais tout s'affiche en euros (taux fixe 655,957), centimes compris
+        $d = User::where('phone', '33612345678')->first()->wallet->display;
+        $this->assertSame(['EUR', 2, '€', true], [$d['currency'], $d['decimals'], $d['symbol'], $d['converted']]);
+        $this->assertEqualsWithDelta(1 / 655.957, $d['rate'], 1e-9);
+        $this->assertSame('XAF', User::where('phone', '242061000551')->first()?->wallet?->display['currency'] ?? 'XAF');
 
         // App : les pays du monde encore fermés ne sont pas proposés ; console : tous
         $app = $this->getJson('/api/pay/corridors')->json('corridors');

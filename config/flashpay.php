@@ -344,6 +344,8 @@ return [
 
     // Devise des wallets FlashPay créés sans pays identifiable
     'base_currency' => env('FLASHPAY_BASE_CURRENCY', 'XAF'),
+    // Affichage dans la monnaie du pays du client (EUR, USD…) : solde tenu en devise du wallet, montants convertis
+    'display_currency' => ['enabled' => (bool) env('FLASHPAY_DISPLAY_CURRENCY', true)],
     // Devises possibles pour un wallet ; un pays dans une autre devise (EUR, USD…) a un wallet en devise de base
     'wallet_currencies' => array_filter(array_map('trim', explode(',', strtoupper((string) env('FLASHPAY_WALLET_CURRENCIES', 'XAF,XOF,CDF,GNF'))))),
 

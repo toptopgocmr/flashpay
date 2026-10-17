@@ -11,6 +11,14 @@ class Wallet extends Model
 
     protected $fillable = ['user_id', 'balance', 'currency', 'country', 'status'];
 
+    /** Devise d'affichage du client (EUR pour un numéro français…), cf. App\Support\DisplayCurrency. */
+    protected $appends = ['display'];
+
+    public function getDisplayAttribute(): array
+    {
+        return \App\Support\DisplayCurrency::for($this->country, (string) $this->currency);
+    }
+
     protected function casts(): array
     {
         return ['balance' => 'integer'];
