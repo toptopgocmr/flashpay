@@ -163,6 +163,36 @@ class TransactionPresenter
         ));
     }
 
+    /**
+     * Débit / crédit / remboursement en clair quand le crédit a échoué après le débit
+     * (null si l'opération n'est pas concernée).
+     * @return ?array{debit:string, credit:string, refund:?string, attempts:array, refund_done:bool}
+     */
+    public static function outcome(Transaction $tx): ?array
+    {
+        $o = $tx->meta['outcome'] ?? null;
+        if (! $o || empty($o['credit'])) {
+            return null;
+        }
+        $d = (array) ($o['debit'] ?? []);
+        $c = (array) $o['credit'];
+        $r = (array) ($o['refund'] ?? []);
+        $n = fn ($v) => number_format((int) $v, 0, ',', ' ');
+        $from = ($d['account'] ?? null) === 'wallet' ? 'wallet FlashPay' : (string) ($d['account'] ?? $tx->source_account);
+        return [
+            'debit' => "Débit effectué : {$n($d['amount'] ?? ($tx->amount + $tx->fee))} {$tx->currency} prélevés sur {$from}" . (! empty($d['partner']) && $d['partner'] !== 'FlashPay' ? " ({$d['partner']})" : ''),
+            'credit' => 'Crédit en échec vers ' . ($c['account'] ?? $tx->destination_account ?? 'le bénéficiaire') . (! empty($c['partner']) ? " ({$c['partner']})" : '') . ' : ' . ($c['error'] ?? 'erreur du partenaire'),
+            'refund' => match (true) {
+                ! $r => $tx->stage === 'awaiting_refund' ? 'Remboursement en cours sur ' . $tx->source_account : null,
+                ($r['to'] ?? null) === 'manual' => 'Remboursement automatique impossible : remboursement manuel par le support',
+                ($r['to'] ?? null) === 'wallet' => 'Remboursé (montant + frais) sur le wallet FlashPay' . (! empty($r['why']) ? ' — ' . $r['why'] : ''),
+                default => 'Remboursé sur ' . ($r['to'] ?? $tx->source_account),
+            },
+            'refund_done' => (bool) ($r['done'] ?? false),
+            'attempts' => array_values(array_map(fn ($a) => ($a['partner'] ?? $a['rail']) . ' : ' . ($a['error'] ?? ''), (array) ($tx->meta['payout_attempts'] ?? []))),
+        ];
+    }
+
     /** « PEEX », « WacePay (Digitwace) », « PEEX → WacePay (Digitwace) » ; null si 100 % interne. */
     public static function partner(Transaction $tx): ?string
     {

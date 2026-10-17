@@ -399,6 +399,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/digitwace/diagnose', [PricingAdminController::class, 'diagnoseWacepay'])->middleware('throttle:10,1');
         Route::post('/digitwace/discover', [PricingAdminController::class, 'discoverWacepay'])->middleware('throttle:3,1');
         Route::delete('/digitwace/discover', [PricingAdminController::class, 'resetWacepayEndpoint']);
+        // Passerelle PawaPay (collecte / versement mobile money, remittance)
+        Route::get('/pawapay/overview', [\App\Http\Controllers\Api\PawapayAdminController::class, 'overview'])->middleware('throttle:30,1,pawapay-overview');
+        Route::post('/pawapay/test-number', [\App\Http\Controllers\Api\PawapayAdminController::class, 'testNumber'])->middleware('throttle:20,1,pawapay-test');
+        Route::post('/pawapay/requests/{remitRequest}/refresh', [\App\Http\Controllers\Api\PawapayAdminController::class, 'refresh'])->whereNumber('remitRequest');
         Route::get('/wacepay/overview', [\App\Http\Controllers\Api\WacepayAdminController::class, 'overview']);
         Route::get('/wacepay/services', [\App\Http\Controllers\Api\WacepayAdminController::class, 'services'])->middleware('throttle:20,1');
         Route::post('/wacepay/test-payin', [\App\Http\Controllers\Api\WacepayAdminController::class, 'testPayin'])->middleware('throttle:10,1');

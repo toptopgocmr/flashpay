@@ -51,6 +51,12 @@
           <router-link class="td-btn ghost" to="/transactions">‹ Transactions</router-link>
         </div>
 
+        <div v-if="t.outcome" class="td-oc">
+          <div class="oc ok">✔ {{ t.outcome.debit }}</div>
+          <div class="oc ko">✘ {{ t.outcome.credit }}</div>
+          <div v-for="a in t.outcome.attempts" :key="a" class="oc ko small">↻ Bascule après échec — {{ a }}</div>
+          <div v-if="t.outcome.refund" class="oc" :class="t.outcome.refund_done ? 'ok' : 'warn'">{{ t.outcome.refund_done ? '↩' : '⚠' }} {{ t.outcome.refund }}</div>
+        </div>
         <p v-if="t.failure_reason" class="td-fail"><b>Motif :</b> {{ t.failure_reason }}</p>
         <p v-if="flash" class="td-flash" :class="flash.type">{{ flash.text }}</p>
       </section>
@@ -460,4 +466,10 @@ a.td-party:hover { border-color: #c7d2fe; }
   .td-parties { grid-template-columns: 1fr; } .td-arrow { transform: rotate(90deg); }
   .td-amount { text-align: left; width: 100%; }
 }
+.td-oc { margin-top: 12px; }
+.oc { padding: 7px 12px; border-radius: 8px; margin-top: 6px; font-size: 13.5px; }
+.oc.ok { background: #ecfdf3; color: #166534; }
+.oc.ko { background: #fef2f2; color: #991b1b; }
+.oc.warn { background: #fffbeb; color: #92400e; }
+.oc.small { font-size: 12px; }
 </style>

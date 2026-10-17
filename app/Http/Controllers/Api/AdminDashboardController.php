@@ -192,10 +192,13 @@ class AdminDashboardController extends Controller
             ->paginate(25)->withQueryString();
         // Opérations WacePay en attente sur la page : vérification auprès de WacePay (sans
         // dépendre du planificateur), 3 au plus par chargement, une fois par minute chacune.
+        // Budget de 8 s : la page ne doit jamais dépasser la limite d'exécution PHP (30 s)
+        // quand WacePay répond lentement ; le reste est vérifié par digitwace:sync.
         $checked = 0;
+        $started = microtime(true);
         foreach ($page->getCollection()->where('status', 'processing') as $t) {
             foreach ($t->digitwaceRequests->whereNull('finalized_at') as $req) {
-                if ($checked >= 3 || ! \Illuminate\Support\Facades\Cache::add('wace:admin-poll:' . $req->id, 1, 60)) {
+                if ($checked >= 3 || microtime(true) - $started > 8 || ! \Illuminate\Support\Facades\Cache::add('wace:admin-poll:' . $req->id, 1, 60)) {
                     continue;
                 }
                 $checked++;
@@ -217,6 +220,7 @@ class AdminDashboardController extends Controller
             // Journal : libellé (Recharge compte FlashPay, Transfert entrant/sortant…), sens crédit/débit, canal
             $t->journal = \App\Support\TransactionPresenter::present($t);
             $t->gateway = \App\Support\TransactionPresenter::gateway($t);
+            $t->outcome = \App\Support\TransactionPresenter::outcome($t);
             $t->refundable = \App\Services\Peex\ManualRefundService::refundableOf($t);
             $t->setRelation('peexRequests', $t->peexRequests->map->only(['id', 'transaction_id', 'track_id', 'status', 'amount']));
             $t->unsetRelation('digitwaceRequests');

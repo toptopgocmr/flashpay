@@ -27,6 +27,7 @@ class SupportController extends Controller
         $out['channel_label'] = \App\Support\TransactionPresenter::channel($transaction);
         $out['parties'] = \App\Support\TransactionPresenter::parties($transaction);
         $out['details'] = \App\Support\TransactionPresenter::details($transaction);
+        $out['outcome'] = \App\Support\TransactionPresenter::outcome($transaction);
         if ($request->user()->hasRole('super_admin')) {
             unset($costs['flow']);
             $out['costs'] = $costs;

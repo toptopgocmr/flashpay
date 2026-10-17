@@ -177,6 +177,7 @@ class PricingAdminController extends Controller
         if (! $pawa->enabled()) {
             return [$fallback, 'PawaPay non configuré'];
         }
+        config(['flashpay.pawapay.timeout' => min(10, (int) config('flashpay.pawapay.timeout', 40))]);
         try {
             return [$pawa->coverage($fresh), null];
         } catch (\Throwable $e) {

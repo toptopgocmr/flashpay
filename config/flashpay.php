@@ -118,6 +118,19 @@ return [
         'default_address' => env('WACEPAY_REMIT_DEFAULT_ADDRESS', 'Brazzaville'),
     ],
 
+    /*
+    | Bascule automatique du versement mobile money : si le partenaire du pays refuse
+    | (échec certain, rien versé), FlashPay réessaie chez un autre partenaire du même
+    | environnement (production ↔ production) qui couvre le pays.
+    */
+    'failover' => [
+        'enabled' => (bool) env('FLASHPAY_FAILOVER', true),
+        'order' => array_filter(array_map('trim', explode(',', (string) env('FLASHPAY_FAILOVER_ORDER', 'peex,pawapay_momo,digitwace')))),
+        'max_switches' => (int) env('FLASHPAY_FAILOVER_MAX', 2),
+        // Remboursement mobile money impossible → montant + frais recrédités sur le wallet FlashPay du client
+        'refund_to_wallet' => (bool) env('FLASHPAY_REFUND_TO_WALLET', true),
+    ],
+
     'pawapay' => [
         'enabled' => (bool) env('PAWAPAY_ENABLED', false),
         // Sandbox : https://api.sandbox.pawapay.io — production : https://api.pawapay.io

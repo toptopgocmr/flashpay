@@ -299,16 +299,23 @@ class PaymentController extends Controller
             'source_operator' => $meta['source_operator'] ?? null,
             'destination_operator' => $meta['destination_operator'] ?? null,
             'failure_reason' => $tx->failure_reason,
+            // Débit / crédit / remboursement, quand le crédit a échoué après le débit
+            'outcome' => \App\Support\TransactionPresenter::outcome($tx),
             'checkout_url' => $pending && $tx->stage === 'awaiting_card' ? ($meta['checkout_url'] ?? null) : null,
             'message' => match (true) {
                 $pending && $tx->stage === 'awaiting_card' => 'Finalisez le paiement par carte sur la page sécurisée qui s\'est ouverte.',
                 $tx->status === 'successful' => 'Opération réussie.',
                 $pending && $tx->stage === 'awaiting_pickup' => 'Présentez votre code de retrait ' . ($tx->destination_rail === 'atm' ? 'au GAB partenaire.' : 'à un agent FlashPay.'),
                 $pending && $tx->stage === 'awaiting_source' => 'Validez le paiement sur le téléphone ' . $tx->source_account . ' (code secret mobile money).',
-                $pending && $tx->stage === 'awaiting_refund' => 'Le versement au bénéficiaire a échoué : remboursement en cours sur le ' . $tx->source_account . '.',
+                $pending && $tx->stage === 'awaiting_refund' => 'Débit effectué, mais le crédit du bénéficiaire a échoué : remboursement en cours sur le ' . $tx->source_account . '.',
+                $pending && ! empty($meta['payout_attempts']) => 'Paiement reçu. Le premier service de versement n\'a pas répondu : versement relancé automatiquement par un autre partenaire.',
                 $pending => 'Paiement reçu, versement en cours chez l\'opérateur du bénéficiaire.',
-                $tx->status === 'reversed' && $tx->source_rail === 'peex' => 'Échec du versement : vous avez été remboursé sur le ' . $tx->source_account . '.',
-                $tx->status === 'reversed' => 'Échec du versement : votre wallet a été remboursé.',
+                $tx->status === 'reversed' && str_starts_with((string) ($meta['refunded_to'] ?? ''), 'wallet:') && $tx->source_rail !== 'wallet' =>
+                    'Débit effectué, mais le crédit du bénéficiaire a échoué : montant et frais remboursés sur votre wallet FlashPay.',
+                $tx->status === 'reversed' && $tx->source_rail !== 'wallet' => 'Débit effectué, mais le crédit du bénéficiaire a échoué : vous avez été remboursé sur le ' . $tx->source_account . '.',
+                $tx->status === 'reversed' => 'Débit effectué, mais le crédit du bénéficiaire a échoué : votre wallet a été remboursé.',
+                $tx->status === 'failed' && ! empty($meta['outcome']['debit']) && ($meta['outcome']['refund']['to'] ?? null) === 'manual' =>
+                    'Débit effectué, mais le crédit du bénéficiaire a échoué. Le support FlashPay vous rembourse, aucune action n\'est nécessaire.',
                 ! empty($meta['validation_timeout']) && $tx->status === 'failed' => 'Délai dépassé : le paiement n\'a pas été validé sur le téléphone. Aucun montant n\'a été débité. Vous pouvez recommencer.',
                 default => $tx->failure_reason ?: 'Opération échouée.',
             },

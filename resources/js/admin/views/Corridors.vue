@@ -54,7 +54,7 @@
             <GwField :value="p.webhook" />
             <div class="pc-actions">
               <button class="btn-normal sm" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
-              <router-link v-if="p.key !== 'pawapay'" class="btn-normal sm" :to="p.key === 'digitwace' ? '/wacepay' : '/peex'">Ouvrir la passerelle</router-link>
+              <router-link class="btn-normal sm" :to="p.key === 'digitwace' ? '/wacepay' : p.key === 'pawapay' ? '/pawapay' : '/peex'">Ouvrir la passerelle</router-link>
             </div>
           </div>
         </div>

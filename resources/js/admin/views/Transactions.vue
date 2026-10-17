@@ -183,6 +183,14 @@
             <div class="kv"><span>Net reçu par le bénéficiaire</span><b class="net">{{ money(netOf(detail), detail.destination_currency || detail.currency) }}</b></div>
           </div>
 
+          <div class="wp-sec" v-if="detail.outcome">
+            <h4>Débit / crédit</h4>
+            <div class="oc ok">✔ {{ detail.outcome.debit }}</div>
+            <div class="oc ko">✘ {{ detail.outcome.credit }}</div>
+            <div v-for="a in detail.outcome.attempts" :key="a" class="oc ko small">↻ Bascule après échec — {{ a }}</div>
+            <div v-if="detail.outcome.refund" class="oc" :class="detail.outcome.refund_done ? 'ok' : 'warn'">{{ detail.outcome.refund_done ? '↩' : '⚠' }} {{ detail.outcome.refund }}</div>
+          </div>
+
           <div class="wp-sec" v-if="detail.failure_reason">
             <h4>Motif d'échec</h4>
             <p class="reason">{{ detail.failure_reason }}</p>
@@ -618,4 +626,9 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 @media (max-width: 1100px) { .wp-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } .wp-filters .wide { grid-column: span 2; } .wp-actions { grid-column: span 3; justify-content: flex-end; } }
 @media (max-width: 900px) { .wp-table table { width: 1040px; } }
 @media (max-width: 640px) { .wp-filters { grid-template-columns: 1fr 1fr; } .wp-filters .wide, .wp-actions { grid-column: span 2; } }
+.oc { padding: 6px 10px; border-radius: 8px; margin-top: 6px; font-size: 13px; }
+.oc.ok { background: #ecfdf3; color: #166534; }
+.oc.ko { background: #fef2f2; color: #991b1b; }
+.oc.warn { background: #fffbeb; color: #92400e; }
+.oc.small { font-size: 12px; }
 </style>
