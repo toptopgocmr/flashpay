@@ -105,7 +105,12 @@ class InternationalTransferController extends Controller
             'country' => 'required|string|size:2',
             'method' => 'required|in:wallet,bank,cash',
             'business_type' => 'required|in:p2p,p2b,b2p,b2b',
-        ]) ;
+            // Compte à débiter : wallet (défaut), mobile money, carte liée
+            'source' => 'nullable|array',
+            'source.type' => 'nullable|in:wallet,mobile,card',
+            'source.phone' => 'nullable|string|max:25',
+            'source.linked_account_id' => 'nullable|integer',
+        ]);
     }
 
     protected function wrap(callable $fn)

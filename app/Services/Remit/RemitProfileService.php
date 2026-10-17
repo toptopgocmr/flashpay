@@ -80,7 +80,7 @@ class RemitProfileService
         if (config('flashpay.remit.require_email_verified') && ! empty($data['email']) && ! $emailVerified) {
             $missing['email_verified'] = 'vérification de l\'e-mail';
         }
-        $docs = $this->documents($user, $data['id_type'] ?? null);
+        $docs = $this->documents($user, $data['id_type'] ?? null, $data['id_changed_at'] ?? null);
         if (config('flashpay.remit.require_documents', true)) {
             foreach ($docs as $k => $d) {
                 if ($d['required'] && ! in_array($d['status'], ['pending', 'approved'], true)) {
@@ -105,9 +105,9 @@ class RemitProfileService
     }
 
     /** Pièces jointes : recto (ou passeport), verso (carte), selfie — statut du dernier envoi. */
-    public function documents(User $user, ?string $idType): array
+    public function documents(User $user, ?string $idType, ?string $idChangedAt = null): array
     {
-        $latest = KycDocument::where('user_id', $user->id)->whereIn('type', ['id_card', 'id_card_back', 'passport', 'selfie'])
+        $latest = KycDocument::where('user_id', $user->id)->whereIn('type', ['id_card', 'id_card_back', 'passport', 'selfie', 'profile_photo'])
             ->latest('id')->get()->unique('type')->keyBy('type');
         $passport = strtoupper((string) $idType) === 'PP';
         $front = $passport ? ($latest['passport'] ?? null) : ($latest['id_card'] ?? $latest['passport'] ?? null);
@@ -115,10 +115,17 @@ class RemitProfileService
             'front' => ['label' => $passport ? 'photo du passeport' : 'photo de la pièce (recto)', 'type' => $passport ? 'passport' : 'id_card', 'required' => true],
             'back' => ['label' => 'photo de la pièce (verso)', 'type' => 'id_card_back', 'required' => ! $passport],
             'selfie' => ['label' => 'selfie avec la pièce', 'type' => 'selfie', 'required' => true],
+            // Photo de profil : modifiable à tout moment (non bloquante)
+            'photo' => ['label' => 'photo de profil', 'type' => 'profile_photo', 'required' => false],
         ];
-        foreach (['front' => $front, 'back' => $latest['id_card_back'] ?? null, 'selfie' => $latest['selfie'] ?? null] as $k => $doc) {
+        foreach (['front' => $front, 'back' => $latest['id_card_back'] ?? null, 'selfie' => $latest['selfie'] ?? null, 'photo' => $latest['profile_photo'] ?? null] as $k => $doc) {
             $out[$k]['status'] = $doc?->status ?? 'missing';
-            $out[$k]['rejection_reason'] = $doc?->rejection_reason;
+            // Photos de l'ancienne pièce : à renvoyer après un changement de pièce
+            if ($doc && $idChangedAt && in_array($k, ['front', 'back', 'selfie'], true) && $doc->created_at && $doc->created_at->lt(\Illuminate\Support\Carbon::parse($idChangedAt)->subHour())) {
+                $out[$k]['status'] = 'outdated';
+                $doc = null;
+            }
+            $out[$k]['rejection_reason'] = $out[$k]['status'] === 'outdated' ? 'Photo de l\'ancienne pièce : envoyez celle de la nouvelle pièce.' : $doc?->rejection_reason;
         }
         return $out;
     }
@@ -128,6 +135,7 @@ class RemitProfileService
     {
         $p = $this->profileOf($user) ?? new RemitProfile(['user_id' => $user->id]);
         $data = (array) ($p->data ?? []);
+        $before = ['id_number' => $data['id_number'] ?? null, 'id_type' => $data['id_type'] ?? null];
         foreach (array_merge(array_keys(self::REQUIRED), self::OPTIONAL) as $k) {
             if (array_key_exists($k, $in) && $k !== 'email') {
                 $v = is_string($in[$k]) ? trim($in[$k]) : $in[$k];
@@ -140,6 +148,11 @@ class RemitProfileService
         }
         if (! empty($data['id_issue_date']) && ! empty($data['id_expiry']) && strtotime((string) $data['id_issue_date']) > strtotime((string) $data['id_expiry'])) {
             throw new PeexException('La date d\'émission de la pièce est postérieure à sa date d\'expiration.');
+        }
+        // Nouvelle pièce (autre numéro ou autre type) : ses photos sont à renvoyer
+        if ($p->exists && ($before['id_number'] || $before['id_type'])
+            && (strcasecmp((string) $before['id_number'], (string) ($data['id_number'] ?? '')) !== 0 || $before['id_type'] !== ($data['id_type'] ?? null))) {
+            $data['id_changed_at'] = now()->toIso8601String();
         }
         // Adresse « ligne 1 » envoyée aux partenaires : rue / repère + quartier
         $data['address'] = trim(implode(', ', array_filter([$data['street'] ?? null, $data['district'] ?? null]))) ?: ($data['address'] ?? null);

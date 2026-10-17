@@ -141,11 +141,32 @@ class WacepayRemitClient
     public function lists(string $businessType): array
     {
         $bt = strtolower($businessType);
-        return Cache::remember("wacepay_remit:lists:{$bt}", now()->addHours(24), fn () => [
-            'relations' => $this->assoc($this->send('get', 'transaction/relation')),
-            'origin_funds' => $this->assoc($this->send('get', 'transaction/origin_fund/' . $bt)),
-            'reasons' => $this->assoc($this->send('get', 'transaction/reason/' . $bt)),
+        // La doc écrit « transaction/reason/b2B » : on essaie aussi cette casse et la majuscule
+        $variants = array_values(array_unique([$bt, substr($bt, 0, 2) . strtoupper(substr($bt, 2)), strtoupper($bt)]));
+        $out = Cache::remember("wacepay_remit:lists:{$bt}", now()->addHours(24), fn () => [
+            'relations' => $this->firstList(['transaction/relation', 'transaction/relations']),
+            'origin_funds' => $this->firstList(array_map(fn ($v) => 'transaction/origin_fund/' . $v, $variants)),
+            'reasons' => $this->firstList(array_map(fn ($v) => 'transaction/reason/' . $v, $variants)),
         ]);
+        if (! array_filter($out)) {
+            Cache::forget("wacepay_remit:lists:{$bt}"); // rien reçu : on réessaiera
+        }
+        return $out;
+    }
+
+    /** Première liste non vide parmi plusieurs chemins (erreurs ignorées). */
+    protected function firstList(array $paths): array
+    {
+        foreach ($paths as $path) {
+            try {
+                if ($l = $this->assoc($this->send('get', $path))) {
+                    return $l;
+                }
+            } catch (\Throwable $e) {
+                Log::info('WacePay : liste illisible', ['path' => $path, 'error' => mb_substr($e->getMessage(), 0, 160)]);
+            }
+        }
+        return [];
     }
 
     /** Solde de l'agence : {balance, currency} */
@@ -318,8 +339,35 @@ class WacepayRemitClient
     protected function assoc(array $json): array
     {
         $data = data_get($json, 'data', $json);
-        return collect((array) $data)->filter(fn ($v, $k) => is_string($k) && is_scalar($v) && ! in_array($k, ['status', 'stauts', 'message', 'messages'], true))
-            ->map(fn ($v) => (string) $v)->all();
+        $out = [];
+        foreach ((array) $data as $k => $v) {
+            if (is_string($k) && in_array($k, ['status', 'stauts', 'message', 'messages', 'code', 'success'], true)) {
+                continue;
+            }
+            if (is_array($v)) {
+                // [{ "Reason": "Education", "Id": 3 }] ou [{ "name": "...", "value": "..." }]
+                $val = null;
+                foreach (['value', 'Value', 'code', 'Code', 'name', 'Name', 'label', 'Label', 'reason', 'Reason', 'relation', 'Relation', 'origin', 'Origin', 'OriginFund', 'description', 'Description'] as $f) {
+                    if (isset($v[$f]) && is_scalar($v[$f]) && trim((string) $v[$f]) !== '') {
+                        $val = trim((string) $v[$f]);
+                        break;
+                    }
+                }
+                if ($val !== null) {
+                    $label = null;
+                    foreach (['name', 'Name', 'label', 'Label', 'description', 'Description'] as $f) {
+                        if (isset($v[$f]) && is_scalar($v[$f]) && trim((string) $v[$f]) !== '') {
+                            $label = trim((string) $v[$f]);
+                            break;
+                        }
+                    }
+                    $out[$val] = $label ?? $val;
+                }
+            } elseif (is_scalar($v) && trim((string) $v) !== '') {
+                is_string($k) ? $out[$k] = (string) $v : $out[(string) $v] = (string) $v;
+            }
+        }
+        return $out;
     }
 
     protected function code(array $json): ?string

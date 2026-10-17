@@ -38,19 +38,57 @@ class InternationalTransferService
     public const ID_TYPES = ['CNI' => 'Carte nationale d\'identité', 'PP' => 'Passeport', 'PC' => 'Permis de conduire', 'CS' => 'Carte de séjour'];
     public const COMPANY_TYPES = ['SARL', 'SARLU', 'SAS', 'SASU', 'SA', 'EI', 'GIE', 'ONG', 'Association'];
 
-    /** Listes de secours (si le partenaire ne les fournit pas). */
+    /**
+     * Listes de secours (si le partenaire ne les fournit pas) — valeurs au format WacePay
+     * (Digitwace : relation, origine des fonds, motif selon P2P / P2B / B2P / B2B).
+     */
     protected const DEFAULT_LISTS = [
         'p' => [
-            'relations' => ['Family' => 'Famille', 'Brother' => 'Frère', 'Sister' => 'Sœur', 'Mother' => 'Mère', 'Parent' => 'Parent', 'Spouse' => 'Conjoint(e)', 'Friend' => 'Ami(e)', 'Self' => 'Moi-même', 'Colleague' => 'Collègue'],
-            'origin_funds' => ['Salary' => 'Salaire', 'Savings' => 'Épargne', 'Business Income' => 'Revenus d\'activité', 'Loan' => 'Prêt', 'Others' => 'Autre'],
-            'reasons' => ['Family Maintainance' => 'Soutien familial', 'Education' => 'Scolarité', 'Medical Expenses' => 'Frais médicaux', 'Gift' => 'Cadeau', 'Rent Property Expenses' => 'Loyer', 'Travel Expenses' => 'Voyage'],
+            'relations' => ['Family' => 'Famille', 'Father' => 'Père', 'Mother' => 'Mère', 'Parent' => 'Parent', 'Brother' => 'Frère', 'Sister' => 'Sœur',
+                'Son' => 'Fils', 'Daughter' => 'Fille', 'Spouse' => 'Conjoint(e)', 'Uncle' => 'Oncle', 'Aunt' => 'Tante', 'Cousin' => 'Cousin(e)',
+                'Nephew' => 'Neveu', 'Niece' => 'Nièce', 'Grand Parent' => 'Grand-parent', 'Grand Child' => 'Petit-enfant', 'In-law' => 'Belle-famille',
+                'Friend' => 'Ami(e)', 'Colleague' => 'Collègue', 'Employer' => 'Employeur', 'Employee' => 'Employé(e)', 'Landlord' => 'Propriétaire (bailleur)',
+                'Tenant' => 'Locataire', 'Self' => 'Moi-même', 'Others' => 'Autre'],
+            'origin_funds' => ['Salary' => 'Salaire', 'Savings' => 'Épargne', 'Business Income' => 'Revenus d\'activité', 'Pension' => 'Pension / retraite',
+                'Gift' => 'Don reçu', 'Inheritance' => 'Héritage', 'Sale of Property' => 'Vente d\'un bien', 'Rental Income' => 'Revenus locatifs',
+                'Investment' => 'Placements', 'Loan' => 'Prêt', 'Scholarship' => 'Bourse', 'Others' => 'Autre'],
+            'reasons' => ['Family Maintainance' => 'Soutien familial', 'Education' => 'Scolarité', 'Medical Expenses' => 'Frais médicaux', 'Gift' => 'Cadeau',
+                'Rent Property Expenses' => 'Loyer', 'Travel Expenses' => 'Voyage', 'Wedding' => 'Mariage', 'Funeral' => 'Funérailles',
+                'Religious Festival' => 'Fête religieuse', 'Personal Savings' => 'Épargne personnelle', 'Construction' => 'Construction / travaux',
+                'Purchase of Property' => 'Achat d\'un bien', 'Debt Settlement' => 'Remboursement d\'une dette', 'Utility Bills' => 'Factures (eau, électricité…)',
+                'Charity' => 'Don à une association', 'Salary' => 'Salaire', 'Others' => 'Autre'],
         ],
         'b' => [
-            'relations' => ['Supplier' => 'Fournisseur', 'Customer' => 'Client', 'Employee' => 'Employé', 'Partner' => 'Partenaire', 'Subsidiary' => 'Filiale', 'Colleague' => 'Collègue'],
-            'origin_funds' => ['Business Income' => 'Revenus d\'activité', 'Business Profit' => 'Bénéfices', 'Settlement' => 'Règlement', 'Loan' => 'Prêt', 'Others' => 'Autre'],
-            'reasons' => ['Advanced Goods Payments' => 'Paiement de marchandises', 'Other Business Services' => 'Prestations de services', 'Employee Compensation' => 'Salaires', 'Software Export' => 'Logiciels / IT', 'Conference or Training Fee' => 'Formation', 'Business Travel' => 'Voyage d\'affaires'],
+            'relations' => ['Supplier' => 'Fournisseur', 'Customer' => 'Client', 'Employee' => 'Employé', 'Partner' => 'Partenaire', 'Subsidiary' => 'Filiale',
+                'Parent Company' => 'Maison mère', 'Branch' => 'Succursale', 'Contractor' => 'Prestataire', 'Shareholder' => 'Actionnaire',
+                'Agent' => 'Agent / mandataire', 'Colleague' => 'Collègue', 'Others' => 'Autre'],
+            'origin_funds' => ['Business Income' => 'Revenus d\'activité', 'Business Profit' => 'Bénéfices', 'Sales' => 'Ventes', 'Settlement' => 'Règlement',
+                'Investment' => 'Investissement', 'Capital' => 'Capital social', 'Loan' => 'Prêt', 'Grant' => 'Subvention', 'Others' => 'Autre'],
+            'reasons' => ['Advanced Goods Payments' => 'Paiement de marchandises', 'Import of Goods' => 'Importation de marchandises',
+                'Other Business Services' => 'Prestations de services', 'Employee Compensation' => 'Salaires', 'Software Export' => 'Logiciels / IT',
+                'Consulting' => 'Conseil', 'Commission' => 'Commissions', 'Rent' => 'Loyer commercial', 'Transport & Logistics' => 'Transport et logistique',
+                'Conference or Training Fee' => 'Formation', 'Business Travel' => 'Voyage d\'affaires', 'Royalties' => 'Redevances',
+                'Investment' => 'Investissement', 'Loan Repayment' => 'Remboursement de prêt', 'Tax Payment' => 'Paiement d\'impôts', 'Others' => 'Autre'],
         ],
     ];
+
+    /** Libellés français des valeurs WacePay (anglais) reçues de l'API. */
+    protected static function frLabel(string $value, string $label): string
+    {
+        $k = strtolower(trim($value));
+        foreach (self::DEFAULT_LISTS as $grp) {
+            foreach ($grp as $list) {
+                foreach ($list as $code => $fr) {
+                    if (strtolower($code) === $k) {
+                        return $fr;
+                    }
+                }
+            }
+        }
+        $more = ['family maintenance' => 'Soutien familial', 'medical' => 'Frais médicaux', 'school fees' => 'Frais de scolarité', 'business' => 'Affaires',
+            'husband' => 'Mari', 'wife' => 'Épouse', 'other' => 'Autre', 'others' => 'Autre', 'self employed' => 'Indépendant', 'salary' => 'Salaire'];
+        return $more[$k] ?? $label;
+    }
 
     public function __construct(
         protected SwitchService $switch,
@@ -102,35 +140,191 @@ class InternationalTransferService
                 'business_name' => $merchant?->business_name, 'city' => $merchant?->city, 'address' => $merchant?->address,
             ], fn ($v) => $v !== null && $v !== ''),
             'is_business' => (bool) $merchant,
+            // Comptes à débiter : wallet, mobile money lié, carte liée
+            'sources' => $this->sourcesOf($user),
         ];
     }
 
-    /** Services (opérateurs / banque / cash) du pays, groupés par moyen de réception. */
+    /** Comptes que l'expéditeur peut débiter pour un transfert international. */
+    public function sourcesOf(User $user): array
+    {
+        $wallet = $this->walletOf($user);
+        $linked = collect();
+        try {
+            $linked = $user->linkedAccounts()->orderByDesc('is_default')->get();
+        } catch (\Throwable) {
+        }
+        $mobiles = $linked->where('type', 'mobile_money')->map(fn ($a) => [
+            'id' => $a->id, 'phone' => '+' . ltrim((string) $a->phone, '+'), 'country' => $a->country, 'operator' => $a->operator, 'label' => $a->label, 'is_default' => (bool) $a->is_default,
+        ])->values()->all();
+        if ($user->phone && ! collect($mobiles)->contains(fn ($m) => preg_replace('/\D/', '', $m['phone']) === preg_replace('/\D/', '', (string) $user->phone))) {
+            $mobiles[] = ['id' => null, 'phone' => '+' . ltrim((string) $user->phone, '+'), 'country' => $wallet?->country, 'operator' => null, 'label' => 'Mon numéro', 'is_default' => ! $mobiles];
+        }
+        $cards = $linked->where('type', 'card')->map(fn ($a) => [
+            'id' => $a->id, 'last4' => $a->card_last4 ?? null, 'brand' => $a->card_brand ?? null, 'holder' => $a->account_holder, 'is_default' => (bool) $a->is_default,
+        ])->values()->all();
+        $cardOn = in_array((string) config('payment_methods.card_driver', 'none'), ['sandbox', 'wacepay'], true);
+
+        return [
+            'wallet' => ['available' => (bool) $wallet, 'balance' => (int) ($wallet?->balance ?? 0), 'currency' => $wallet?->currency ?? config('flashpay.remit.from_currency', 'XAF')],
+            'mobile' => ['available' => (bool) config('flashpay.remit.allow_mobile_source', true), 'accounts' => $mobiles],
+            'card' => ['available' => $cardOn && (bool) config('flashpay.remit.allow_card_source', true), 'accounts' => $cards,
+                'reason' => $cardOn ? null : 'Paiement par carte bientôt disponible.'],
+        ];
+    }
+
+    /**
+     * Compte à débiter : wallet (défaut), mobile money (compte lié ou numéro du titulaire, collecte
+     * PEEX / WacePay / PawaPay selon le pays) ou carte liée (page 3-D Secure).
+     * @return array{type:string, rail:string, phone:?string, country:?string, currency:string, label:string, linked_id:?int, collect_partner:?string, problems:array}
+     */
+    public function sourceFor(User $user, array $in, string $currency): array
+    {
+        $type = in_array($in['type'] ?? 'wallet', ['wallet', 'mobile', 'card'], true) ? ($in['type'] ?? 'wallet') : 'wallet';
+        $out = ['type' => $type, 'rail' => 'wallet', 'phone' => null, 'country' => null, 'currency' => $currency, 'label' => 'Wallet FlashPay', 'linked_id' => null, 'collect_partner' => null, 'problems' => []];
+        $flow = app(\App\Services\Peex\PeexFlowService::class);
+        if ($type === 'mobile') {
+            if (! config('flashpay.remit.allow_mobile_source', true)) {
+                $out['problems'][] = 'Débit mobile money non disponible pour les transferts internationaux.';
+                return $out;
+            }
+            $phone = trim((string) ($in['phone'] ?? $user->phone ?? ''));
+            try {
+                $route = app(\App\Services\Peex\PeexCorridors::class)->resolve($phone);
+            } catch (\Throwable $e) {
+                $out['problems'][] = $e->getMessage();
+                return $out;
+            }
+            $out['phone'] = $route['phone'];
+            $out['country'] = $route['country'];
+            $out['label'] = 'Mobile money ' . $route['phone'];
+            if (empty($route['collect'])) {
+                $out['problems'][] = "Débit mobile money non disponible depuis {$route['country_name']}.";
+                return $out;
+            }
+            $parity = (array) config('flashpay.fixed_parity', ['XAF', 'XOF']);
+            if ($route['currency'] !== $currency && ! (in_array($route['currency'], $parity, true) && in_array($currency, $parity, true))) {
+                $out['problems'][] = "Ce numéro est en {$route['currency']} : débitez un compte en {$currency}.";
+                return $out;
+            }
+            try {
+                $out['rail'] = $flow->collectRailFor($route);
+                $linked = $flow->linkedMobile($user, $route['phone'], ['source_country' => $route['country']]);
+                $out['linked_id'] = $linked?->id;
+            } catch (\Throwable $e) {
+                $out['problems'][] = str_replace('Recharge refusée', 'Débit refusé', $e->getMessage());
+                return $out;
+            }
+            $out['collect_partner'] = match ($out['rail']) { 'digitwace' => 'digitwace', 'pawapay_momo' => 'pawapay', default => 'peex' };
+        } elseif ($type === 'card') {
+            $out['rail'] = 'card';
+            $out['label'] = 'Carte bancaire';
+            if (! in_array((string) config('payment_methods.card_driver', 'none'), ['sandbox', 'wacepay'], true) || ! config('flashpay.remit.allow_card_source', true)) {
+                $out['problems'][] = 'Le paiement par carte n\'est pas encore disponible.';
+                return $out;
+            }
+            try {
+                $card = $flow->linkedCard($user, array_filter(['linked_account_id' => $in['linked_account_id'] ?? null]));
+                $out['linked_id'] = $card?->id;
+                if ($card) {
+                    $out['label'] = trim(($card->card_brand ?? 'Carte') . ' •••• ' . ($card->card_last4 ?? ''));
+                }
+            } catch (\Throwable $e) {
+                $out['problems'][] = str_replace('Recharge par carte impossible', 'Paiement par carte impossible', $e->getMessage());
+            }
+        }
+        return $out;
+    }
+
+    /** Frais du partenaire de collecte (mobile money, carte), ajoutés aux frais payés par le client. */
+    protected function collectFee(array $src, int $gross): int
+    {
+        if ($src['type'] === 'wallet' || ! config('flashpay.fees.pass_partner_fees', true)) {
+            return 0;
+        }
+        $key = $src['type'] === 'card'
+            ? (config('payment_methods.card_driver') === 'wacepay' ? 'digitwace_card' : 'card')
+            : ($src['collect_partner'] ?? 'peex') . '_collect';
+        try {
+            return \App\Support\PartnerFees::quoteFee($key, $gross, $src['country'], \App\Support\PartnerFees::rates(), gross: true);
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    /**
+     * Services (opérateurs / banque / cash) du pays, groupés par moyen de réception, et disponibilité
+     * de chaque mode : un mode que le partenaire ne propose pas pour ce pays est grisé dans l'app.
+     * @return array{partner:string, methods:array, available:array<string,bool>, unavailable:array<string,string>, message:?string}
+     */
     public function services(string $iso): array
     {
         $c = $this->country($iso);
         $p = $c['partner'];
+        $offered = RemitCountries::methodsOf($p);
+        $methods = [];
+        $message = null;
         if ($p === 'terrapay') {
-            return ['partner' => $p, 'methods' => ['wallet' => [['code' => '', 'name' => 'Mobile money (opérateur détecté automatiquement)']], 'bank' => [['code' => '', 'name' => 'Virement bancaire']]]];
-        }
-        if ($p === 'pawapay') {
-            $providers = [];
+            $methods = ['wallet' => [['code' => '', 'name' => 'Mobile money (opérateur détecté automatiquement)']], 'bank' => [['code' => '', 'name' => 'Virement bancaire']]];
+        } elseif ($p === 'pawapay') {
+            $providers = null;
             try {
                 $providers = $this->pawa->activeCountries()[PawapayClient::iso3($iso)] ?? [];
             } catch (\Throwable) {
                 // configuration pawaPay illisible : opérateur détecté depuis le numéro
             }
-            $list = [['code' => '', 'name' => 'Mobile money (opérateur détecté automatiquement)']];
-            foreach ($providers as $pr) {
-                $list[] = ['code' => $pr, 'name' => ucwords(strtolower(str_replace('_', ' ', preg_replace('/_[A-Z]{3}$/', '', $pr))))];
+            if ($providers === []) {
+                $message = "PawaPay ne verse pas encore vers {$c['name']}.";
+            } else {
+                $list = [['code' => '', 'name' => 'Mobile money (opérateur détecté automatiquement)']];
+                foreach ((array) $providers as $pr) {
+                    $list[] = ['code' => $pr, 'name' => ucwords(strtolower(str_replace('_', ' ', preg_replace('/_[A-Z]{3}$/', '', $pr))))];
+                }
+                $methods = ['wallet' => $list];
             }
-            return ['partner' => $p, 'methods' => ['wallet' => $list]];
+        } else {
+            try {
+                $out = ['wallet' => [], 'bank' => [], 'cash' => []];
+                foreach ($this->wace->payoutServices($iso, $c['currency']) as $sv) {
+                    $out[$sv['method']][] = ['code' => $sv['code'], 'name' => $sv['name']];
+                }
+                $methods = array_filter($out);
+                if (! $methods) {
+                    $message = "WacePay ne propose aucun mode de réception vers {$c['name']} ({$c['currency']}).";
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('WacePay : services de versement illisibles', ['country' => $iso, 'error' => mb_substr($e->getMessage(), 0, 200)]);
+                $message = "Transferts vers {$c['name']} momentanément indisponibles (le partenaire ne répond pas). Réessayez plus tard.";
+            }
         }
-        $out = ['wallet' => [], 'bank' => [], 'cash' => []];
-        foreach ($this->wace->payoutServices($iso, $c['currency']) as $s) {
-            $out[$s['method']][] = ['code' => $s['code'], 'name' => $s['name']];
+        $available = [];
+        $unavailable = [];
+        foreach (array_keys(self::METHODS) as $m) {
+            $available[$m] = in_array($m, $offered, true) && ! empty($methods[$m]);
+            if (! $available[$m]) {
+                $unavailable[$m] = ! in_array($m, $offered, true)
+                    ? self::METHODS[$m] . ' : non proposé par ' . $this->partnerName($p) . '.'
+                    : ($message ?? self::METHODS[$m] . " : non disponible vers {$c['name']}.");
+            }
         }
-        return ['partner' => $p, 'methods' => array_filter($out)];
+        return ['partner' => $p, 'methods' => $methods, 'available' => $available, 'unavailable' => $unavailable, 'message' => $message];
+    }
+
+    /** Le mode de réception est-il proposé pour ce pays ? (contrôle du devis ; null = indéterminé) */
+    protected function methodProblem(array $c, string $method): ?string
+    {
+        if (! in_array($method, RemitCountries::methodsOf($c['partner']), true)) {
+            return (self::METHODS[$method] ?? $method) . " : non disponible vers {$c['name']}.";
+        }
+        if ($c['partner'] !== 'wacepay_remit') {
+            return null;
+        }
+        try {
+            $s = $this->services($c['iso']);
+        } catch (\Throwable) {
+            return null;
+        }
+        return $s['available'][$method] ?? true ? null : ($s['unavailable'][$method] ?? (self::METHODS[$method] ?? $method) . " : non disponible vers {$c['name']}.");
     }
 
     /** Banques (WacePay : liste avec BankID ; TerraPay : saisie libre + SWIFT). */
@@ -140,8 +334,13 @@ class InternationalTransferService
         if ($c['partner'] !== 'wacepay_remit') {
             return ['free_text' => true, 'banks' => []];
         }
-        $payer = $this->wace->payerCode($iso, $c['currency'], $service);
-        return ['free_text' => false, 'banks' => $this->wace->banks($iso, $payer)];
+        try {
+            $payer = $this->wace->payerCode($iso, $c['currency'], $service);
+            $banks = $this->wace->banks($iso, $payer);
+        } catch (\Throwable) {
+            return ['free_text' => true, 'banks' => [], 'warning' => 'Liste des banques indisponible : saisissez le nom de la banque.'];
+        }
+        return ['free_text' => ! $banks, 'banks' => $banks];
     }
 
     public function cashPoints(string $iso, array $service): array
@@ -150,8 +349,12 @@ class InternationalTransferService
         if ($c['partner'] !== 'wacepay_remit') {
             return [];
         }
-        $payer = $this->wace->payerCode($iso, $c['currency'], $service);
-        return $this->wace->cashPoints($iso, $c['currency'], $payer, config('flashpay.remit.from_currency', 'XAF'));
+        try {
+            $payer = $this->wace->payerCode($iso, $c['currency'], $service);
+            return $this->wace->cashPoints($iso, $c['currency'], $payer, config('flashpay.remit.from_currency', 'XAF'));
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     /** Relations, origines des fonds, motifs selon le type (p2p, p2b, b2p, b2b). */
@@ -162,16 +365,18 @@ class InternationalTransferService
         if ((! $iso || RemitCountries::partnerFor($iso) === 'wacepay_remit') && $this->wace->enabled()) {
             try {
                 $l = $this->wace->lists($bt);
+                $fr = fn (array $m) => collect($m)->mapWithKeys(fn ($label, $code) => [$code => self::frLabel((string) $code, (string) $label)])->all();
                 return [
-                    'relations' => $l['relations'] ?: $fallback['relations'],
-                    'origin_funds' => $l['origin_funds'] ?: $fallback['origin_funds'],
-                    'reasons' => $l['reasons'] ?: $fallback['reasons'],
+                    'relations' => $l['relations'] ? $fr($l['relations']) : $fallback['relations'],
+                    'origin_funds' => $l['origin_funds'] ? $fr($l['origin_funds']) : $fallback['origin_funds'],
+                    'reasons' => $l['reasons'] ? $fr($l['reasons']) : $fallback['reasons'],
+                    'source' => 'wacepay',
                 ];
             } catch (\Throwable) {
                 // listes de secours
             }
         }
-        return $fallback;
+        return $fallback + ['source' => 'flashpay'];
     }
 
     // ------------------------------------------------------------ Devis
@@ -190,8 +395,8 @@ class InternationalTransferService
         if (! isset(self::BUSINESS_TYPES[$bt])) {
             $problems[] = 'Type de transfert inconnu.';
         }
-        if (! in_array($method, RemitCountries::methodsOf($c['partner']), true)) {
-            $problems[] = (self::METHODS[$method] ?? $method) . " : non disponible vers {$c['name']}.";
+        if ($mp = $this->methodProblem($c, $method)) {
+            $problems[] = $mp;
         }
         if ($amount < (int) config('flashpay.remit.min_amount', 1000)) {
             $problems[] = 'Montant minimum : ' . number_format((int) config('flashpay.remit.min_amount', 1000), 0, ',', ' ') . " {$currency}.";
@@ -216,7 +421,10 @@ class InternationalTransferService
         // Normes (Console › Tarifs internationaux) : zone + seuil, frais HT de la tranche, taxes → frais TTC
         $pricing = app(RemitFeeService::class);
         $priced = $pricing->compute($c['iso'], $bt, $method, $c['partner'] ?? null, $amount);
-        $fee = $priced['fee'];
+        $source = $this->sourceFor($user, (array) ($in['source'] ?? []), $currency);
+        array_push($problems, ...$source['problems']);
+        $collectFee = $this->collectFee($source, $amount + $priced['fee']);
+        $fee = $priced['fee'] + $collectFee;
         if ($priced['threshold'] && $amount > $priced['threshold']) {
             $problems[] = 'Montant maximum par transfert vers ' . $priced['zone']->name . ' : ' . number_format($priced['threshold'], 0, ',', ' ') . " {$currency}.";
         }
@@ -226,7 +434,7 @@ class InternationalTransferService
             $fx = ['amount' => 0, 'rate' => 0, 'margin_percent' => 0, 'from' => $currency, 'to' => $c['currency'], 'source' => 'indisponible'];
             $problems[] = "Taux de change {$currency} → {$c['currency']} non disponible pour le moment.";
         }
-        if ($wallet && (int) $wallet->balance < $amount + $fee) {
+        if ($source['type'] === 'wallet' && $wallet && (int) $wallet->balance < $amount + $fee) {
             $problems[] = 'Solde insuffisant (' . number_format((int) $wallet->balance, 0, ',', ' ') . " {$currency}).";
         }
         if (! $problems && ($p = $this->partnerBalanceProblem($c['partner'], $amount, $currency))) {
@@ -246,6 +454,9 @@ class InternationalTransferService
             'currency' => $currency,
             'fee' => $fee,
             'fee_ht' => $priced['fee_ht'],
+            'fee_remit' => $priced['fee'],
+            'collect_fee' => $collectFee,
+            'source' => array_diff_key($source, ['problems' => 1]),
             'taxes' => $priced['taxes'],
             'taxes_total' => $priced['taxes_total'],
             'zone' => $priced['zone'] ? ['id' => $priced['zone']->id, 'name' => $priced['zone']->name, 'threshold' => $priced['threshold']] : null,
@@ -331,10 +542,12 @@ class InternationalTransferService
         $converted = $q['currency'] !== $q['receive_currency'];
         $display = $ben['type'] === 'B' ? $ben['business_name'] : trim($ben['first_name'] . ' ' . $ben['last_name']);
 
-        return $this->switch->process([
+        $src = $q['source'];
+        $payload = [
             'type' => 'international_transfer',
             'scope' => 'international',
-            'source_rail' => 'wallet',
+            'source_rail' => $src['rail'],
+            'source_account' => $src['type'] === 'mobile' ? $src['phone'] : null,
             'source_wallet_id' => $wallet->id,
             'destination_rail' => $q['partner'],
             'destination_account' => $account['msisdn'] ?? $account['account'] ?? ('cash:' . ($account['city'] ?? $country['iso'])),
@@ -347,7 +560,7 @@ class InternationalTransferService
             'meta' => array_filter([
                 'channel' => 'international',
                 'destination_country' => $country['iso'],
-                'source_country' => $sender['country'],
+                'source_country' => $src['country'] ?? $sender['country'],
                 'sender_name' => $sender['type'] === 'B' ? $sender['business_name'] : trim($sender['first_name'] . ' ' . $sender['last_name']),
                 'beneficiary_name' => $display,
                 'business_type' => strtoupper($bt),
@@ -357,8 +570,20 @@ class InternationalTransferService
                 'remit' => $remit,
                 'purpose' => $remit['why']['reason'] ?? null,
                 'note' => $remit['note'],
+                'debit_source' => $src['type'],
+                'linked_account_id' => $src['linked_id'],
+                'sender_phone' => $src['type'] === 'mobile' ? $src['phone'] : null,
+                'fee_breakdown' => $q['collect_fee'] ? ['flashpay' => $q['fee_remit'], 'collect' => $q['collect_fee']] : null,
             ], fn ($v) => $v !== null && $v !== ''),
-        ]);
+        ];
+
+        // Carte : la collecte est confirmée par la page de paiement sécurisée (3-D Secure)
+        if ($src['type'] === 'card') {
+            $tx = $this->switch->createPending($payload, 'awaiting_card');
+            return app(\App\Services\Payments\CardPaymentService::class)->startCheckout($tx);
+        }
+
+        return $this->switch->process($payload);
     }
 
     /** Contrôles bloquants côté partenaire, sans rien débiter. */

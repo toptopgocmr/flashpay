@@ -21,6 +21,7 @@ class InternationalTransferTest extends TestCase
     protected string $terraStatus = '3050:Remit Acknowledged.';
     protected string $terraAccount = 'available';
     protected string $pawaStatus = 'PROCESSING';
+    protected ?array $waceServices = null; // null = liste par défaut ; [] = aucun service ; ['down'] = erreur 500
 
     protected function setUp(): void
     {
@@ -48,6 +49,8 @@ class InternationalTransferTest extends TestCase
                     ? Http::response(['status' => 2000, 'access_token' => 'WTOK', 'token_type' => 'bearer', 'expires_in' => 3600])
                     : Http::response(['status' => 1002, 'message' => 'bad'], 401),
                 str_ends_with($u, '/account/balance') => Http::response(['status' => 2000, 'data' => ['Balance' => '9000000.000', 'Currency' => 'XAF']]),
+                str_ends_with($u, '/transaction/payouts/services') && $this->waceServices === ['down'] => Http::response(['message' => 'Server Error'], 500),
+                str_ends_with($u, '/transaction/payouts/services') && $this->waceServices !== null => Http::response(['status' => 2000, 'data' => $this->waceServices]),
                 str_ends_with($u, '/transaction/payouts/services') => Http::response(['status' => 2000, 'data' => [
                     ['ServiceCode' => 'B', 'ServiceName' => 'BANKS DEPOSIT'], ['ServiceCode' => 'OM', 'ServiceName' => 'ORANGE MONEY'], ['ServiceCode' => 'CP', 'ServiceName' => 'CASH PICKUP'],
                 ]]),
@@ -472,5 +475,87 @@ class InternationalTransferTest extends TestCase
         $q = $this->postJson('/api/pay/international/quote', ['amount' => 10000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p'])->assertOk();
         $this->assertContains('id_expired', $q->json('problem_codes'));
         $this->assertTrue($this->getJson('/api/pay/international/options')->json('profile.expired'));
+    }
+
+    public function test_unavailable_methods_are_greyed_and_partner_errors_never_500(): void
+    {
+        $c = $this->client();
+        $this->actingAs($c, 'sanctum');
+
+        // Tous les modes proposés
+        $s = $this->getJson('/api/pay/international/services?country=CI')->assertOk();
+        $this->assertSame(['wallet' => true, 'bank' => true, 'cash' => true], $s->json('available'));
+
+        // WacePay ne propose que le mobile money vers ce pays : banque et cash grisés, devis refusé
+        $this->waceServices = [['ServiceCode' => 'OM', 'ServiceName' => 'ORANGE MONEY']];
+        Cache::flush();
+        $s = $this->getJson('/api/pay/international/services?country=SN')->assertOk();
+        $this->assertSame(['wallet' => true, 'bank' => false, 'cash' => false], $s->json('available'));
+        $this->assertNotEmpty($s->json('unavailable.bank'));
+        $q = $this->postJson('/api/pay/international/quote', ['amount' => 10000, 'country' => 'SN', 'method' => 'bank', 'business_type' => 'p2p'])->assertOk();
+        $this->assertFalse($q->json('available'));
+
+        // Le partenaire ne répond pas : 200 avec tout grisé et un message (plus d'« Erreur interne du serveur »)
+        $this->waceServices = ['down'];
+        Cache::flush();
+        $s = $this->getJson('/api/pay/international/services?country=ML')->assertOk();
+        $this->assertSame(['wallet' => false, 'bank' => false, 'cash' => false], $s->json('available'));
+        $this->assertStringContainsString('indisponibles', (string) $s->json('message'));
+        // Banques : saisie libre au lieu de « aucun PayerCode »
+        $this->postJson('/api/pay/international/banks', ['country' => 'ML'])->assertOk()->assertJsonPath('free_text', true);
+
+        // Listes WacePay : libellés en français
+        $this->waceServices = null;
+        $l = $this->getJson('/api/pay/international/lists?business_type=p2p&country=CI')->assertOk();
+        $this->assertSame('Soutien familial', $l->json('reasons')['Family Maintainance']);
+        $this->assertSame('Frère', $l->json('relations')['Brother']);
+    }
+
+    public function test_sender_chooses_the_account_to_debit(): void
+    {
+        $c = $this->client(0); // wallet vide
+        $this->actingAs($c, 'sanctum');
+        $o = $this->getJson('/api/pay/international/options')->assertOk();
+        $this->assertTrue($o->json('sources.wallet.available'));
+        $this->assertSame('+242069887766', $o->json('sources.mobile.accounts.0.phone'));
+
+        $base = ['amount' => 10000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p'];
+        // Wallet vide : solde insuffisant
+        $q = $this->postJson('/api/pay/international/quote', $base)->assertOk();
+        $this->assertFalse($q->json('available'));
+        // Mobile money du titulaire : pas de contrôle du solde du wallet, frais de collecte ajoutés
+        $q = $this->postJson('/api/pay/international/quote', $base + ['source' => ['type' => 'mobile', 'phone' => '+242069887766']])->assertOk();
+        $this->assertTrue($q->json('available'), implode(' ', (array) $q->json('problems')));
+        $this->assertSame('mobile', $q->json('source.type'));
+        $this->assertSame($q->json('fee_remit') + $q->json('collect_fee'), $q->json('fee'));
+        // Numéro non lié au profil : refusé
+        $q = $this->postJson('/api/pay/international/quote', $base + ['source' => ['type' => 'mobile', 'phone' => '+242055001122']])->assertOk();
+        $this->assertFalse($q->json('available'));
+        $this->assertStringContainsString('Comptes liés', implode(' ', $q->json('problems')));
+        // Carte : aucune carte liée
+        config(['payment_methods.card_driver' => 'sandbox']);
+        $q = $this->postJson('/api/pay/international/quote', $base + ['source' => ['type' => 'card']])->assertOk();
+        $this->assertFalse($q->json('available'));
+    }
+
+    public function test_new_id_document_requires_new_photos_and_profile_photo_is_listed(): void
+    {
+        $c = $this->client();
+        $this->actingAs($c, 'sanctum');
+        \App\Models\KycDocument::where('user_id', $c->id)->update(['created_at' => now()->subDays(3)]);
+        $p = $this->getJson('/api/pay/international/profile')->assertOk();
+        $this->assertTrue($p->json('complete'));
+        $this->assertSame('profile_photo', $p->json('documents.photo.type'));
+        $this->assertFalse($p->json('documents.photo.required'));
+
+        // Pièce renouvelée : nouveau numéro → photos de l'ancienne pièce à renvoyer
+        $this->putJson('/api/pay/international/profile', ['id_number' => 'Y987', 'id_expiry' => now()->addYears(5)->toDateString()])->assertOk();
+        $p = $this->getJson('/api/pay/international/profile')->assertOk();
+        $this->assertFalse($p->json('complete'));
+        $this->assertSame('outdated', $p->json('documents.front.status'));
+        foreach (['passport', 'selfie'] as $t) {
+            \App\Models\KycDocument::create(['user_id' => $c->id, 'type' => $t, 'path' => "kyc/{$t}2.jpg", 'status' => 'pending']);
+        }
+        $this->assertTrue($this->getJson('/api/pay/international/profile')->json('complete'));
     }
 }

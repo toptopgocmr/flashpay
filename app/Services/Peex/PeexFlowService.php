@@ -161,7 +161,7 @@ class PeexFlowService
             || (method_exists($user, 'hasRole') && $user->hasRole('super_admin'));
     }
 
-    protected function linkedMobile(User $user, string $phone, array $opt): ?\App\Models\LinkedAccount
+    public function linkedMobile(User $user, string $phone, array $opt): ?\App\Models\LinkedAccount
     {
         if ($this->linkedCheckExempt($user, $opt + ($opt['meta'] ?? []))) {
             return null;
@@ -188,7 +188,7 @@ class PeexFlowService
             . 'Ajoutez-le dans Profil › Comptes liés (code PIN demandé), puis réessayez.');
     }
 
-    protected function linkedCard(User $user, array $meta): ?\App\Models\LinkedAccount
+    public function linkedCard(User $user, array $meta): ?\App\Models\LinkedAccount
     {
         if ($this->linkedCheckExempt($user, $meta)) {
             return null;
