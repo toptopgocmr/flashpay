@@ -65,7 +65,7 @@ class PricingAdminController extends Controller
 
     // ------------------------------------------------------------------ Corridors
 
-    public function corridors()
+    public function corridors(Request $request)
     {
         $defaults = $this->corridors->defaults();
         $overrides = CorridorSetting::all()->keyBy('country');
@@ -82,7 +82,9 @@ class PricingAdminController extends Controller
             }, []);
 
         $coverage = app(\App\Services\Digitwace\CoverageService::class)->byCountry();
-        $list = collect($this->corridors->catalog())->map(function ($c) use ($defaults, $overrides, $usage, $coverage) {
+        // pawaPay : couverture lue sur le compte (active-conf) ; sans réponse, pays du réseau pawaPay
+        [$pawaCov, $pawaErr] = self::pawapayCoverage($request->boolean('pawapay_refresh'));
+        $list = collect($this->corridors->catalog())->map(function ($c) use ($defaults, $overrides, $usage, $coverage, $pawaCov) {
             $d = $defaults[$c['country']] ?? [];
             $o = $overrides[$c['country']] ?? null;
             return $c + [
@@ -93,7 +95,7 @@ class PricingAdminController extends Controller
                 // Services proposés par WacePay dans ce pays (synchro getPayerCode)
                 'wacepay' => $coverage[$c['country']] ?? null,
                 // pawaPay : pays de son réseau mobile money (collecte + versement)
-                'pawapay' => isset(\App\Services\Remit\PawapayClient::ISO3[$c['country']]) && ! in_array($c['country'], ['FR', 'US', 'BE', 'GB'], true),
+                'pawapay' => $pawaCov[$c['country']] ?? null,
                 'payout_partner_name' => PeexCorridors::partnerName($c['payout_partner']),
                 'overridden' => (bool) $o,
                 'note' => $o?->note,
@@ -139,6 +141,13 @@ class PricingAdminController extends Controller
                 'collect_countries' => $list->where('collect', true)->where('collect_partner', 'pawapay')->count(),
                 'payout_countries' => $list->where('payout', true)->where('payout_partner', 'pawapay')->count(),
                 'webhook' => url('/api/webhooks/pawapay'),
+                'coverage_countries' => count(array_filter($pawaCov, fn ($r) => $r['collect'] || $r['payout'])),
+                'coverage_payin' => count(array_filter($pawaCov, fn ($r) => $r['collect'])),
+                'coverage_payout' => count(array_filter($pawaCov, fn ($r) => $r['payout'])),
+                'coverage_list' => array_keys(array_filter($pawaCov, fn ($r) => $r['collect'] || $r['payout'])),
+                'coverage_live' => $pawaErr === null,
+                'coverage_error' => $pawaErr,
+                'coverage_synced_at' => cache('pawapay:coverage:synced_at'),
             ],
         ];
 
@@ -157,6 +166,22 @@ class PricingAdminController extends Controller
                 'stale_rates' => $rates->filter(fn ($r) => str_contains((string) $r->source, 'indicatif') || $r->updated_at < now()->subDays(7))->count(),
             ],
         ]);
+    }
+
+    /** @return array{0: array, 1: ?string} couverture pawaPay par pays (ISO2) et erreur éventuelle de lecture */
+    protected static function pawapayCoverage(bool $fresh = false): array
+    {
+        $pawa = app(\App\Services\Remit\PawapayClient::class);
+        $fallback = collect(\App\Services\Remit\PawapayClient::ISO3)->except(['FR', 'US', 'BE', 'GB'])
+            ->map(fn () => ['collect' => true, 'payout' => true, 'providers' => [], 'unverified' => true])->all();
+        if (! $pawa->enabled()) {
+            return [$fallback, 'PawaPay non configuré'];
+        }
+        try {
+            return [$pawa->coverage($fresh), null];
+        } catch (\Throwable $e) {
+            return [$fallback, mb_substr($e->getMessage(), 0, 200)];
+        }
     }
 
     /** { collect?: bool, payout?: bool, payout_api?: disbursement|remittance, note? } */
@@ -183,10 +208,14 @@ class PricingAdminController extends Controller
             unset($v['partner']);
         }
 
-        // pawaPay : uniquement les pays de son réseau mobile money
-        if (in_array('pawapay', [$v['collect_partner'] ?? null, $v['payout_partner'] ?? null], true)
-            && (! isset(\App\Services\Remit\PawapayClient::ISO3[$iso]) || in_array($iso, ['FR', 'US', 'BE', 'GB'], true))) {
-            return response()->json(['message' => "PawaPay ne couvre pas {$iso}."], 422);
+        // pawaPay : uniquement là où le compte pawaPay ouvre le flux (active-conf)
+        if (in_array('pawapay', [$v['collect_partner'] ?? null, $v['payout_partner'] ?? null], true)) {
+            $cov = self::pawapayCoverage()[0][$iso] ?? null;
+            foreach (['collect_partner' => ['collect', 'la collecte'], 'payout_partner' => ['payout', 'le versement']] as $field => [$flow, $label]) {
+                if (($v[$field] ?? null) === 'pawapay' && empty($cov[$flow])) {
+                    return response()->json(['message' => "PawaPay ne propose pas {$label} pour {$iso} sur votre compte."], 422);
+                }
+            }
         }
 
         // WacePay n'est proposé que là où la couverture synchronisée l'annonce

@@ -29,6 +29,10 @@
             <div class="gw-row"><span class="gw-dot" :class="{ off: !p.payout_countries }"></span>
               <div class="gw-main"><b>Versement</b><small v-if="p.key === 'digitwace' && p.coverage_countries">{{ p.coverage_payout }} pays disponibles</small></div>
               <div class="gw-end"><b>{{ n(p.payout_countries) }} pays</b></div></div>
+            <div v-if="p.key === 'pawapay'" class="gw-row"><span class="gw-dot" :class="p.coverage_live ? '' : 'err'"></span>
+              <div class="gw-main"><b>Couverture</b><small :class="{ 't-err': !p.coverage_live }">{{ p.coverage_live ? `collecte ${p.coverage_payin} · versement ${p.coverage_payout}` + (p.coverage_list?.length ? ' · ' + p.coverage_list.join(', ') : '') + (p.coverage_synced_at ? ' · ' + dt(p.coverage_synced_at) : '') : 'Non lue : ' + (p.coverage_error || '') }}</small></div>
+              <div class="gw-end"><b v-if="p.coverage_live">{{ p.coverage_countries }} pays</b>
+                <button class="btn-normal sm" :disabled="pSyncing || !p.ready" @click="syncPawapay">{{ pSyncing ? '…' : 'Synchroniser' }}</button></div></div>
             <template v-if="p.key === 'digitwace'">
               <div class="gw-row"><span class="gw-dot" :class="{ off: !p.coverage_countries }"></span>
                 <div class="gw-main"><b>Couverture</b><small>{{ p.coverage_countries ? `collecte ${p.coverage_payin} · versement ${p.coverage_payout}` + (p.coverage_synced_at ? ' · ' + dt(p.coverage_synced_at) : '') : 'Non synchronisée' }}</small></div>
@@ -111,7 +115,7 @@
                     <select class="api" :class="'p-' + gw(c)" :value="gw(c)" @change="setGateway(c, $event.target.value)" title="Collecte, versement, vérifications et soldes passent par cette passerelle">
                       <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payin') && !waceOk(c, 'payout')">WacePay</option>
-                      <option value="pawapay" :disabled="!c.pawapay">PawaPay{{ c.pawapay ? '' : ' — non couvert' }}</option>
+                      <option value="pawapay" :disabled="!c.pawapay?.collect || !c.pawapay?.payout">PawaPay{{ pawaNote(c) }}</option>
                       <option value="mixed" disabled>Mixte</option>
                     </select>
                     <button type="button" class="custom-btn" @click="custom[c.country] = !custom[c.country]">{{ custom[c.country] ? 'Masquer' : 'Par flux' }}</button>
@@ -122,7 +126,7 @@
                     <select class="api" :class="'p-' + c.collect_partner" :value="c.collect_partner" @change="update(c, { collect_partner: $event.target.value })">
                       <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payin')">WacePay{{ waceNote(c, 'payin') }}</option>
-                      <option value="pawapay" :disabled="!c.pawapay">PawaPay{{ c.pawapay ? '' : ' — non couvert' }}</option>
+                      <option value="pawapay" :disabled="!c.pawapay?.collect">PawaPay{{ pawaNote(c, 'collect') }}</option>
                     </select>
                   </div>
                   <div class="pl" :class="{ dim: !c.payout }">
@@ -130,7 +134,7 @@
                     <select class="api" :class="'p-' + c.payout_partner" :value="c.payout_partner" @change="update(c, { payout_partner: $event.target.value })">
                       <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payout')">WacePay{{ waceNote(c, 'payout') }}</option>
-                      <option value="pawapay" :disabled="!c.pawapay">PawaPay{{ c.pawapay ? '' : ' — non couvert' }}</option>
+                      <option value="pawapay" :disabled="!c.pawapay?.payout">PawaPay{{ pawaNote(c, 'payout') }}</option>
                     </select>
                   </div>
                   </template>
@@ -144,6 +148,7 @@
                     </select>
                   </div>
                   <div v-if="(c.payout_partner === 'digitwace' || c.collect_partner === 'digitwace') && !partnerReady('digitwace')" class="t-warn small">⚠ WacePay non configuré</div>
+                  <div v-if="c.pawapay && !c.pawapay.unverified" class="wace-avail">PawaPay ici : {{ [c.pawapay.collect && 'collecte', c.pawapay.payout && 'versement'].filter(Boolean).join(' + ') || '—' }}{{ c.pawapay.providers.length ? ' · ' + c.pawapay.providers.join(', ') : '' }}</div>
                   <div v-if="(c.payout_partner === 'pawapay' || c.collect_partner === 'pawapay') && !partnerReady('pawapay')" class="t-warn small">⚠ PawaPay non configuré (PAWAPAY_ENABLED, PAWAPAY_API_TOKEN)</div>
                   <div v-if="(c.payout_partner === 'digitwace' && !waceOk(c, 'payout')) || (c.collect_partner === 'digitwace' && !waceOk(c, 'payin'))" class="t-warn small">
                     ⚠ WacePay non confirmé ici ({{ c.wacepay ? 'service absent' : 'couverture non synchronisée' }})
@@ -331,6 +336,12 @@ const zoneLabel = { CEMAC: 'CEMAC — Afrique centrale', UEMOA: 'UEMOA — Afriq
 const syncing = ref(false)
 // WacePay proposé seulement là où la couverture synchronisée l'annonce
 const waceOk = (c, svc) => !!c.wacepay?.[svc]
+const pawaNote = (c, flow) => (!c.pawapay ? ' — non couvert' : (flow ? (c.pawapay[flow] ? '' : ' — non ouvert sur le compte') : (c.pawapay.collect && c.pawapay.payout ? '' : ' — un seul flux ouvert : utiliser « Par flux »')))
+const pSyncing = ref(false)
+async function syncPawapay() {
+  pSyncing.value = true
+  try { await load(true) } finally { pSyncing.value = false }
+}
 const waceNote = (c, svc) => (c.wacepay ? (c.wacepay[svc] ? '' : ' — non disponible ici') : ' — couverture non synchronisée')
 const wBal = ref(null)
 const wBalLoading = ref(false)
@@ -398,10 +409,10 @@ async function setRemitPartner(c, partner) {
   if (partner === 'off' && !(await confirmBox('Les clients ne pourront plus envoyer d\'argent vers ce pays depuis l\'app.', { title: `Fermer les transferts vers ${c.name} ?`, confirmLabel: 'Fermer', danger: true }))) return loadRemit()
   run(() => api.post(`/admin/remit/countries/${c.iso}`, { partner }), 'R' + c.iso)
 }
-async function load() {
+async function load(pawapayRefresh = false) {
   error.value = ''
   try {
-    const [c, r] = await Promise.all([api.get('/admin/corridors'), api.get('/admin/fx-rates')])
+    const [c, r] = await Promise.all([api.get('/admin/corridors', { params: pawapayRefresh === true ? { pawapay_refresh: 1 } : {} }), api.get('/admin/fx-rates')])
     corridors.value = c.data.corridors
     zones.value = c.data.zones
     kpi.value = c.data.kpi

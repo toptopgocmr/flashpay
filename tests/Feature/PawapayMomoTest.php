@@ -40,6 +40,18 @@ class PawapayMomoTest extends TestCase
                 str_starts_with($path, '/v2/deposits/') => Http::response(['status' => 'FOUND', 'data' => ['depositId' => basename($path), 'status' => $this->depositStatus]]),
                 str_starts_with($path, '/v2/payouts/') => Http::response(['status' => 'FOUND', 'data' => ['payoutId' => basename($path), 'status' => $this->payoutStatus,
                     'failureReason' => $this->payoutStatus === 'FAILED' ? ['failureCode' => 'RECIPIENT_NOT_FOUND', 'failureMessage' => 'Recipient not found'] : null]]),
+                $path === '/v2/active-conf' => Http::response(['countries' => [
+                    ['country' => 'COG', 'providers' => [
+                        ['provider' => 'MTN_MOMO_COG', 'displayName' => 'MTN', 'currencies' => [['currency' => 'XAF', 'operationTypes' => [
+                            'DEPOSIT' => ['status' => 'OPERATIONAL'], 'PAYOUT' => ['status' => 'OPERATIONAL']]]]],
+                        // format « tableau » aussi présent dans la doc
+                        ['provider' => 'AIRTEL_COG', 'displayName' => 'Airtel', 'currencies' => [['currency' => 'XAF', 'operationTypes' => [
+                            ['operationType' => 'DEPOSIT', 'status' => 'OPERATIONAL'], ['operationType' => 'PAYOUT', 'status' => 'DELAYED']]]]],
+                    ]],
+                    // Cameroun : versement seulement
+                    ['country' => 'CMR', 'providers' => [['provider' => 'MTN_MOMO_CMR', 'displayName' => 'MTN', 'currencies' => [['currency' => 'XAF', 'operationTypes' => [
+                        'DEPOSIT' => ['status' => 'CLOSED'], 'PAYOUT' => ['status' => 'OPERATIONAL']]]]]]],
+                ]]),
                 $path === '/v2/wallet-balances' => Http::response(['balances' => [['country' => 'COG', 'currency' => 'XAF', 'balance' => (string) $this->balance]]]),
                 default => Http::response(['message' => 'not found'], 404),
             };
@@ -65,6 +77,9 @@ class PawapayMomoTest extends TestCase
     {
         $admin = $this->admin();
         $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/GW', ['partner' => 'pawapay'])->assertStatus(422);
+        // Cameroun : collecte fermée sur le compte pawaPay, versement ouvert
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/CM', ['collect_partner' => 'pawapay'])->assertStatus(422);
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/CM', ['payout_partner' => 'pawapay'])->assertOk();
         $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/CG', ['partner' => 'pawapay'])->assertOk()
             ->assertJsonPath('message', fn ($m) => str_contains($m, 'PawaPay'));
 
@@ -75,7 +90,12 @@ class PawapayMomoTest extends TestCase
         $this->assertSame(1, $card['collect_countries']);
         $cg = collect($d['corridors'])->firstWhere('country', 'CG');
         $this->assertSame('pawapay', $cg['collect_partner']);
-        $this->assertTrue($cg['pawapay']);
+        $this->assertTrue($cg['pawapay']['collect'] && $cg['pawapay']['payout']);
+        $this->assertSame(['MTN', 'Airtel'], $cg['pawapay']['providers']);
+        $this->assertNull(collect($d['corridors'])->firstWhere('country', 'GA')['pawapay']);
+        $this->assertTrue($card['coverage_live']);
+        $this->assertSame(2, $card['coverage_countries']);
+        $this->assertSame(1, $card['coverage_payin']);
 
         $flows = app(\App\Services\Peex\PeexFlowService::class);
         $route = app(\App\Services\Peex\PeexCorridors::class)->resolve('+242061112233');

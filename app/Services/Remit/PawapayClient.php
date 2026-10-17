@@ -89,6 +89,49 @@ class PawapayClient
         });
     }
 
+    /**
+     * Couverture réelle du compte pawaPay (GET /v2/active-conf) pour la passerelle nationale :
+     * [ISO2 => ['collect' => bool, 'payout' => bool, 'providers' => [noms…]]]. Cache 10 min.
+     */
+    public function coverage(bool $fresh = false): array
+    {
+        if ($fresh) {
+            Cache::forget('pawapay:coverage');
+        }
+        return Cache::remember('pawapay:coverage', 600, function () {
+            $json = $this->send('get', 'v2/active-conf');
+            $iso2 = array_flip(self::ISO3);
+            $out = [];
+            foreach ((array) data_get($json, 'countries', []) as $c) {
+                $iso = $iso2[strtoupper((string) ($c['country'] ?? ''))] ?? null;
+                if (! $iso) {
+                    continue;
+                }
+                $row = $out[$iso] ?? ['collect' => false, 'payout' => false, 'providers' => []];
+                foreach ((array) ($c['providers'] ?? []) as $p) {
+                    $any = false;
+                    foreach ((array) ($p['currencies'] ?? []) as $cur) {
+                        foreach (['DEPOSIT' => 'collect', 'PAYOUT' => 'payout'] as $op => $flow) {
+                            $ops = (array) ($cur['operationTypes'] ?? []);
+                            $o = $ops[$op] ?? collect($ops)->firstWhere('operationType', $op);
+                            if ($o && strtoupper((string) ($o['status'] ?? 'OPERATIONAL')) !== 'CLOSED') {
+                                $row[$flow] = true;
+                                $any = true;
+                            }
+                        }
+                    }
+                    if ($any) {
+                        $row['providers'][] = (string) ($p['displayName'] ?? $p['provider'] ?? '');
+                    }
+                }
+                $row['providers'] = array_values(array_unique(array_filter($row['providers'])));
+                $out[$iso] = $row;
+            }
+            Cache::put('pawapay:coverage:synced_at', now()->toIso8601String(), 86400);
+            return $out;
+        });
+    }
+
     public function mode(): string
     {
         return $this->cfg('mode', 'remittance') === 'payout' ? 'payout' : 'remittance';
