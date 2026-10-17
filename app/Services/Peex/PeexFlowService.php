@@ -391,6 +391,8 @@ class PeexFlowService
                 'payer_verified_name' => $src['verified_name'] ?? null,
                 'beneficiary_verified_name' => $dst['verified_name'] ?? null,
                 'fx' => $converted ? $q['fx'] : null,
+                // Frais FlashPay + frais partenaires (collecte, versement) facturés au client
+                'fee_breakdown' => isset($q['fee_flashpay']) ? ['flashpay' => $q['fee_flashpay']] + ($q['partner_fees'] ?? []) : null,
             ], fn ($v) => $v !== null && $v !== ''),
         ];
 

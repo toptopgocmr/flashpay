@@ -30,6 +30,8 @@ class PartnerFees
         'digitwace_collect' => 'WacePay — collecte mobile money',
         'digitwace_payout' => 'WacePay — versement',
         'digitwace_card' => 'WacePay — carte / compte bancaire',
+        'pawapay_collect' => 'PawaPay — collecte mobile money',
+        'pawapay_payout' => 'PawaPay — versement',
         'card' => 'Carte (autre prestataire)',
     ];
 
@@ -40,6 +42,8 @@ class PartnerFees
      * Une ligne `countries` remplace le tarif général pour le pays de l'opération.
      */
     public const DEFAULTS = [
+        // PEEX production : 2,5 % constatés sur la collecte Congo (réponse « fees » de PEEX, 16/10/2026)
+        'peex_collect' => ['pct' => 2.5, 'fixed' => 0, 'countries' => []],
         'digitwace_collect' => ['pct' => 3.5, 'fixed' => 0, 'countries' => []],
         'digitwace_payout' => ['pct' => 0, 'fixed' => 0, 'countries' => [
             'CG' => ['pct' => 0, 'fixed' => 1500],
@@ -76,6 +80,32 @@ class PartnerFees
             ];
         }
         return $out;
+    }
+
+    /**
+     * Frais partenaire ESTIMÉS avant l'opération (devis), arrondis au supérieur pour que
+     * FlashPay ne soit jamais perdant. $gross = true : le frais s'applique au montant collecté
+     * qui l'inclut lui-même (collecte de montant + frais), on résout donc x = (base + x) × p.
+     */
+    public static function quoteFee(?string $rateKey, int $amount, ?string $country = null, ?array $rates = null, bool $gross = false): int
+    {
+        if (! $rateKey || $amount <= 0) {
+            return 0;
+        }
+        $rates ??= self::rates();
+        $r = $rates[$rateKey] ?? null;
+        if (! $r) {
+            return 0;
+        }
+        $byCountry = $country ? (((array) ($r['countries'] ?? []))[strtoupper($country)] ?? null) : null;
+        $pct = (float) ($byCountry['pct'] ?? $r['pct'] ?? 0);
+        $fixed = (int) ($byCountry['fixed'] ?? $r['fixed'] ?? 0);
+        if ($pct <= 0 && $fixed <= 0) {
+            return 0;
+        }
+        $p = $pct / 100;
+        $base = $gross && $p < 1 ? ($amount + $fixed) * $p / (1 - $p) : $amount * $p;
+        return (int) ceil(round($base, 6)) + $fixed;
     }
 
     /** Normalise les tarifs envoyés par la console (pour l'enregistrement). */

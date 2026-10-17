@@ -123,6 +123,14 @@ return [
     | (échec certain, rien versé), FlashPay réessaie chez un autre partenaire du même
     | environnement (production ↔ production) qui couvre le pays.
     */
+    /*
+    | Frais partenaires (collecte + versement) ajoutés au total payé par le client, d'après les
+    | tarifs de la console (Tarifs › frais partenaires). false = FlashPay les absorbe.
+    */
+    'fees' => [
+        'pass_partner_fees' => (bool) env('FLASHPAY_PASS_PARTNER_FEES', true),
+    ],
+
     'failover' => [
         'enabled' => (bool) env('FLASHPAY_FAILOVER', true),
         'order' => array_filter(array_map('trim', explode(',', (string) env('FLASHPAY_FAILOVER_ORDER', 'peex,pawapay_momo,digitwace')))),

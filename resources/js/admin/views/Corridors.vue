@@ -113,7 +113,7 @@
                   <div class="pl pl-gw">
                     <span class="lbl">Passerelle</span>
                     <select class="api" :class="'p-' + gw(c)" :value="gw(c)" @change="setGateway(c, $event.target.value)" title="Collecte, versement, vérifications et soldes passent par cette passerelle">
-                      <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
+                      <option value="peex" :disabled="c.source === 'wacepay' || c.source === 'world'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payin') && !waceOk(c, 'payout')">WacePay</option>
                       <option value="pawapay" :disabled="!c.pawapay?.collect || !c.pawapay?.payout">PawaPay{{ pawaNote(c) }}</option>
                       <option value="mixed" disabled>Mixte</option>
@@ -124,7 +124,7 @@
                   <div class="pl" :class="{ dim: !c.collect }">
                     <span class="lbl">Collecte</span>
                     <select class="api" :class="'p-' + c.collect_partner" :value="c.collect_partner" @change="update(c, { collect_partner: $event.target.value })">
-                      <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
+                      <option value="peex" :disabled="c.source === 'wacepay' || c.source === 'world'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payin')">WacePay{{ waceNote(c, 'payin') }}</option>
                       <option value="pawapay" :disabled="!c.pawapay?.collect">PawaPay{{ pawaNote(c, 'collect') }}</option>
                     </select>
@@ -132,7 +132,7 @@
                   <div class="pl" :class="{ dim: !c.payout }">
                     <span class="lbl">Versement</span>
                     <select class="api" :class="'p-' + c.payout_partner" :value="c.payout_partner" @change="update(c, { payout_partner: $event.target.value })">
-                      <option value="peex" :disabled="c.source === 'wacepay'">PEEX</option>
+                      <option value="peex" :disabled="c.source === 'wacepay' || c.source === 'world'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payout')">WacePay{{ waceNote(c, 'payout') }}</option>
                       <option value="pawapay" :disabled="!c.pawapay?.payout">PawaPay{{ pawaNote(c, 'payout') }}</option>
                     </select>
@@ -332,7 +332,7 @@ const error = ref('')
 const msg = ref('')
 const flt = reactive({ q: '', zone: '', open: '', partner: '' })
 const conv = reactive({ amount: 10000, from: 'XAF', to: 'CDF' })
-const zoneLabel = { CEMAC: 'CEMAC — Afrique centrale', UEMOA: 'UEMOA — Afrique de l\'Ouest', RDC: 'RD Congo', GUINEE: 'Guinée', INTERNATIONAL: 'Autres pays (WacePay)' }
+const zoneLabel = { CEMAC: 'CEMAC — Afrique centrale', UEMOA: 'UEMOA — Afrique de l\'Ouest', RDC: 'RD Congo', GUINEE: 'Guinée', INTERNATIONAL: 'Autres pays du monde' }
 const syncing = ref(false)
 // WacePay proposé seulement là où la couverture synchronisée l'annonce
 const waceOk = (c, svc) => !!c.wacepay?.[svc]

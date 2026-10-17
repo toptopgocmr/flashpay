@@ -86,6 +86,12 @@ class QuoteService
             ? $this->fees->fee('merchant_fee', $scope, $fx['amount'])
             : 0;
 
+        // Frais des partenaires (collecte + versement) ajoutés au total payé par le client,
+        // calculés et affichés AVANT l'opération : FlashPay ne paie jamais ces frais à perte.
+        $flashpayFee = $fee;
+        $partner = $this->partnerFees($src, $dst, $amount, $fee, $fx);
+        $fee += $partner['collect'] + $partner['payout'];
+
         if ($src['type'] === 'wallet' && isset($src['balance']) && $src['balance'] < $amount + $fee) {
             $this->codes[] = 'insufficient_balance';
             $problems[] = 'Solde insuffisant (' . number_format($src['balance'], 0, ',', ' ') . ' ' . $src['currency'] . ').';
@@ -109,6 +115,9 @@ class QuoteService
             'currency' => $src['currency'],
             'fee' => $fee,
             'total' => $amount + $fee,
+            // Détail des frais : FlashPay + partenaires (collecte, versement)
+            'fee_flashpay' => $flashpayFee,
+            'partner_fees' => $partner,
             'fx' => $fx,
             'receive_amount' => max(0, $fx['amount'] - $merchantFee),
             'receive_currency' => $dst['currency'],
@@ -219,6 +228,42 @@ class QuoteService
         if ($src['type'] === 'mobile' && $dst['type'] === 'mobile' && $collectBy === 'peex' && ! $src['payout']) {
             $problems[] = "Remboursement automatique impossible vers {$src['country_name']} en cas d'échec : opération non disponible.";
         }
+    }
+
+    /**
+     * Frais estimés des partenaires pour cette opération, en devise de l'expéditeur.
+     * @return array{collect:int, payout:int, collect_partner:?string, payout_partner:?string}
+     */
+    protected function partnerFees(array $src, array $dst, int $amount, int $flashpayFee, array $fx): array
+    {
+        $out = ['collect' => 0, 'payout' => 0, 'collect_partner' => null, 'payout_partner' => null];
+        if (! config('flashpay.fees.pass_partner_fees', true)) {
+            return $out;
+        }
+        $names = ['peex' => 'PEEX', 'digitwace' => 'WacePay', 'pawapay' => 'PawaPay', 'card' => 'Carte'];
+        $rates = \App\Support\PartnerFees::rates();
+
+        // Versement au bénéficiaire (frais en devise du bénéficiaire, ramenés en devise de l'expéditeur)
+        if ($dst['type'] === 'mobile') {
+            $p = $this->partnerFor($dst['country'], 'payout_partner');
+            $feeOut = \App\Support\PartnerFees::quoteFee($p . '_payout', (int) $fx['amount'], $dst['country'], $rates);
+            $rate = (float) ($fx['rate'] ?? 1) ?: 1;
+            $out['payout'] = $src['currency'] === $dst['currency'] ? $feeOut : (int) ceil($feeOut / $rate);
+            $out['payout_partner'] = $names[$p] ?? $p;
+        }
+        // Collecte chez l'expéditeur, sur le montant total collecté (montant + frais)
+        $collectKey = match ($src['type']) {
+            'mobile' => $this->partnerFor($src['country'], 'collect_partner') . '_collect',
+            'card' => config('payment_methods.card_driver') === 'wacepay' ? 'digitwace_card' : 'card',
+            'bank' => config('payment_methods.bank_debit_driver') === 'wacepay' ? 'digitwace_card' : null,
+            default => null,
+        };
+        if ($collectKey) {
+            $out['collect'] = \App\Support\PartnerFees::quoteFee($collectKey, $amount + $flashpayFee + $out['payout'], $src['country'] ?? null, $rates, gross: true);
+            $p = explode('_', $collectKey)[0];
+            $out['collect_partner'] = $names[$p] ?? ucfirst($p);
+        }
+        return $out;
     }
 
     /** Partenaire (peex | digitwace | pawapay) qui gère ce flux pour le pays. */

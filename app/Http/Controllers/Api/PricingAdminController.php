@@ -201,9 +201,15 @@ class PricingAdminController extends Controller
             'partner' => 'sometimes|in:peex,digitwace,pawapay',
             'note' => 'sometimes|nullable|string|max:190',
         ]);
+        // PEEX ne couvre que ses pays (config) : refusé pour les pays ajoutés (WacePay / reste du monde)
+        foreach (['collect_partner', 'payout_partner'] as $f) {
+            if (($v[$f] ?? null) === 'peex' && ($this->corridors->defaults()[$iso]['source'] ?? null) === 'world') {
+                return response()->json(['message' => "PEEX ne couvre pas {$iso}."], 422);
+            }
+        }
         if (isset($v['partner'])) {
             $v['collect_partner'] = $v['payout_partner'] = $v['partner'];
-            if ($v['partner'] === 'peex' && ($this->corridors->defaults()[$iso]['source'] ?? null) === 'wacepay') {
+            if ($v['partner'] === 'peex' && in_array($this->corridors->defaults()[$iso]['source'] ?? null, ['wacepay', 'world'], true)) {
                 return response()->json(['message' => "{$iso} n'est couvert que par WacePay : PEEX ne peut pas gérer ses flux."], 422);
             }
             unset($v['partner']);

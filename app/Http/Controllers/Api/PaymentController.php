@@ -36,7 +36,8 @@ class PaymentController extends Controller
         return response()->json([
             'sandbox' => (bool) config('flashpay.peex.sandbox'),
             'zones' => ['CEMAC' => 'XAF', 'UEMOA' => 'XOF', 'RDC' => 'CDF', 'GUINEE' => 'GNF'],
-            'corridors' => $this->corridors->catalog(),
+            // Pays du monde encore fermés (ni collecte ni versement) : pas proposés dans l'app
+            'corridors' => array_values(array_filter($this->corridors->catalog(), fn ($c) => ($c['source'] ?? '') !== 'world' || $c['collect'] || $c['payout'])),
         ]);
     }
 

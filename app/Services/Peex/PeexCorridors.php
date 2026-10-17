@@ -40,7 +40,7 @@ class PeexCorridors
 
     public function all(): array
     {
-        $all = config('flashpay.corridors', []) + $this->extraCountries();
+        $all = config('flashpay.corridors', []) + $this->extraCountries() + self::worldCountries();
         // Partenaire par défaut : PEEX, sauf versements listés dans DIGITWACE_PAYOUT_COUNTRIES
         $wace = (array) config('flashpay.digitwace.payout_countries', []);
         $home = strtoupper((string) config('flashpay.peex.default_country', 'CG'));
@@ -149,7 +149,35 @@ class PeexCorridors
     /** Valeurs de config/corridors.php (+ .env), sans les surcharges de la console. */
     public function defaults(): array
     {
-        return config('flashpay.corridors', []) + $this->extraCountries();
+        return config('flashpay.corridors', []) + $this->extraCountries() + self::worldCountries();
+    }
+
+    /**
+     * Tous les autres pays du monde (config/world_countries.php), fermés par défaut :
+     * ils s'ouvrent depuis la console (Pays & change) une fois un partenaire choisi.
+     * Pays principal d'un indicatif partagé d'abord (+1 → États-Unis, +7 → Russie…).
+     */
+    public static function worldCountries(): array
+    {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+        $world = (array) config('world_countries', []);
+        uksort($world, fn ($a, $b) => [! ($world[$a]['main'] ?? true), $a] <=> [! ($world[$b]['main'] ?? true), $b]);
+        $out = [];
+        foreach ($world as $iso => $w) {
+            $pawa = isset(\App\Services\Remit\PawapayClient::ISO3[$iso]);
+            $out[$iso] = [
+                'name' => $w['name'], 'zone' => 'INTERNATIONAL', 'dial' => $w['dial'],
+                'local_length' => (int) $w['max'], 'local_min' => (int) $w['min'],
+                'currency' => $w['currency'], 'flag' => $w['flag'] ?? '', 'collect' => false, 'payout' => false,
+                'payout_api' => 'remittance', 'operators' => [],
+                'collect_partner' => $pawa ? 'pawapay' : 'digitwace', 'payout_partner' => $pawa ? 'pawapay' : 'digitwace',
+                'source' => 'world',
+            ];
+        }
+        return $cache = $out;
     }
 
     /** Surcharges enregistrées depuis la console (table corridor_settings). */
@@ -192,7 +220,12 @@ class PeexCorridors
         if (strtoupper($fromIso) === strtoupper($toIso)) {
             return 'national';
         }
-        return $this->country($fromIso)['zone'] === $this->country($toIso)['zone'] ? 'regional' : 'international';
+        $a = $this->country($fromIso);
+        $b = $this->country($toIso);
+        if ($a['zone'] === 'INTERNATIONAL' || $b['zone'] === 'INTERNATIONAL') {
+            return $a['zone'] === $b['zone'] && $a['currency'] === $b['currency'] ? 'regional' : 'international';
+        }
+        return $a['zone'] === $b['zone'] ? 'regional' : 'international';
     }
 
     /**
@@ -244,7 +277,8 @@ class PeexCorridors
             $local = substr($local, 1); // préfixe national (ex. RDC 081… -> 81…)
         }
 
-        if (strlen($local) !== $len) {
+        $min = (int) ($c['local_min'] ?? $len);
+        if (strlen($local) < $min || strlen($local) > $len) {
             throw new PeexException("Numéro invalide pour {$c['name']} : {$phone} (attendu {$len} chiffres après +{$c['dial']})");
         }
 

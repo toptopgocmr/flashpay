@@ -8,7 +8,7 @@ namespace App\Services\Remit;
  */
 class RemitCountries
 {
-    /** ISO2 => [nom, devise de paiement, indicatif, drapeau] */
+    /** ISO2 => [nom, devise de paiement, indicatif, drapeau] — pays prioritaires ; le reste du monde vient de config/world_countries.php */
     public const ALL = [
         // Afrique centrale (CEMAC) et RDC
         'CM' => ['Cameroun', 'XAF', '237', '🇨🇲'], 'GA' => ['Gabon', 'XAF', '241', '🇬🇦'], 'TD' => ['Tchad', 'XAF', '235', '🇹🇩'],
@@ -48,6 +48,14 @@ class RemitCountries
             }
             $out[$iso] = ['iso' => $iso, 'name' => $name, 'currency' => $cur, 'dial' => $dial, 'flag' => $flag];
         }
+        // Tous les autres pays du monde (remittance B2B, B2C, C2C) : config/world_countries.php
+        foreach ((array) config('world_countries', []) as $iso => $w) {
+            if (isset($out[$iso]) || $iso === $home || ($only && ! in_array($iso, $only, true))) {
+                continue;
+            }
+            $out[$iso] = ['iso' => $iso, 'name' => $w['name'], 'currency' => $w['currency'], 'dial' => $w['dial'], 'flag' => $w['flag'] ?? ''];
+        }
+        uasort($out, fn ($a, $b) => strcoll(\Illuminate\Support\Str::ascii($a['name']), \Illuminate\Support\Str::ascii($b['name'])));
         return $out;
     }
 
