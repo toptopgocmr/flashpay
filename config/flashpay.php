@@ -107,8 +107,9 @@ return [
         // Sandbox : https://sandbox.wacepay.com/api/v1 — production : à fournir par WacePay
         'base_url' => env('WACEPAY_REMIT_BASE_URL', 'https://sandbox.wacepay.com/api/v1'),
         // Couple e-mail / mot de passe fourni par WacePay (variables Railway uniquement, jamais dans Git)
-        'email' => env('WACEPAY_REMIT_EMAIL', ''),
-        'password' => env('WACEPAY_REMIT_PASSWORD', ''),
+        // (repris de DIGITWACE_EMAIL / DIGITWACE_PASSWORD si c'est sous ces noms qu'ils ont été saisis)
+        'email' => env('WACEPAY_REMIT_EMAIL', env('DIGITWACE_EMAIL', '')),
+        'password' => env('WACEPAY_REMIT_PASSWORD', env('DIGITWACE_PASSWORD', '')),
         'timeout' => (int) env('WACEPAY_REMIT_TIMEOUT', 40),
         'token_ttl_minutes' => (int) env('WACEPAY_REMIT_TOKEN_TTL', 55), // jeton valable 3600 s
         // Confirmer automatiquement les transactions « WAITING CONFIRMATION » (POST /transaction/confirm)
