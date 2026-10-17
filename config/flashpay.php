@@ -344,6 +344,8 @@ return [
 
     // Devise des wallets FlashPay créés sans pays identifiable
     'base_currency' => env('FLASHPAY_BASE_CURRENCY', 'XAF'),
+    // Devises possibles pour un wallet ; un pays dans une autre devise (EUR, USD…) a un wallet en devise de base
+    'wallet_currencies' => array_filter(array_map('trim', explode(',', strtoupper((string) env('FLASHPAY_WALLET_CURRENCIES', 'XAF,XOF,CDF,GNF'))))),
 
     // Zones monétaires à parité fixe (XAF = XOF = 655,957 EUR)
     'fixed_parity' => ['XAF', 'XOF'],

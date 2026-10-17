@@ -70,6 +70,8 @@ class PartnerFeesQuoteWorldTest extends TestCase
         $reg = $this->postJson('/api/auth/register', ['full_name' => 'Marie Dupont', 'phone' => '+33612345678', 'password' => '7391', 'password_confirmation' => '7391', 'profile' => 'client']);
         $this->assertContains($reg->status(), [200, 201], $reg->getContent());
         $this->assertTrue(User::where('phone', '33612345678')->exists());
+        // EUR pas encore géré pour les wallets : wallet ouvert en devise de base
+        $this->assertSame('XAF', User::where('phone', '33612345678')->first()->wallet->currency);
 
         // App : les pays du monde encore fermés ne sont pas proposés ; console : tous
         $app = $this->getJson('/api/pay/corridors')->json('corridors');
