@@ -96,7 +96,7 @@ class InternationalTransferTest extends TestCase
     {
         $this->actingAs($u, 'sanctum')->putJson('/api/pay/international/profile', [
             'first_name' => 'Basile', 'last_name' => 'Test', 'gender' => 'M', 'date_of_birth' => '1990-01-01', 'place_of_birth' => 'Brazzaville',
-            'nationality' => 'CG', 'occupation' => 'Informaticien', 'email' => 'basile@test.cg',
+            'nationality' => 'CG', 'occupation' => 'Informaticien', 'email' => 'basile@test.cg', 'civility' => 'Married', 'pep' => false,
             'id_type' => 'PP', 'id_number' => 'X123', 'id_issuer_country' => 'CG', 'id_issue_date' => '2020-01-01', 'id_expiry' => now()->addYear()->toDateString(),
             'country' => 'CG', 'city' => 'Brazzaville', 'district' => 'Centre-ville', 'street' => 'Avenue de la Paix',
         ])->assertOk();
@@ -198,6 +198,9 @@ class InternationalTransferTest extends TestCase
         $this->assertSame('RCCM', $sender['idType']);
         $this->assertSame('CG-BZV-2020-B-1', $sender['idNumber']);
         $this->assertSame('FlashPay Test SARL', $sender['businessName']);
+        // Situation familiale et PPE déclarées par le client (orthographe WacePay « Maried »)
+        $this->assertSame('Maried', $sender['civility']);
+        $this->assertSame(0, $sender['pep']);
         $bank = collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/transaction/bank/create'));
         $this->assertSame('CI008012345678', $bank['bankAccount']);
         $this->assertSame(7, $bank['bankId']);
@@ -340,7 +343,12 @@ class InternationalTransferTest extends TestCase
         $this->putJson('/api/pay/international/profile', ['id_type' => 'CNI', 'id_number' => 'CG-778899', 'id_expiry' => now()->addYears(2)->toDateString()])->assertOk();
         $r = $this->putJson('/api/pay/international/profile', ['country' => 'CG', 'city' => 'Pointe-Noire', 'district' => 'Tié-Tié', 'street' => 'Rue 12', 'gps_lat' => -4.79, 'gps_lng' => 11.86])->assertOk();
         $this->assertFalse($r->json('complete'));
-        $this->assertSame(['doc_front', 'doc_back', 'doc_selfie'], array_keys($r->json('missing'))); // CNI : recto + verso + selfie
+        $this->assertSame(['civility', 'pep', 'doc_front', 'doc_back', 'doc_selfie'], array_keys($r->json('missing'))); // CNI : recto + verso + selfie
+        // Situation familiale et déclaration PPE : à répondre par le client (« non » est une réponse)
+        $this->putJson('/api/pay/international/profile', ['civility' => 'Divorced'])->assertStatus(422);
+        $r = $this->putJson('/api/pay/international/profile', ['civility' => 'Single', 'pep' => false])->assertOk();
+        $this->assertSame(['doc_front', 'doc_back', 'doc_selfie'], array_keys($r->json('missing')));
+        $this->assertFalse($r->json('data.pep'));
         $this->assertSame('Rue 12, Tié-Tié', $r->json('data.address'));
         $this->assertSame('CG', $r->json('data.nationality'));
         $this->assertEqualsWithDelta(-4.79, $r->json('gps.lat'), 0.0001);

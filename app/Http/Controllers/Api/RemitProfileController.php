@@ -22,6 +22,7 @@ class RemitProfileController extends Controller
         $v = $request->validate(['country' => 'nullable|string|size:2']);
         return response()->json($this->profiles->status($request->user(), $v['country'] ?? null) + [
             'id_types' => \App\Services\Remit\InternationalTransferService::ID_TYPES,
+            'civilities' => \App\Services\Remit\RemitProfileService::CIVILITIES,
             'postal_code_countries' => array_values((array) config('flashpay.remit.postal_code_countries', [])),
             'require_email_verified' => (bool) config('flashpay.remit.require_email_verified'),
         ]);
@@ -37,6 +38,8 @@ class RemitProfileController extends Controller
             'place_of_birth' => 'sometimes|nullable|string|max:100',
             'nationality' => 'sometimes|required|string|size:2',
             'occupation' => 'sometimes|nullable|string|max:80',
+            'civility' => 'sometimes|required|in:Single,Married,Others',
+            'pep' => 'sometimes|required|boolean',
             'email' => 'sometimes|nullable|email|max:150',
             'id_type' => 'sometimes|required|in:CNI,PP,PC,CS',
             'id_number' => 'sometimes|required|string|max:40',

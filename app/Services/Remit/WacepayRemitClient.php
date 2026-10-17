@@ -173,7 +173,8 @@ class WacepayRemitClient
             'country' => strtoupper((string) ($s['country'] ?? config('flashpay.remit.from_country', 'CG'))),
             'city' => $s['city'] ?? $this->cfg('default_address'),
             'gender' => $s['gender'] ?? 'M',
-            'civility' => $s['civility'] ?? $this->cfg('default_civility', 'Single'),
+            // Valeurs WacePay : Single, Maried (orthographe de l'API), Others
+            'civility' => match ($s['civility'] ?? $this->cfg('default_civility', 'Single')) { 'Married', 'Maried' => 'Maried', 'Single' => 'Single', default => 'Others' },
             'idNumber' => $type === 'B' ? ($s['registration_number'] ?? null) : ($s['id_number'] ?? null),
             'idType' => $type === 'B' ? 'RCCM' : ($s['id_type'] ?? 'CNI'),
             'occupation' => $s['occupation'] ?? null,

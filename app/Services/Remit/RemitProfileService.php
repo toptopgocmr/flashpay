@@ -28,7 +28,12 @@ class RemitProfileService
         'nationality' => 'nationalité', 'id_type' => 'type de pièce', 'id_number' => 'numéro de pièce',
         'id_expiry' => 'date d\'expiration de la pièce', 'country' => 'pays de résidence', 'city' => 'ville',
         'address' => 'adresse (quartier, rue ou repère)', 'email' => 'e-mail',
+        // Exigés par WacePay (sender/create) : déclarés par le client, jamais déduits
+        'civility' => 'situation familiale', 'pep' => 'déclaration « personne politiquement exposée »',
     ];
+
+    /** Situation familiale (valeurs WacePay : Single, Maried, Others). */
+    public const CIVILITIES = ['Single' => 'Célibataire', 'Married' => 'Marié(e)', 'Others' => 'Autre (divorcé·e, veuf·ve…)'];
 
     public const OPTIONAL = ['place_of_birth', 'occupation', 'id_issuer_country', 'id_issue_date', 'district', 'street', 'postal_code'];
 
@@ -63,7 +68,8 @@ class RemitProfileService
         $data = $this->data($user);
         $missing = [];
         foreach (self::REQUIRED as $k => $label) {
-            if (empty($data[$k])) {
+            // « pep » vaut true ou false : seule l'absence de réponse manque
+            if ($k === 'pep' ? ! array_key_exists('pep', $data) || $data['pep'] === null || $data['pep'] === '' : empty($data[$k])) {
                 $missing[$k] = $label;
             }
         }
@@ -125,7 +131,8 @@ class RemitProfileService
         foreach (array_merge(array_keys(self::REQUIRED), self::OPTIONAL) as $k) {
             if (array_key_exists($k, $in) && $k !== 'email') {
                 $v = is_string($in[$k]) ? trim($in[$k]) : $in[$k];
-                $data[$k] = in_array($k, ['nationality', 'country', 'id_issuer_country', 'id_type', 'gender'], true) && $v ? strtoupper($v) : $v;
+                $data[$k] = $k === 'pep' ? filter_var($v, FILTER_VALIDATE_BOOLEAN)
+                    : (in_array($k, ['nationality', 'country', 'id_issuer_country', 'id_type', 'gender'], true) && $v ? strtoupper($v) : $v);
             }
         }
         if (! empty($data['id_expiry']) && strtotime((string) $data['id_expiry']) < strtotime('today')) {
@@ -226,11 +233,12 @@ class RemitProfileService
             'first_name' => $d['first_name'] ?? null, 'last_name' => $d['last_name'] ?? null,
             'gender' => $d['gender'] ?? null, 'date_of_birth' => $d['date_of_birth'] ?? null, 'place_of_birth' => $d['place_of_birth'] ?? null,
             'nationality' => $d['nationality'] ?? null, 'occupation' => $d['occupation'] ?? null,
+            'civility' => $d['civility'] ?? null,
             'id_type' => $d['id_type'] ?? null, 'id_number' => $d['id_number'] ?? null, 'id_expiry' => $d['id_expiry'] ?? null,
             'id_issue_date' => $d['id_issue_date'] ?? null, 'id_issuer_country' => $d['id_issuer_country'] ?? null,
             'address' => $d['address'] ?? null, 'city' => $d['city'] ?? null, 'postal_code' => $d['postal_code'] ?? null,
             'country' => $d['country'] ?? config('flashpay.remit.from_country', 'CG'),
             'phone' => $user->phone, 'email' => $d['email'] ?? $user->email,
-        ], fn ($v) => $v !== null && $v !== '');
+        ], fn ($v) => $v !== null && $v !== '') + (array_key_exists('pep', $d) ? ['pep' => (bool) $d['pep']] : []);
     }
 }
