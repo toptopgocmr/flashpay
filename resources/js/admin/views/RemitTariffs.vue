@@ -277,7 +277,8 @@
         <div class="row2">
           <div><label class="field">Tranche A (de)</label><input v-model.number="form.min_amount" type="number" min="0" /></div>
           <div><label class="field">Tranche B (à)</label>
-            <input v-model.number="form.max_amount" type="number" min="1" :disabled="form.max_amount >= 1e9" :placeholder="form.max_amount >= 1e9 ? 'Sans limite' : ''" />
+            <input v-if="form.max_amount < 1e9" v-model.number="form.max_amount" type="number" min="1" />
+            <input v-else type="text" disabled placeholder="Sans limite" />
             <label class="check small"><input type="checkbox" :checked="form.max_amount >= 1e9" @change="form.max_amount = $event.target.checked ? 1000000000 : Math.max((form.min_amount || 0) + 1, 50000)" /> Sans limite</label></div>
         </div>
       </div>
