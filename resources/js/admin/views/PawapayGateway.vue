@@ -72,9 +72,9 @@
           <div class="gw-card-h"><div class="t"><h3>Pays confiés à PawaPay</h3><p>Console › Pays &amp; change</p></div></div>
           <div class="gw-rows">
             <div class="gw-row"><span class="gw-dot" :class="{ off: !o.countries_collect.length }"></span>
-              <div class="gw-main"><b>Collecte</b><small>{{ o.countries_collect.join(', ') || 'aucun pays' }}</small></div></div>
+              <div class="gw-main"><b>Collecte</b><small v-if="o.countries_collect.length" class="flags"><span v-for="iso in o.countries_collect" :key="iso" class="fl"><Flag :iso="iso" :size="12" /> {{ iso }}</span></small><small v-else>aucun pays</small></div></div>
             <div class="gw-row"><span class="gw-dot" :class="{ off: !o.countries_payout.length }"></span>
-              <div class="gw-main"><b>Versement</b><small>{{ o.countries_payout.join(', ') || 'aucun pays' }}</small></div></div>
+              <div class="gw-main"><b>Versement</b><small v-if="o.countries_payout.length" class="flags"><span v-for="iso in o.countries_payout" :key="iso" class="fl"><Flag :iso="iso" :size="12" /> {{ iso }}</span></small><small v-else>aucun pays</small></div></div>
           </div>
           <div class="gw-card-b"><router-link class="btn-normal sm" to="/corridors">Choisir les pays</router-link></div>
         </div>
@@ -90,14 +90,24 @@
         <div v-else-if="!coverage.length" class="gw-empty">Aucun pays ouvert sur ce compte.</div>
         <div v-else class="gw-scroll">
           <table class="gw-table">
-            <thead><tr><th>Pays</th><th>Opérateurs</th><th>Collecte</th><th>Versement</th><th>Solde</th></tr></thead>
+            <thead><tr><th>Pays</th><th>Opérateurs</th><th>Collecte</th><th>Versement</th><th>Solde</th><th>Dans FlashPay</th><th class="r">Actions</th></tr></thead>
             <tbody>
               <tr v-for="c in coverage" :key="c.iso">
-                <td><b>{{ c.iso }}</b></td>
+                <td class="nowrap"><Flag :iso="c.iso" :size="16" /> <b>{{ countryName(c.iso) }}</b> <span class="small muted">{{ c.iso }}</span></td>
                 <td>{{ c.providers.join(', ') || '—' }}</td>
                 <td><span class="gw-pill" :class="c.collect ? 'ok' : 'muted'">{{ c.collect ? 'Ouverte' : 'Fermée' }}</span></td>
                 <td><span class="gw-pill" :class="c.payout ? 'ok' : 'muted'">{{ c.payout ? 'Ouvert' : 'Fermé' }}</span></td>
                 <td class="nowrap">{{ balanceOf(c.iso) }}</td>
+                <td class="nowrap">
+                  <span class="use" :class="{ on: usesCollect(c.iso) }" :title="usesCollect(c.iso) ? 'La collecte de ce pays passe par PawaPay' : 'Collecte confiée à un autre partenaire'">Collecte</span>
+                  <span class="use" :class="{ on: usesPayout(c.iso) }" :title="usesPayout(c.iso) ? 'Le versement de ce pays passe par PawaPay' : 'Versement confié à un autre partenaire'">Versement</span>
+                </td>
+                <td class="acts">
+                  <IconAction v-if="c.collect && c.payout" icon="check" tone="ok" label="Confier collecte + versement à PawaPay" :disabled="busy === c.iso || (usesCollect(c.iso) && usesPayout(c.iso))" @click="assign(c, { partner: 'pawapay' }, 'collecte et versement')" />
+                  <IconAction icon="wallet" label="Confier la collecte à PawaPay" :disabled="!c.collect || busy === c.iso || usesCollect(c.iso)" @click="assign(c, { collect_partner: 'pawapay' }, 'collecte')" />
+                  <IconAction icon="bank" label="Confier le versement à PawaPay" :disabled="!c.payout || busy === c.iso || usesPayout(c.iso)" @click="assign(c, { payout_partner: 'pawapay' }, 'versement')" />
+                  <IconAction icon="edit" label="Modifier dans Pays & change" :to="{ path: '/corridors', query: { q: c.iso } }" />
+                </td>
               </tr>
             </tbody>
           </table>
@@ -139,6 +149,9 @@ import { computed, onMounted, ref } from 'vue'
 import api from '../services/api'
 import GwHead from '../components/GwHead.vue'
 import GwField from '../components/GwField.vue'
+import Flag from '../components/Flag.vue'
+import IconAction from '../components/IconAction.vue'
+import { confirmBox } from '../utils/ui'
 
 const o = ref(null)
 const loading = ref(false)
@@ -147,6 +160,26 @@ const toast = ref(null)
 const phone = ref('')
 const testing = ref(false)
 const testRes = ref(null)
+const busy = ref('')
+let dn = null
+try { dn = new Intl.DisplayNames(['fr'], { type: 'region' }) } catch { dn = null }
+const countryName = (iso) => { try { return (dn && dn.of(iso)) || iso } catch { return iso } }
+const usesCollect = (iso) => (o.value?.countries_collect || []).includes(iso)
+const usesPayout = (iso) => (o.value?.countries_payout || []).includes(iso)
+// Confie un ou deux flux du pays à PawaPay (même règle que Pays & change)
+async function assign(c, patch, what) {
+  if (!(await confirmBox(`${countryName(c.iso)} (${c.iso}) : ${what} via PawaPay`, { title: 'Confier ce pays à PawaPay ?', confirmLabel: 'Confier' }))) return
+  busy.value = c.iso
+  try {
+    await api.post(`/admin/corridors/${c.iso}`, patch)
+    showToast(`${countryName(c.iso)} : ${what} confié(e) à PawaPay.`)
+    await load()
+  } catch (e) {
+    showToast(e.response?.data?.message || e.message, 'err')
+  } finally {
+    busy.value = ''
+  }
+}
 const STATUS = { new: 'Nouveau', pending: 'En cours', successful: 'Réussi', failed: 'Échoué' }
 const STATUS_CLS = { pending: 'info', successful: 'ok', failed: 'err' }
 const nf = new Intl.NumberFormat('fr-FR')
@@ -211,6 +244,12 @@ onMounted(load)
 .muted { color: var(--text-2); }
 .t-err { color: #b91c1c; }
 .nowrap { white-space: nowrap; }
+.r { text-align: right; }
+td.acts { white-space: nowrap; text-align: right; }
+.use { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px; margin-right: 4px; background: #f1f5f9; color: #94a3b8; text-decoration: line-through; }
+.use.on { background: #ecfdf5; color: #047857; text-decoration: none; }
+.flags { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.fl { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .fp-toast { position: fixed; top: 16px; right: 16px; z-index: 1000; max-width: 460px; padding: 12px 16px; border-radius: 10px; color: #fff; font-size: 13.5px; box-shadow: 0 8px 24px rgba(0,0,0,.18); cursor: pointer; background: #15803d; }
 .fp-toast.err { background: #b91c1c; }
 </style>

@@ -315,6 +315,7 @@ import GwField from '../components/GwField.vue'
 import Flag from '../components/Flag.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
+import { useRoute } from 'vue-router'
 
 const tab = ref('corridors')
 const corridors = ref([])
@@ -330,7 +331,7 @@ const draft = reactive({})
 const add = reactive({ base: 'XAF', quote: '', rate: null, margin_percent: 1.5 })
 const error = ref('')
 const msg = ref('')
-const flt = reactive({ q: '', zone: '', open: '', partner: '' })
+const flt = reactive({ q: String(useRoute().query.q || ''), zone: '', open: '', partner: '' })
 const conv = reactive({ amount: 10000, from: 'XAF', to: 'CDF' })
 const zoneLabel = { CEMAC: 'CEMAC — Afrique centrale', UEMOA: 'UEMOA — Afrique de l\'Ouest', RDC: 'RD Congo', GUINEE: 'Guinée', INTERNATIONAL: 'Autres pays du monde' }
 const syncing = ref(false)
