@@ -13,9 +13,13 @@
     <!-- Partenaires de paiement -->
     <section class="gw-section">
       <GwHead icon="partners" title="Partenaires de paiement" :count="partners.length || null" />
+      <p class="pc-order-hint">Glissez les cases pour les réordonner<template v-if="cardOrder.length"> · <a href="#" @click.prevent="resetCardOrder">ordre par défaut</a></template></p>
       <div class="gw-cols">
-        <div v-for="p in partners" :key="p.key" class="gw-card pc" :class="'p-' + p.key">
+        <div v-for="p in orderedPartners" :key="p.key" class="gw-card pc" :class="['p-' + p.key, { dragging: dragKey === p.key, 'drop-target': overKey === p.key && dragKey !== p.key }]"
+          draggable="true" @dragstart="onDragStart($event, p.key)" @dragover.prevent="overKey = p.key" @dragleave="overKey === p.key && (overKey = null)"
+          @drop.prevent="onDrop(p.key)" @dragend="dragKey = overKey = null">
           <div class="gw-card-h">
+            <span class="pc-grip" title="Glisser pour déplacer" aria-hidden="true">⠿</span>
             <span class="pbadge" :class="'p-' + p.key"><ProviderLogo :name="p.name" :size="20" />{{ p.name }}</span>
             <div class="side">
               <span class="gw-pill" :class="p.ready ? 'ok' : 'warn'">{{ p.ready ? 'Connecté' : 'Non configuré' }}</span>
@@ -346,6 +350,32 @@ const zones = ref({})
 const kpi = ref({})
 const sandbox = ref(false)
 const partners = ref([])
+// Ordre des cases « Partenaires de paiement » (glisser-déposer), mémorisé dans ce navigateur
+const ORDER_KEY = 'flashpay:corridors:partner-order'
+const cardOrder = ref((() => { try { return JSON.parse(localStorage.getItem(ORDER_KEY) || '[]') } catch { return [] } })())
+const dragKey = ref(null)
+const overKey = ref(null)
+const orderedPartners = computed(() => {
+  const rank = (k) => { const i = cardOrder.value.indexOf(k); return i === -1 ? 999 : i }
+  return [...partners.value].map((p, i) => ({ p, i })).sort((a, b) => rank(a.p.key) - rank(b.p.key) || a.i - b.i).map((x) => x.p)
+})
+function saveCardOrder(keys) {
+  cardOrder.value = keys
+  try { keys.length ? localStorage.setItem(ORDER_KEY, JSON.stringify(keys)) : localStorage.removeItem(ORDER_KEY) } catch { /* stockage indisponible */ }
+}
+function onDragStart(e, key) {
+  dragKey.value = key
+  try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', key) } catch { /* navigateur ancien */ }
+}
+function onDrop(target) {
+  const from = dragKey.value
+  dragKey.value = overKey.value = null
+  if (!from || from === target) return
+  const keys = orderedPartners.value.map((p) => p.key).filter((k) => k !== from)
+  keys.splice(keys.indexOf(target) + (orderedPartners.value.findIndex((p) => p.key === from) < orderedPartners.value.findIndex((p) => p.key === target) ? 1 : 0), 0, from)
+  saveCardOrder(keys)
+}
+const resetCardOrder = () => saveCardOrder([])
 const partnerReady = (k) => !!partners.value.find((p) => p.key === k)?.ready
 const partnerName = (k) => partners.value.find((p) => p.key === k)?.name || k
 const rates = ref([])
@@ -583,6 +613,11 @@ onMounted(load)
 .gw-stat b small { font-size: 14px; color: var(--text-2); font-weight: 500; }
 .gw-card.container { padding: 0; border-radius: 14px; }
 .partners { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 12px; align-items: start; }
+.gw-card.pc[draggable="true"] { cursor: grab; transition: opacity .15s, outline-color .15s; }
+.gw-card.pc.dragging { opacity: .45; cursor: grabbing; }
+.gw-card.pc.drop-target { outline: 2px dashed var(--link); outline-offset: 3px; }
+.pc-grip { color: var(--text-2); font-size: 16px; line-height: 1; margin-right: 6px; cursor: grab; user-select: none; }
+.pc-order-hint { margin: -6px 0 10px; font-size: 12px; color: var(--text-2); }
 .partners > *, .partner-card > *, .pc-flows > div, .pc-row-main, .kv2 > * { min-width: 0; }
 .partner-card { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid #1e3a8a; border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); display: grid; gap: 10px; align-content: start; overflow: hidden; }
 .partner-card.p-digitwace { border-top-color: #ea7a17; }
