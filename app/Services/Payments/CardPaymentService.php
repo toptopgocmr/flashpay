@@ -194,12 +194,12 @@ class CardPaymentService
 
     /**
      * Paiements carte / crypto abandonnés (page jamais validée) : statut relu chez la passerelle,
-     * puis annulés après FLASHPAY_CARD_TIMEOUT_MINUTES (10 min par défaut). Un paiement confirmé
+     * puis annulés après FLASHPAY_CARD_TIMEOUT_MINUTES (2 min par défaut). Un paiement confirmé
      * plus tard par la passerelle rouvre l'opération (voir complete()).
      */
     public function expireAbandoned(?int $minutes = null): int
     {
-        $minutes ??= max(3, (int) config('payment_methods.card_checkout_timeout_minutes', 10));
+        $minutes ??= max(2, (int) config('payment_methods.card_checkout_timeout_minutes', 2));
         $n = 0;
         Transaction::where('status', 'processing')->where('stage', 'awaiting_card')
             ->where('created_at', '<', now()->subMinutes($minutes))

@@ -112,7 +112,7 @@ class PawapayMomoConnector implements PaymentRailConnector
             return ['status' => 'unknown', 'external_ref' => $externalRef, 'raw' => ['error' => $e->getMessage()], 'checked' => false];
         }
         // Inconnue chez pawaPay longtemps après un envoi incertain : elle n'est jamais arrivée → échec
-        if ($r['raw_status'] === 'NOT_FOUND' && $req->created_at?->lt(now()->subMinutes((int) config('flashpay.pawapay.not_found_minutes', 15)))) {
+        if ($r['raw_status'] === 'NOT_FOUND' && $req->created_at?->lt(now()->subMinutes((int) config('flashpay.pawapay.not_found_minutes', 2)))) {
             $r['status'] = 'failed';
         }
         $req->update(['raw_status' => $r['raw_status'], 'last_response' => $r['raw'], 'last_checked_at' => now(),

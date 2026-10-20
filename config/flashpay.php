@@ -164,7 +164,7 @@ return [
         // Passerelle nationale : solde pawaPay vérifié avant chaque versement
         'check_balance' => (bool) env('PAWAPAY_CHECK_BALANCE', true),
         // Collecte / versement inconnus chez pawaPay après ce délai : jamais arrivés → échec (remboursement)
-        'not_found_minutes' => (int) env('PAWAPAY_NOT_FOUND_MINUTES', 15),
+        'not_found_minutes' => (int) env('PAWAPAY_NOT_FOUND_MINUTES', 2),
         // Callbacks (à saisir dans le tableau de bord pawaPay) : {APP_URL}/api/webhooks/pawapay
     ],
 
@@ -204,7 +204,7 @@ return [
             'utility' => env('MAISHAPAY_PATH_UTILITY', 'services/utility/pay'),
         ],
         // Opération inconnue chez MaishaPay après ce délai : jamais arrivée → échec
-        'not_found_minutes' => (int) env('MAISHAPAY_NOT_FOUND_MINUTES', 15),
+        'not_found_minutes' => (int) env('MAISHAPAY_NOT_FOUND_MINUTES', 2),
     ],
 
     // Services payés depuis le wallet (crédit, TV, factures) — exécutés par MaishaPay
@@ -383,7 +383,7 @@ return [
         // Délai max pour valider un paiement mobile money sur le téléphone (code secret).
         // Au-delà : opération « échouée — délai dépassé » (rien n'a été débité) ;
         // une validation tardive confirmée par PEEX rouvre et termine l'opération.
-        'validation_timeout_seconds' => (int) env('PEEX_VALIDATION_TIMEOUT_SECONDS', 180),
+        'validation_timeout_seconds' => (int) env('PEEX_VALIDATION_TIMEOUT_SECONDS', 120),
         // Alerte « solde bas » sur le tableau de bord (XAF disponibles par compte de versement)
         'low_balance_alert' => (int) env('PEEX_LOW_BALANCE_ALERT', 100000),
     ],

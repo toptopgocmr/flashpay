@@ -187,11 +187,11 @@ class MaishapayTest extends TestCase
         $u = $this->user('242069990055');
         \App\Models\LinkedAccount::create(['user_id' => $u->id, 'type' => 'card', 'card_brand' => 'Visa', 'card_last4' => '4242', 'account_holder' => 'JEAN TEST', 'is_default' => true, 'country' => 'CG']);
         $tx = app(\App\Services\Peex\PeexFlowService::class)->cardDeposit($u->fresh(), 2000);
-        $this->travel(11)->minutes();
+        $this->travel(3)->minutes();
         Artisan::call('flashpay:maintenance');
         $tx = $tx->fresh();
         $this->assertSame('failed', $tx->status);
-        $this->assertStringContainsString('10 minutes', $tx->failure_reason);
+        $this->assertStringContainsString('2 minutes', $tx->failure_reason);
 
         // MaishaPay confirme finalement le paiement : opération rouverte, wallet crédité
         $req = RemitRequest::where('method', 'checkout')->firstOrFail();

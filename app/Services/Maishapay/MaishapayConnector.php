@@ -119,7 +119,7 @@ class MaishapayConnector implements PaymentRailConnector
             return ['status' => 'unknown', 'external_ref' => $externalRef, 'raw' => ['error' => $e->getMessage()], 'checked' => false];
         }
         // Inconnue chez MaishaPay longtemps après l'envoi : jamais arrivée → échec
-        if (! $r['found'] && $req->created_at?->lt(now()->subMinutes((int) config('flashpay.maishapay.not_found_minutes', 15)))) {
+        if (! $r['found'] && $req->created_at?->lt(now()->subMinutes((int) config('flashpay.maishapay.not_found_minutes', 2)))) {
             $r['status'] = 'failed';
             $r['failure'] = 'Opération introuvable chez MaishaPay';
         }

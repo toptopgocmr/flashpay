@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Log;
  * Avant : une collecte mobile money jamais validée par le client restait
  * « En cours » indéfiniment (écran d'attente sans fin, historique pollué).
  *
- * Maintenant : passé PEEX_VALIDATION_TIMEOUT_SECONDS (180 s par défaut) sans
+ * Maintenant : passé PEEX_VALIDATION_TIMEOUT_SECONDS (120 s par défaut) sans
  * confirmation, on interroge PEEX une dernière fois ; si la collecte n'est
  * toujours pas validée, la transaction passe en « Échouée — délai dépassé ».
  * Aucun argent n'a été débité à ce stade (étape awaiting_source).
@@ -31,7 +31,7 @@ class PendingTimeoutService
 
     public static function timeoutSeconds(): int
     {
-        return max(60, (int) config('flashpay.peex.validation_timeout_seconds', 180));
+        return max(60, (int) config('flashpay.peex.validation_timeout_seconds', 120));
     }
 
     /** Échéance de validation (affichée en compte à rebours dans l'app). */
