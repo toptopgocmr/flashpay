@@ -46,7 +46,18 @@ class RemitStatusHandler
     {
         $req->update(['status' => $status, 'finalized_at' => now()]);
         if ($tx = $req->transaction) {
-            $name = $req->partner === 'pawapay_momo' ? 'PawaPay' : RemitCountries::partnerName($req->partner);
+            $name = match ($req->partner) { 'pawapay_momo' => 'PawaPay', 'maishapay' => 'MaishaPay', default => RemitCountries::partnerName($req->partner) };
+            if ($req->method === 'checkout') {
+                // Page de paiement carte (MaishaPay) : résultat relu auprès de l'API
+                $masked = \App\Support\TransactionPresenter::cardLabel($tx->meta ?? []);
+                app(\App\Services\Payments\CardPaymentService::class)->complete((string) $tx->source_external_ref, $status === 'successful',
+                    $status === 'successful' ? $masked . ' (' . $name . ')' : null, $status === 'successful' ? null : $name . ' : paiement par carte refusé (' . $reason . ')');
+                return $req->fresh();
+            }
+            if (in_array($req->method, ['airtime', 'paytv', 'utility'], true)) {
+                app(\App\Services\Bills\BillPaymentService::class)->finalize($tx, $status === 'successful', $name . ' : ' . $reason);
+                return $req->fresh();
+            }
             if ($req->method === 'refund') {
                 // Remboursement du payeur par pawaPay (partenaire qui a collecté)
                 return tap($req->fresh(), fn () => $status === 'successful'

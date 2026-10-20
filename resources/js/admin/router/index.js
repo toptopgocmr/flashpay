@@ -20,6 +20,7 @@ const routes = [
   { path: '/peex', component: () => import('../views/PeexSandbox.vue') },
   { path: '/wacepay', component: () => import('../views/WacepayGateway.vue') },
   { path: '/pawapay', component: () => import('../views/PawapayGateway.vue') },
+  { path: '/maishapay', component: () => import('../views/MaishapayGateway.vue') },
   { path: '/corridors', component: () => import('../views/Corridors.vue') },
   // Cahier des charges v1.5
   { path: '/notifications', component: () => import('../views/Notifications.vue') },

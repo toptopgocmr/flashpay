@@ -163,7 +163,7 @@ class InternationalTransferService
         $cards = $linked->where('type', 'card')->map(fn ($a) => [
             'id' => $a->id, 'last4' => $a->card_last4 ?? null, 'brand' => $a->card_brand ?? null, 'holder' => $a->account_holder, 'is_default' => (bool) $a->is_default,
         ])->values()->all();
-        $cardOn = in_array((string) config('payment_methods.card_driver', 'none'), ['sandbox', 'wacepay'], true);
+        $cardOn = in_array((string) config('payment_methods.card_driver', 'none'), ['sandbox', 'wacepay', 'maishapay'], true);
 
         return [
             'wallet' => ['available' => (bool) $wallet, 'balance' => (int) ($wallet?->balance ?? 0), 'currency' => $wallet?->currency ?? config('flashpay.remit.from_currency', 'XAF')],
@@ -215,11 +215,11 @@ class InternationalTransferService
                 $out['problems'][] = str_replace('Recharge refusée', 'Débit refusé', $e->getMessage());
                 return $out;
             }
-            $out['collect_partner'] = match ($out['rail']) { 'digitwace' => 'digitwace', 'pawapay_momo' => 'pawapay', default => 'peex' };
+            $out['collect_partner'] = match ($out['rail']) { 'digitwace' => 'digitwace', 'pawapay_momo' => 'pawapay', 'maishapay' => 'maishapay', default => 'peex' };
         } elseif ($type === 'card') {
             $out['rail'] = 'card';
             $out['label'] = 'Carte bancaire';
-            if (! in_array((string) config('payment_methods.card_driver', 'none'), ['sandbox', 'wacepay'], true) || ! config('flashpay.remit.allow_card_source', true)) {
+            if (! in_array((string) config('payment_methods.card_driver', 'none'), ['sandbox', 'wacepay', 'maishapay'], true) || ! config('flashpay.remit.allow_card_source', true)) {
                 $out['problems'][] = 'Le paiement par carte n\'est pas encore disponible.';
                 return $out;
             }
@@ -242,7 +242,7 @@ class InternationalTransferService
      */
     protected function payoutFee(?string $partner, string $iso, array $fx, string $from, string $to): int
     {
-        $key = ['pawapay' => 'pawapay_payout', 'digitwace' => 'digitwace_payout'][$partner] ?? null;
+        $key = ['pawapay' => 'pawapay_payout', 'digitwace' => 'digitwace_payout', 'maishapay' => 'maishapay_payout'][$partner] ?? null;
         if (! $key || ! config('flashpay.fees.pass_partner_fees', true) || (int) ($fx['amount'] ?? 0) <= 0) {
             return 0;
         }
@@ -262,7 +262,7 @@ class InternationalTransferService
             return 0;
         }
         $key = $src['type'] === 'card'
-            ? (config('payment_methods.card_driver') === 'wacepay' ? 'digitwace_card' : 'card')
+            ? (['wacepay' => 'digitwace_card', 'maishapay' => 'maishapay_card'][config('payment_methods.card_driver')] ?? 'card')
             : ($src['collect_partner'] ?? 'peex') . '_collect';
         try {
             $payerBorne = $key === 'digitwace_collect' && config('flashpay.digitwace.collect_fee_bearer', 'payer') === 'payer';

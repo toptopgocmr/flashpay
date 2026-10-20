@@ -193,7 +193,7 @@ class PaymentController extends Controller
                 }
             }
             // pawaPay (passerelle nationale) : collecte / versement relus chez pawaPay
-            foreach (\App\Models\RemitRequest::where('transaction_id', $transaction->id)->where('partner', 'pawapay_momo')->whereNull('finalized_at')->get() as $req) {
+            foreach (\App\Models\RemitRequest::where('transaction_id', $transaction->id)->whereIn('partner', ['pawapay_momo', 'maishapay'])->whereNull('finalized_at')->get() as $req) {
                 if (\Illuminate\Support\Facades\Cache::add('pawapay:poll:' . $req->id, 1, 4)) {
                     try {
                         app(\App\Services\Remit\RemitStatusHandler::class)->refresh($req);

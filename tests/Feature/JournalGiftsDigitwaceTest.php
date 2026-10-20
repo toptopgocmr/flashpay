@@ -246,7 +246,7 @@ class JournalGiftsDigitwaceTest extends TestCase
         $admin->assignRole('super_admin');
 
         $d = $this->actingAs($admin, 'sanctum')->getJson('/api/admin/corridors')->assertOk()->json();
-        $this->assertSame(['peex', 'digitwace', 'pawapay'], array_column($d['partners'], 'key'));
+        $this->assertSame(['peex', 'digitwace', 'pawapay', 'maishapay'], array_column($d['partners'], 'key'));
         $sn = collect($d['corridors'])->firstWhere('country', 'SN');
         $this->assertSame('peex', $sn['payout_partner']);
         $this->assertSame('PEEX', $sn['payout_partner_name']);

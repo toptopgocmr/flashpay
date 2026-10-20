@@ -54,7 +54,7 @@
             <GwField :value="p.webhook" />
             <div class="pc-actions">
               <button class="btn-normal sm" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
-              <router-link class="btn-normal sm" :to="p.key === 'digitwace' ? '/wacepay' : p.key === 'pawapay' ? '/pawapay' : '/peex'">Ouvrir la passerelle</router-link>
+              <router-link class="btn-normal sm" :to="{ digitwace: '/wacepay', pawapay: '/pawapay', maishapay: '/maishapay' }[p.key] || '/peex'">Ouvrir la passerelle</router-link>
             </div>
           </div>
         </div>
@@ -116,6 +116,7 @@
                       <option value="peex" :disabled="c.source === 'wacepay' || c.source === 'world'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payin') && !waceOk(c, 'payout')">WacePay</option>
                       <option value="pawapay" :disabled="!c.pawapay?.collect || !c.pawapay?.payout">PawaPay{{ pawaNote(c) }}</option>
+                      <option value="maishapay" :disabled="!c.maishapay">MaishaPay{{ c.maishapay ? '' : ' — non couvert' }}</option>
                       <option value="mixed" disabled>Mixte</option>
                     </select>
                     <button type="button" class="custom-btn" @click="custom[c.country] = !custom[c.country]">{{ custom[c.country] ? 'Masquer' : 'Par flux' }}</button>
@@ -127,6 +128,7 @@
                       <option value="peex" :disabled="c.source === 'wacepay' || c.source === 'world'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payin')">WacePay{{ waceNote(c, 'payin') }}</option>
                       <option value="pawapay" :disabled="!c.pawapay?.collect">PawaPay{{ pawaNote(c, 'collect') }}</option>
+                      <option value="maishapay" :disabled="!c.maishapay">MaishaPay{{ c.maishapay ? '' : ' — non couvert' }}</option>
                     </select>
                   </div>
                   <div class="pl" :class="{ dim: !c.payout }">
@@ -135,6 +137,7 @@
                       <option value="peex" :disabled="c.source === 'wacepay' || c.source === 'world'">PEEX</option>
                       <option value="digitwace" :disabled="!waceOk(c, 'payout')">WacePay{{ waceNote(c, 'payout') }}</option>
                       <option value="pawapay" :disabled="!c.pawapay?.payout">PawaPay{{ pawaNote(c, 'payout') }}</option>
+                      <option value="maishapay" :disabled="!c.maishapay">MaishaPay{{ c.maishapay ? '' : ' — non couvert' }}</option>
                     </select>
                   </div>
                   </template>
@@ -150,6 +153,7 @@
                   <div v-if="(c.payout_partner === 'digitwace' || c.collect_partner === 'digitwace') && !partnerReady('digitwace')" class="t-warn small">⚠ WacePay non configuré</div>
                   <div v-if="c.pawapay && !c.pawapay.unverified" class="wace-avail">PawaPay ici : {{ [c.pawapay.collect && 'collecte', c.pawapay.payout && 'versement'].filter(Boolean).join(' + ') || '—' }}{{ c.pawapay.providers.length ? ' · ' + c.pawapay.providers.join(', ') : '' }}</div>
                   <div v-if="(c.payout_partner === 'pawapay' || c.collect_partner === 'pawapay') && !partnerReady('pawapay')" class="t-warn small">⚠ PawaPay non configuré (PAWAPAY_ENABLED, PAWAPAY_API_TOKEN)</div>
+                  <div v-if="(c.payout_partner === 'maishapay' || c.collect_partner === 'maishapay') && !partnerReady('maishapay')" class="t-warn small">⚠ MaishaPay non configuré (MAISHAPAY_ENABLED, MAISHAPAY_PUBLIC_KEY, MAISHAPAY_SECRET_KEY)</div>
                   <div v-if="(c.payout_partner === 'digitwace' && !waceOk(c, 'payout')) || (c.collect_partner === 'digitwace' && !waceOk(c, 'payin'))" class="t-warn small">
                     ⚠ WacePay non confirmé ici ({{ c.wacepay ? 'service absent' : 'couverture non synchronisée' }})
                   </div>
@@ -572,6 +576,8 @@ onMounted(load)
 .pbadge.p-wacepay_remit { background: #ea7a17; }
 .pbadge.p-terrapay { background: #7c3aed; }
 .pbadge.p-pawapay { background: #0e9f6e; }
+.pbadge.p-maishapay { background: #16a34a; }
+.api.p-maishapay { border-color: #16a34a; color: #15803d; font-weight: 700; }
 .partner-cell { min-width: 230px; }
 .partner-cell .api { width: 140px; }
 .pl { display: flex; align-items: center; gap: 8px; margin: 3px 0; }

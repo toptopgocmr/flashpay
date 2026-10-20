@@ -61,6 +61,8 @@ Route::prefix('v1')->middleware('merchant.api')->group(function () {
 // Webhook Digitwace / WacePay (statut des versements) — vérifié par signature puis revalidé via l'API
 Route::post('/webhooks/digitwace', \App\Http\Controllers\Api\DigitwaceWebhookController::class)->middleware('throttle:120,1')->name('webhooks.digitwace');
 // Callbacks pawaPay (dépôts / versements / remittances) — statut toujours relu via l'API pawaPay
+// MaishaPay : notifications POST (mobile money, B2C, services) et GET (carte)
+Route::match(['get', 'post'], '/webhooks/maishapay', \App\Http\Controllers\Api\MaishapayWebhookController::class)->middleware('throttle:240,1,maishapay-callback')->name('webhooks.maishapay');
 Route::post('/webhooks/pawapay', \App\Http\Controllers\Api\PawapayWebhookController::class)->middleware('throttle:240,1,pawapay-callback')->name('webhooks.pawapay');
 
 Route::post('/webhooks/peex/{service?}', [WebhookController::class, 'peex'])
@@ -180,6 +182,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/quote', [PaymentController::class, 'quote']);
         Route::get('/pending', [PaymentController::class, 'pending']); // opération en cours (à rouvrir dans l'app)
         Route::post('/transfer', [PaymentController::class, 'transfer'])->middleware(['cap:send', 'one_op', 'pin', 'idempotent']);
+        // Services MaishaPay : crédit téléphonique, abonnement TV, factures (depuis le wallet)
+        Route::get('/services', [\App\Http\Controllers\Api\BillPaymentController::class, 'catalog']);
+        Route::post('/services/quote', [\App\Http\Controllers\Api\BillPaymentController::class, 'quote']);
+        Route::post('/services/{service}', [\App\Http\Controllers\Api\BillPaymentController::class, 'pay'])->whereIn('service', ['airtime', 'paytv', 'utility'])->middleware(['cap:send', 'one_op', 'pin', 'idempotent']);
         Route::post('/deposit', [PaymentController::class, 'deposit'])->middleware(['cap:topup', 'one_op', 'pin', 'idempotent']);
         Route::post('/withdraw', [PaymentController::class, 'withdraw'])->middleware(['cap:withdraw,settlement', 'one_op', 'pin', 'idempotent']);
         Route::get('/merchant/{code}', [PaymentController::class, 'merchantInfo'])->where('code', '.*');
@@ -418,6 +424,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/digitwace/discover', [PricingAdminController::class, 'discoverWacepay'])->middleware('throttle:3,1');
         Route::delete('/digitwace/discover', [PricingAdminController::class, 'resetWacepayEndpoint']);
         // Passerelle PawaPay (collecte / versement mobile money, remittance)
+        Route::get('/maishapay/overview', [\App\Http\Controllers\Api\MaishapayAdminController::class, 'overview']);
+        Route::post('/maishapay/test', [\App\Http\Controllers\Api\MaishapayAdminController::class, 'test'])->middleware('throttle:20,1,maishapay-test');
+        Route::post('/maishapay/requests/{remitRequest}/refresh', [\App\Http\Controllers\Api\MaishapayAdminController::class, 'refresh'])->whereNumber('remitRequest');
         Route::get('/pawapay/overview', [\App\Http\Controllers\Api\PawapayAdminController::class, 'overview'])->middleware('throttle:30,1,pawapay-overview');
         Route::get('/pawapay/balances', [\App\Http\Controllers\Api\PawapayAdminController::class, 'balances'])->middleware('throttle:30,1,pawapay-balances');
         Route::post('/pawapay/test-number', [\App\Http\Controllers\Api\PawapayAdminController::class, 'testNumber'])->middleware('throttle:20,1,pawapay-test');

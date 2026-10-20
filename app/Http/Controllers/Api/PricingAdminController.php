@@ -84,7 +84,8 @@ class PricingAdminController extends Controller
         $coverage = app(\App\Services\Digitwace\CoverageService::class)->byCountry();
         // pawaPay : couverture lue sur le compte (active-conf) ; sans réponse, pays du réseau pawaPay
         [$pawaCov, $pawaErr] = self::pawapayCoverage($request->boolean('pawapay_refresh'));
-        $list = collect($this->corridors->catalog())->map(function ($c) use ($defaults, $overrides, $usage, $coverage, $pawaCov) {
+        $maishaCountries = app(\App\Services\Maishapay\MaishapayClient::class)->countries();
+        $list = collect($this->corridors->catalog())->map(function ($c) use ($defaults, $overrides, $usage, $coverage, $pawaCov, $maishaCountries) {
             $d = $defaults[$c['country']] ?? [];
             $o = $overrides[$c['country']] ?? null;
             return $c + [
@@ -96,6 +97,8 @@ class PricingAdminController extends Controller
                 'wacepay' => $coverage[$c['country']] ?? null,
                 // pawaPay : pays de son réseau mobile money (collecte + versement)
                 'pawapay' => $pawaCov[$c['country']] ?? null,
+                // MaishaPay : pays couverts (MAISHAPAY_COUNTRIES)
+                'maishapay' => in_array($c['country'], $maishaCountries, true) ? ['collect' => true, 'payout' => true] : null,
                 'payout_partner_name' => PeexCorridors::partnerName($c['payout_partner']),
                 'overridden' => (bool) $o,
                 'note' => $o?->note,
@@ -149,6 +152,20 @@ class PricingAdminController extends Controller
                 'coverage_error' => $pawaErr,
                 'coverage_synced_at' => cache('pawapay:coverage:synced_at'),
             ],
+            [
+                'key' => 'maishapay', 'name' => 'MaishaPay', 'flows' => ['collect', 'payout'],
+                'ready' => ($mp = app(\App\Services\Maishapay\MaishapayClient::class))->enabled() && (bool) config('flashpay.rails.maishapay.enabled'),
+                'mode' => $mp->enabled() ? ($mp->sandbox() ? 'Sandbox' : 'Production') : 'clés API à saisir',
+                'sandbox' => $mp->sandbox(),
+                'card' => config('payment_methods.card_driver') === 'maishapay',
+                'collect_countries' => $list->where('collect', true)->where('collect_partner', 'maishapay')->count(),
+                'payout_countries' => $list->where('payout', true)->where('payout_partner', 'maishapay')->count(),
+                'webhook' => $mp->callbackUrl(),
+                'coverage_countries' => count($maishaCountries),
+                'coverage_payin' => count($maishaCountries),
+                'coverage_payout' => count($maishaCountries),
+                'coverage_list' => $maishaCountries,
+            ],
         ];
 
         return response()->json([
@@ -195,10 +212,10 @@ class PricingAdminController extends Controller
             'payout' => 'sometimes|boolean',
             'payout_api' => 'sometimes|nullable|in:disbursement,remittance',
             // Partenaire qui gère les flux : collecte = PEEX (seul partenaire de collecte), versement = PEEX ou WacePay
-            'collect_partner' => 'sometimes|nullable|in:peex,digitwace,pawapay',
-            'payout_partner' => 'sometimes|nullable|in:peex,digitwace,pawapay',
+            'collect_partner' => 'sometimes|nullable|in:peex,digitwace,pawapay,maishapay',
+            'payout_partner' => 'sometimes|nullable|in:peex,digitwace,pawapay,maishapay',
             // Passerelle unique : collecte ET versement confiés au même partenaire
-            'partner' => 'sometimes|in:peex,digitwace,pawapay',
+            'partner' => 'sometimes|in:peex,digitwace,pawapay,maishapay',
             'note' => 'sometimes|nullable|string|max:190',
         ]);
         // PEEX ne couvre que ses pays (config) : refusé pour les pays ajoutés (WacePay / reste du monde)
@@ -225,6 +242,12 @@ class PricingAdminController extends Controller
             }
         }
 
+        // MaishaPay : pays couverts (MAISHAPAY_COUNTRIES)
+        if (in_array('maishapay', [$v['collect_partner'] ?? null, $v['payout_partner'] ?? null], true)
+            && ! in_array($iso, app(\App\Services\Maishapay\MaishapayClient::class)->countries(), true)) {
+            return response()->json(['message' => "MaishaPay ne couvre pas {$iso} (MAISHAPAY_COUNTRIES)."], 422);
+        }
+
         // WacePay n'est proposé que là où la couverture synchronisée l'annonce
         foreach (['collect_partner' => 'payin', 'payout_partner' => 'payout'] as $field => $service) {
             if (($v[$field] ?? null) === 'digitwace') {
@@ -245,8 +268,9 @@ class PricingAdminController extends Controller
 
         $waceOff = ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled();
         $pawaOff = ! app(\App\Services\Remit\PawapayClient::class)->enabled() || ! config('flashpay.rails.pawapay_momo.enabled');
-        $off = fn (?string $p) => ($p === 'digitwace' && $waceOff) || ($p === 'pawapay' && $pawaOff);
-        $offName = fn (?string $p) => $p === 'pawapay' ? 'PawaPay' : 'WacePay';
+        $maishaOff = ! app(\App\Services\Maishapay\MaishapayClient::class)->enabled() || ! config('flashpay.rails.maishapay.enabled');
+        $off = fn (?string $p) => ($p === 'digitwace' && $waceOff) || ($p === 'pawapay' && $pawaOff) || ($p === 'maishapay' && $maishaOff);
+        $offName = fn (?string $p) => match ($p) { 'pawapay' => 'PawaPay', 'maishapay' => 'MaishaPay', default => 'WacePay' };
         $message = match (true) {
             isset($v['payout_partner'], $v['collect_partner']) && $v['payout_partner'] === $v['collect_partner'] =>
                 'Tous les flux de ' . $iso . ' (collecte, versement, vérifications, soldes) passent désormais par ' . PeexCorridors::partnerName($v['payout_partner']) . '.'

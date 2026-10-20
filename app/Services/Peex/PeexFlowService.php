@@ -50,6 +50,9 @@ class PeexFlowService
         if ($partner === 'pawapay') {
             return $this->pawapayRail('Collecte depuis ce pays confiée à PawaPay');
         }
+        if ($partner === 'maishapay') {
+            return $this->maishapayRail('Collecte depuis ce pays confiée à MaishaPay');
+        }
         if ($partner !== 'digitwace') {
             return 'peex';
         }
@@ -75,6 +78,9 @@ class PeexFlowService
         if ($partner === 'pawapay') {
             return $this->pawapayRail('Versements vers ce pays confiés à PawaPay');
         }
+        if ($partner === 'maishapay') {
+            return $this->maishapayRail('Versements vers ce pays confiés à MaishaPay');
+        }
         if ($partner !== 'digitwace') {
             return 'peex';
         }
@@ -84,6 +90,15 @@ class PeexFlowService
         }
 
         return 'digitwace';
+    }
+
+    /** MaishaPay choisi pour le pays : refusé (jamais routé ailleurs en silence) s'il n'est pas configuré. */
+    protected function maishapayRail(string $what): string
+    {
+        if (! config('flashpay.rails.maishapay.enabled', false) || ! app(\App\Services\Maishapay\MaishapayClient::class)->enabled()) {
+            throw new PeexException($what . ', mais MaishaPay n\'est pas encore configuré. Contactez le support FlashPay.');
+        }
+        return 'maishapay';
     }
 
     /** pawaPay choisi pour le pays : refusé (jamais routé ailleurs en silence) s'il n'est pas configuré. */

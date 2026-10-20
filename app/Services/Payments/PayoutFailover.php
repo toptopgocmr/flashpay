@@ -23,9 +23,9 @@ use Illuminate\Support\Facades\Log;
  */
 class PayoutFailover
 {
-    public const RAILS = ['peex', 'digitwace', 'pawapay_momo'];
+    public const RAILS = ['peex', 'digitwace', 'pawapay_momo', 'maishapay'];
 
-    public const NAMES = ['peex' => 'PEEX', 'digitwace' => 'WacePay', 'pawapay_momo' => 'PawaPay'];
+    public const NAMES = ['peex' => 'PEEX', 'digitwace' => 'WacePay', 'pawapay_momo' => 'PawaPay', 'maishapay' => 'MaishaPay'];
 
     public function __construct(protected PeexCorridors $corridors)
     {
@@ -75,6 +75,7 @@ class PayoutFailover
             'peex' => (bool) config('flashpay.peex.sandbox', true),
             'digitwace' => (bool) config('flashpay.digitwace.sandbox', true),
             'pawapay_momo' => app(\App\Services\Remit\PawapayClient::class)->sandbox(),
+            'maishapay' => app(\App\Services\Maishapay\MaishapayClient::class)->sandbox(),
             default => true,
         };
     }
@@ -92,6 +93,7 @@ class PayoutFailover
             'pawapay_momo' => ($p = app(\App\Services\Remit\PawapayClient::class))->enabled()
                 && ! empty($p->coverage()[$iso]['payout'])
                 && $this->enough($p->availableFor($currency, $iso), $amount),
+            'maishapay' => ($m = app(\App\Services\Maishapay\MaishapayClient::class))->enabled() && in_array($iso, $m->countries(), true),
             default => false,
         };
     }

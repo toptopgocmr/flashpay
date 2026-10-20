@@ -165,7 +165,7 @@ class ReconciliationService
         \App\Models\RemitRequest::with('transaction')->whereNotNull('transaction_id')->where('updated_at', '>=', now()->subDays(7))
             ->chunk(300, function ($rows) use ($check) {
                 foreach ($rows as $r) {
-                    $name = $r->partner === 'pawapay_momo' ? 'PawaPay' : \App\Services\Remit\RemitCountries::partnerName($r->partner);
+                    $name = match ($r->partner) { 'pawapay_momo' => 'PawaPay', 'maishapay' => 'MaishaPay', default => \App\Services\Remit\RemitCountries::partnerName($r->partner) };
                     $check($name, ['deposit' => 'collect', 'refund' => 'refund'][$r->method] ?? 'payout', (string) $r->status, $r->transaction, $r->id, (string) $r->reference);
                 }
             });

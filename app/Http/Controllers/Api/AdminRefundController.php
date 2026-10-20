@@ -22,7 +22,7 @@ class AdminRefundController extends Controller
         $transaction->load('peexRequests');
         $p = TransactionPresenter::parties($transaction);
         $meta = $transaction->meta ?? [];
-        $mobileRail = in_array($transaction->source_rail, ['peex', 'digitwace', 'pawapay_momo'], true);
+        $mobileRail = in_array($transaction->source_rail, ['peex', 'digitwace', 'pawapay_momo', 'maishapay'], true);
 
         return response()->json([
             'transaction' => [

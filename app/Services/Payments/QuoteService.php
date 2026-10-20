@@ -216,6 +216,19 @@ class QuoteService
                 }
             }
         }
+        // MaishaPay : configuré, et opérateur du numéro reconnu (AIRTEL, ORANGE, MTN, MPESA, AFRICELL…)
+        foreach ([[$src, $collectBy, 'source'], [$dst, $payoutBy, 'destination']] as [$e, $by, $side]) {
+            if ($e['type'] !== 'mobile' || $by !== 'maishapay') {
+                continue;
+            }
+            $what = $side === 'source' ? "Collecte depuis {$e['country_name']}" : "Versements vers {$e['country_name']}";
+            if (! app(\App\Services\Maishapay\MaishapayClient::class)->enabled() || ! config('flashpay.rails.maishapay.enabled', false)) {
+                $this->codes[] = $side === 'source' ? 'collect_unavailable' : 'payout_unavailable';
+                $problems[] = "{$what} confiés à MaishaPay, mais MaishaPay n'est pas configuré.";
+            } elseif (! \App\Services\Maishapay\MaishapayClient::provider($e['operator'] ?? null)) {
+                $problems[] = "Opérateur du numéro {$e['phone']} non pris en charge par MaishaPay.";
+            }
+        }
         if ($dst['type'] === 'mobile' && $payoutBy === 'pawapay' && $pawa->enabled() && config('flashpay.pawapay.check_balance', true)) {
             $avail = $pawa->availableFor($dst['currency'], $dst['country']);
             if ($avail !== null && $avail < $outAmount) {
@@ -240,7 +253,7 @@ class QuoteService
         if (! config('flashpay.fees.pass_partner_fees', true)) {
             return $out;
         }
-        $names = ['peex' => 'PEEX', 'digitwace' => 'WacePay', 'pawapay' => 'PawaPay', 'card' => 'Carte'];
+        $names = ['peex' => 'PEEX', 'digitwace' => 'WacePay', 'pawapay' => 'PawaPay', 'maishapay' => 'MaishaPay', 'card' => 'Carte'];
         $rates = \App\Support\PartnerFees::rates();
 
         // Versement au bénéficiaire (frais en devise du bénéficiaire, ramenés en devise de l'expéditeur)
@@ -254,7 +267,7 @@ class QuoteService
         // Collecte chez l'expéditeur, sur le montant total collecté (montant + frais)
         $collectKey = match ($src['type']) {
             'mobile' => $this->partnerFor($src['country'], 'collect_partner') . '_collect',
-            'card' => config('payment_methods.card_driver') === 'wacepay' ? 'digitwace_card' : 'card',
+            'card' => ['wacepay' => 'digitwace_card', 'maishapay' => 'maishapay_card'][config('payment_methods.card_driver')] ?? 'card',
             'bank' => config('payment_methods.bank_debit_driver') === 'wacepay' ? 'digitwace_card' : null,
             default => null,
         };
@@ -277,7 +290,7 @@ class QuoteService
         }
         try {
             $p = $this->corridors->country($iso)[$field] ?? 'peex';
-            return in_array($p, ['digitwace', 'pawapay'], true) ? $p : 'peex';
+            return in_array($p, ['digitwace', 'pawapay', 'maishapay'], true) ? $p : 'peex';
         } catch (\Throwable) {
             return 'peex';
         }

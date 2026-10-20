@@ -40,7 +40,7 @@ class CardPaymentService
         $driver = $this->driver($tx);
         $bank = $tx->source_rail === 'bank';
         $label = $bank ? 'La recharge depuis un compte bancaire' : 'Le paiement par carte';
-        if (! in_array($driver, ['sandbox', 'wacepay'], true)) {
+        if (! in_array($driver, ['sandbox', 'wacepay', 'maishapay'], true) || ($driver === 'maishapay' && $bank)) {
             $tx->update(['status' => 'failed', 'stage' => null, 'failure_reason' => 'Passerelle ' . ($bank ? 'bancaire' : 'carte') . ' non configurée']);
             throw new CashNetworkException("{$label} n'est pas encore disponible.");
         }
@@ -77,6 +77,43 @@ class CardPaymentService
             $tx->update(['meta' => array_merge($tx->fresh()->meta ?? [], ['checkout_url' => $res['url'], 'return_url' => $ourUrl, 'wacepay_ref' => $reference])]);
         }
 
+        if ($driver === 'maishapay') {
+            // Page de paiement MaishaPay (carte 3-D Secure) ; retour et notification sur la page FlashPay
+            $reference = $tx->reference . '-K' . (\App\Models\RemitRequest::where('transaction_id', $tx->id)->where('method', 'checkout')->count() + 1);
+            $req = \App\Models\RemitRequest::create(['transaction_id' => $tx->id, 'partner' => 'maishapay', 'reference' => $reference, 'method' => 'checkout', 'status' => 'new']);
+            try {
+                $user = $tx->initiator;
+                $names = preg_split('/\s+/', trim((string) ($user?->full_name ?: 'Client FlashPay'))) ?: ['Client'];
+                $res = app(\App\Services\Maishapay\MaishapayClient::class)->collectCard($reference, [
+                    'amount' => (int) $tx->amount + (int) $tx->fee, 'currency' => $tx->currency, 'brand' => $tx->meta['card_brand'] ?? null,
+                    'first_name' => array_shift($names), 'last_name' => implode(' ', $names) ?: 'FlashPay',
+                    'phone' => $user?->phone, 'email' => $user?->email, 'address' => $user ? ($user->getAttributes()['address'] ?? null) : null, 'city' => $user ? ($user->getAttributes()['city'] ?? null) : null,
+                    'return_url' => $ourUrl,
+                ]);
+            } catch (\Throwable $e) {
+                $req->update(['status' => 'failed', 'message' => mb_substr($e->getMessage(), 0, 250), 'finalized_at' => now()]);
+                $this->complete($token, false, null, 'MaishaPay indisponible : ' . $e->getMessage());
+                throw new CashNetworkException("{$label} est momentanément indisponible. Aucun montant n'a été débité.");
+            }
+            $req->update(['partner_ref' => $res['id'] ?: $reference, 'status' => 'pending', 'raw_status' => $res['raw_status'], 'last_response' => $res['raw']]);
+            if (! $res['url']) {
+                $req->update(['status' => 'failed', 'message' => 'Aucune page de paiement renvoyée par MaishaPay', 'finalized_at' => now()]);
+                $this->complete($token, false, null, 'MaishaPay n\'a pas renvoyé de page de paiement');
+                throw new CashNetworkException("{$label} est momentanément indisponible. Aucun montant n'a été débité.");
+            }
+            $tx->update(['meta' => array_merge($tx->fresh()->meta ?? [], ['checkout_url' => $res['url'], 'return_url' => $ourUrl, 'maishapay_ref' => $reference])]);
+        }
+
+        return $tx->fresh();
+    }
+
+    /** Résultat MaishaPay (notification revérifiée ou page de retour). */
+    public function syncMaishapay(Transaction $tx): Transaction
+    {
+        $req = \App\Models\RemitRequest::where('transaction_id', $tx->id)->where('partner', 'maishapay')->where('method', 'checkout')->whereNull('finalized_at')->latest('id')->first();
+        if ($req) {
+            app(\App\Services\Remit\RemitStatusHandler::class)->refresh($req);
+        }
         return $tx->fresh();
     }
 
@@ -142,8 +179,8 @@ class CardPaymentService
         Transaction::where('status', 'processing')->where('stage', 'awaiting_card')
             ->where('created_at', '<', now()->subMinutes($minutes))
             ->each(function (Transaction $tx) use (&$n) {
-                if (($tx->meta['card_driver'] ?? null) === 'wacepay') {
-                    $tx = $this->syncWacepay($tx);
+                if (in_array($tx->meta['card_driver'] ?? null, ['wacepay', 'maishapay'], true)) {
+                    $tx = ($tx->meta['card_driver'] ?? null) === 'maishapay' ? $this->syncMaishapay($tx) : $this->syncWacepay($tx);
                     if ($tx->stage !== 'awaiting_card') {
                         return;
                     }

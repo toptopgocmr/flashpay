@@ -68,7 +68,7 @@ class PendingTimeoutService
             }
         }
         // Collecte pawaPay
-        foreach (\App\Models\RemitRequest::where('transaction_id', $tx->id)->where('partner', 'pawapay_momo')->where('method', 'deposit')->whereNull('finalized_at')->get() as $req) {
+        foreach (\App\Models\RemitRequest::where('transaction_id', $tx->id)->whereIn('partner', ['pawapay_momo', 'maishapay'])->where('method', 'deposit')->whereNull('finalized_at')->get() as $req) {
             try {
                 app(\App\Services\Remit\RemitStatusHandler::class)->refresh($req);
             } catch (\Throwable $e) {

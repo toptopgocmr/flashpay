@@ -32,6 +32,9 @@ class PartnerFees
         'digitwace_card' => 'WacePay — carte / compte bancaire',
         'pawapay_collect' => 'PawaPay — collecte mobile money',
         'pawapay_payout' => 'PawaPay — versement',
+        'maishapay_collect' => 'MaishaPay — collecte mobile money',
+        'maishapay_payout' => 'MaishaPay — versement',
+        'maishapay_card' => 'MaishaPay — carte bancaire',
         'card' => 'Carte (autre prestataire)',
     ];
 
@@ -158,6 +161,7 @@ class PartnerFees
         $wace = $tx->relationLoaded('digitwaceRequests') ? $tx->digitwaceRequests : DigitwaceRequest::where('transaction_id', $tx->id)->get();
         $meta = $tx->meta ?? [];
         $hosted = ($meta['card_driver'] ?? null) === 'wacepay';
+        $remit = \App\Models\RemitRequest::where('transaction_id', $tx->id)->get();
 
         // 1. Collecte (débit du compte de l'expéditeur)
         $srcRail = $tx->source_rail ?: 'wallet';
@@ -171,6 +175,11 @@ class PartnerFees
                 $key = $srcRail === 'digitwace' ? 'digitwace_collect' : 'digitwace_card';
                 $legs[] = self::leg('collect', 'WacePay', $key, $req?->wace_id ?? $tx->source_external_ref, $req?->status,
                     (int) $tx->amount + (int) $tx->fee, $tx->currency, self::reported($req, 'wace'), $rates, self::countryOf($tx, 'in'));
+            } elseif (in_array($srcRail, ['pawapay_momo', 'maishapay'], true) || ($srcRail === 'card' && ($meta['card_driver'] ?? null) === 'maishapay')) {
+                $p = $srcRail === 'pawapay_momo' ? 'pawapay' : 'maishapay';
+                $req = $remit->first(fn ($r) => in_array($r->method, ['deposit', 'checkout'], true));
+                $legs[] = self::leg('collect', $p === 'pawapay' ? 'PawaPay' : 'MaishaPay', $p . ($srcRail === 'card' ? '_card' : '_collect'), $req?->partner_ref ?? $tx->source_external_ref, $req?->status,
+                    (int) $tx->amount + (int) $tx->fee, $tx->currency, self::reported($req, 'remit'), $rates, self::countryOf($tx, 'in'));
             } elseif ($srcRail === 'card') {
                 $legs[] = self::leg('collect', 'Carte', 'card', $tx->source_external_ref, null,
                     (int) $tx->amount + (int) $tx->fee, $tx->currency, null, $rates);
@@ -188,6 +197,19 @@ class PartnerFees
             $req = $wace->first(fn ($r) => $r->operation === 'payout');
             $legs[] = self::leg('payout', 'WacePay', 'digitwace_payout', $req?->wace_id ?? $tx->destination_external_ref, $req?->status,
                 $out, $outCur, self::reported($req, 'wace'), $rates, self::countryOf($tx, 'out'));
+        }
+
+        elseif (in_array($tx->destination_rail, ['pawapay_momo', 'maishapay'], true)) {
+            $p = $tx->destination_rail === 'pawapay_momo' ? 'pawapay' : 'maishapay';
+            $req = $remit->first(fn ($r) => $r->method === 'payout' && $r->partner === $tx->destination_rail);
+            $legs[] = self::leg('payout', $p === 'pawapay' ? 'PawaPay' : 'MaishaPay', $p . '_payout', $req?->partner_ref ?? $tx->destination_external_ref, $req?->status,
+                $out, $outCur, self::reported($req, 'remit'), $rates, self::countryOf($tx, 'out'));
+        }
+        // Remboursements PawaPay / MaishaPay (versement vers le payeur) : coût supplémentaire
+        foreach ($remit->filter(fn ($r) => $r->method === 'refund') as $req) {
+            $p = $req->partner === 'pawapay_momo' ? 'pawapay' : 'maishapay';
+            $legs[] = self::leg('refund', $p === 'pawapay' ? 'PawaPay' : 'MaishaPay', $p . '_payout', $req->partner_ref ?? $req->reference, $req->status,
+                (int) $tx->amount + (int) $tx->fee, $tx->currency, self::reported($req, 'remit'), $rates, self::countryOf($tx, 'in'));
         }
 
         // 3. Remboursements PEEX (automatiques ou manuels) : coût supplémentaire

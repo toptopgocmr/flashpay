@@ -21,9 +21,9 @@ class CardCheckoutController extends Controller
     {
         $tx = $this->cards->pending($token);
         $driver = $tx->meta['card_driver'] ?? $this->cards->driver($tx);
-        if ($driver === 'wacepay') {
-            // Retour de la page WacePay : on vérifie le résultat auprès de l'API
-            $tx = $this->cards->syncWacepay($tx);
+        if (in_array($driver, ['wacepay', 'maishapay'], true)) {
+            // Retour de la page WacePay / MaishaPay : on vérifie le résultat auprès de l'API
+            $tx = $driver === 'maishapay' ? $this->cards->syncMaishapay($tx) : $this->cards->syncWacepay($tx);
             return response($this->page($tx, $token, null, true));
         }
         abort_unless($driver === 'sandbox', 404);

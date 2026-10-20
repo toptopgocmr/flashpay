@@ -57,6 +57,11 @@ return [
             'driver' => \App\Services\Remit\PawapayMomoConnector::class,
             'enabled' => (bool) env('PAWAPAY_ENABLED', false),
         ],
+        // MaishaPay : collecte (mobile money, carte) et versements mobile money (B2C)
+        'maishapay' => [
+            'driver' => \App\Services\Maishapay\MaishapayConnector::class,
+            'enabled' => (bool) env('MAISHAPAY_ENABLED', false),
+        ],
     ],
 
     /*
@@ -157,6 +162,50 @@ return [
         // Collecte / versement inconnus chez pawaPay après ce délai : jamais arrivés → échec (remboursement)
         'not_found_minutes' => (int) env('PAWAPAY_NOT_FOUND_MINUTES', 15),
         // Callbacks (à saisir dans le tableau de bord pawaPay) : {APP_URL}/api/webhooks/pawapay
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | MaishaPay (https://docs.maishapay.net) — RDC, Congo, Cameroun, Sénégal, Bénin, Côte d'Ivoire, Togo
+    |--------------------------------------------------------------------------
+    | Clés : tableau de bord marchand https://marchand.maishapay.online (MP-SBPK-… en sandbox,
+    | MP-LIVEPK-… en production). Variables Railway uniquement, jamais dans l'app.
+    | Callback (collecte, versement, carte) : {APP_URL}/api/webhooks/maishapay
+    */
+    'maishapay' => [
+        'enabled' => (bool) env('MAISHAPAY_ENABLED', false),
+        'base_url' => env('MAISHAPAY_BASE_URL', 'https://marchand.maishapay.online/api'),
+        'public_key' => env('MAISHAPAY_PUBLIC_KEY', ''),
+        'secret_key' => env('MAISHAPAY_SECRET_KEY', ''),
+        // gatewayMode : 0 = sandbox, 1 = production (déduit de la clé MP-LIVEPK-… si non renseigné)
+        'sandbox' => env('MAISHAPAY_SANDBOX') === null ? null : filter_var(env('MAISHAPAY_SANDBOX'), FILTER_VALIDATE_BOOLEAN),
+        // Jeton Bearer facultatif (doc Web API v2.1) ; les clés sont toujours envoyées dans le corps
+        'bearer' => env('MAISHAPAY_BEARER_TOKEN', ''),
+        // Secret de signature des webhooks (X-MaishaPay-Signature : sha256=HMAC du corps) — facultatif
+        'webhook_secret' => env('MAISHAPAY_WEBHOOK_SECRET', ''),
+        'timeout' => (int) env('MAISHAPAY_TIMEOUT', 40),
+        // Pays où MaishaPay est proposé dans la console (Pays & change)
+        'countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('MAISHAPAY_COUNTRIES', 'CD,CG,CM,SN,BJ,CI,TG'))))),
+        // Chemins (collection Postman MaishaPay) — ajustables sans redéploiement du code
+        'paths' => [
+            'collect_mobile' => env('MAISHAPAY_PATH_COLLECT_MOBILE', 'collect/v2/store/mobileMoney'),
+            'collect_card' => env('MAISHAPAY_PATH_COLLECT_CARD', 'collect/v3/store/card'),
+            'payout_mobile' => env('MAISHAPAY_PATH_PAYOUT_MOBILE', 'b2c/store/transfert/mobilemoney'),
+            'check' => env('MAISHAPAY_PATH_CHECK', 'transaction/rest/v2/check'),
+            // Services (doc Web API v2.1, à confirmer avec MaishaPay)
+            'airtime' => env('MAISHAPAY_PATH_AIRTIME', 'services/airtime/topup'),
+            'paytv' => env('MAISHAPAY_PATH_PAYTV', 'services/paytv/pay'),
+            'utility' => env('MAISHAPAY_PATH_UTILITY', 'services/utility/pay'),
+        ],
+        // Opération inconnue chez MaishaPay après ce délai : jamais arrivée → échec
+        'not_found_minutes' => (int) env('MAISHAPAY_NOT_FOUND_MINUTES', 15),
+    ],
+
+    // Services payés depuis le wallet (crédit, TV, factures) — exécutés par MaishaPay
+    'bills' => [
+        'enabled' => (bool) env('FLASHPAY_BILLS_ENABLED', true),
+        // Moyen de paiement déclaré à MaishaPay pour un abonnement TV payé par FlashPay (à confirmer avec MaishaPay)
+        'payment_method' => env('MAISHAPAY_SERVICES_PAYMENT_METHOD', 'balance'),
     ],
 
     'terrapay' => [

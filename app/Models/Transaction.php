@@ -83,6 +83,7 @@ class Transaction extends Model
         'cash_in' => 'Recharge', 'deposit' => 'Recharge', 'withdrawal' => 'Retrait', 'cash_out' => 'Retrait chez un agent',
         'cash_pickup' => 'Retrait avec code', 'bank_transfer' => 'Virement bancaire', 'gift' => 'Cadeau envoyé', 'international_transfer' => 'Transfert international',
         'gift_claim' => 'Cadeau reçu', 'gift_refund' => 'Cadeau remboursé', 'refund' => 'Remboursement',
+        'airtime' => 'Crédit téléphonique', 'tv_subscription' => 'Abonnement TV', 'bill_payment' => 'Paiement de facture',
         'split_payment' => 'Contribution à une cagnotte', 'float_topup' => 'Approvisionnement agent', 'adjustment' => 'Ajustement',
     ];
 
