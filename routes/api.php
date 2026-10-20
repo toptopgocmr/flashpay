@@ -206,6 +206,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
             Route::post('/quote', 'quote')->middleware('throttle:60,1,remit-quote');
             Route::post('/send', 'send')->middleware(['cap:send', 'one_op', 'pin', 'idempotent']);
         });
+        // Carnet des bénéficiaires internationaux
+        Route::get('/international/beneficiaries', [\App\Http\Controllers\Api\RemitBeneficiaryController::class, 'index']);
+        Route::post('/international/beneficiaries', [\App\Http\Controllers\Api\RemitBeneficiaryController::class, 'store'])->middleware('throttle:30,1,remit-benef');
+        Route::patch('/international/beneficiaries/{beneficiary}', [\App\Http\Controllers\Api\RemitBeneficiaryController::class, 'update'])->whereNumber('beneficiary');
+        Route::delete('/international/beneficiaries/{beneficiary}', [\App\Http\Controllers\Api\RemitBeneficiaryController::class, 'destroy'])->whereNumber('beneficiary');
     });
 
     // --- PEEX : corridors & frais (tous profils) ---

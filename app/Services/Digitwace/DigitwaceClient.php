@@ -824,6 +824,11 @@ class DigitwaceClient
         }
         $json = $res->json() ?? [];
         $code = $this->codeOf($json);
+        // API Partenaire : un refus peut revenir en HTTP 200/201 avec { "status": -1, "message": "…" }
+        // (ex. « Compte payout XOF introuvable »). Pour un envoi (POST), c'est un refus certain.
+        if ($code === null && $method !== 'get' && self::refused($json)) {
+            $code = 'REFUSED';
+        }
 
         $failed = ! $res->successful() || ($code !== null && $code !== self::OK);
         Log::log($failed ? 'warning' : 'info', 'WacePay ' . strtoupper($method) . ' ' . $endpoint, array_filter([
@@ -841,6 +846,13 @@ class DigitwaceClient
         }
 
         return $json;
+    }
+
+    /** Réponse de refus de l'API Partenaire : status = -1 (entier ou texte) au premier niveau. */
+    public static function refused(mixed $json): bool
+    {
+        $st = is_array($json) ? ($json['status'] ?? null) : null;
+        return (is_int($st) || (is_string($st) && preg_match('/^-?\d+$/', $st))) && (int) $st < 0;
     }
 
     /** Champs envoyés, numéros masqués (journaux). */
@@ -958,6 +970,7 @@ class DigitwaceClient
         $msg = mb_substr(strip_tags($msg), 0, 200);
         $hint = match (true) {
             str_contains(strtolower($msg), 'whitelist') => 'IP du serveur pas encore autorisée chez WacePay : vérifiez Developers › IP Whitelist et que DIGITWACE_BASE_URL pointe bien sur la même plateforme (sandbox-payinws.wacepay.io pour la sandbox)',
+            str_contains(strtolower($msg), 'compte payout') => 'le compte de versement de cette devise n\'est pas activé chez WacePay : activez-le dans le tableau de bord WacePay (Payout) ou demandez l\'activation à Digitwace',
             $code === '4001' => 'accès refusé — vérifiez que l\'IP du serveur est autorisée (IP Whitelist)',
             $code === '3002' => 'compte ou solde WacePay inactif',
             in_array($code, ['3015', '3016'], true) => 'référence invalide ou déjà utilisée',

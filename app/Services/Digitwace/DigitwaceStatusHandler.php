@@ -28,9 +28,29 @@ class DigitwaceStatusHandler
             return $this->finalize($req, 'failed', $req->message ?: 'Versement refusé par WacePay');
         }
 
+        // Versement envoyé avant le correctif « status -1 » : payout/execute avait répondu par un
+        // refus (HTTP 201 + status -1) mais la demande était restée « en attente » → échec certain.
+        $sent = data_get($req->transaction?->meta, 'wacepay_payout.response');
+        if (! $req->wace_id && $req->operation === 'payout' && is_array($sent) && DigitwaceClient::refused($sent)) {
+            $msg = 'Versement refusé par WacePay : ' . mb_substr((string) data_get($sent, 'message', 'refus'), 0, 200);
+            $req->update(['status' => 'failed', 'message' => $msg]);
+            return $this->finalize($req->fresh(), 'failed', $msg);
+        }
+
         $check = $this->connector->checkStatus($req->wace_id ?: $req->reference);
         if (($check['checked'] ?? false) !== true) {
             return $req->fresh(); // API injoignable : on réessaiera
+        }
+        // Versement que WacePay déclare introuvable (refresh-status, transactions ET liste) alors qu'il
+        // n'a jamais renvoyé d'identifiant : il n'a pas été créé chez eux. Passé le délai de grâce
+        // (DIGITWACE_PAYOUT_NOT_FOUND_SECONDS, 120 s), échec certain → remboursement, sans faire
+        // attendre le client des dizaines de minutes.
+        if ($check['status'] === 'pending' && $req->operation === 'payout' && ! $req->wace_id
+            && self::notFound($check['raw'] ?? [])
+            && $req->created_at && $req->created_at->lt(now()->subSeconds(max(60, (int) config('flashpay.digitwace.payout_not_found_seconds', 120))))) {
+            $msg = 'Versement introuvable chez WacePay (jamais exécuté)';
+            $req->update(['status' => 'failed', 'message' => $msg]);
+            return $this->finalize($req->fresh(), 'failed', $msg);
         }
         if ($check['status'] === 'pending') {
             $req->update(['status' => 'pending']);
@@ -38,6 +58,15 @@ class DigitwaceStatusHandler
         }
 
         return $this->finalize($req->fresh(), $check['status'], (string) ($req->fresh()->message ?: $req->raw_status ?: 'statut WacePay'));
+    }
+
+    /** Réponse WacePay « transaction introuvable » (status -1 + not found). */
+    public static function notFound(mixed $json): bool
+    {
+        if (! is_array($json) || ! DigitwaceClient::refused($json)) {
+            return false;
+        }
+        return (bool) preg_match('/not\s*found|introuvable/i', (string) ($json['message'] ?? ''));
     }
 
     /** Webhook reçu : on vérifie auprès de l'API puis on applique. */

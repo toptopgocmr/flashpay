@@ -45,6 +45,14 @@ class DigitwaceConnector implements PaymentRailConnector
                 $op = \App\Services\Digitwace\DigitwaceClient::operatorCode($meta['source_operator'] ?? $route['operator'] ?? null);
                 throw new DigitwaceException('Collecte WacePay non disponible' . ($op ? " pour les numéros {$op}" : '') . " ({$route['country']}) : aucun service de collecte WacePay" . ($op ? " {$op}" : '') . ' sur votre compte. Activez-le chez WacePay puis synchronisez la couverture.', '1001');
             }
+            // WacePay facture sa commission de collecte AU PAYEUR, en plus du montant demandé
+            // (feeBearer PAYER : 4 270 demandés → 4 356 débités). Les frais de collecte déjà
+            // inclus dans le devis FlashPay sont donc retirés du montant demandé, sinon
+            // l'expéditeur paierait la collecte deux fois.
+            $collectFee = (int) data_get($meta, 'fee_breakdown.collect', 0);
+            if ($collectFee > 0 && config('flashpay.digitwace.collect_fee_bearer', 'payer') === 'payer' && $collectFee < $amountMinor) {
+                $amountMinor -= $collectFee;
+            }
             $r = $this->client->payin($ref, $payer, $amountMinor, $currency, $route['phone'],
                 $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $tx?->initiator?->full_name ?? 'Client FlashPay', $route['country'],
                 $meta['source_operator'] ?? null, $tx?->initiator?->email ?? null);

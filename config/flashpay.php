@@ -184,6 +184,11 @@ return [
 
     'digitwace' => [
         'enabled' => (bool) env('DIGITWACE_ENABLED', false),
+        // Versement déclaré introuvable par WacePay au-delà de ce délai → échec + remboursement
+        'payout_not_found_seconds' => (int) env('DIGITWACE_PAYOUT_NOT_FOUND_SECONDS', 120),
+        // Qui paie la commission de collecte WacePay : « payer » = WacePay l'ajoute au débit du client
+        // (constaté en sandbox : feeBearer PAYER) ; « merchant » = déduite de ce que FlashPay reçoit.
+        'collect_fee_bearer' => env('DIGITWACE_COLLECT_FEE_BEARER', 'payer'),
         // Doc : https://docs.digitwace.com — API PayIn : https://payinws.wacepay.com/api/v1
         // API Partenaire : sandbox https://sandbox-payinws.wacepay.io/api/v1/ (tableau de bord sandbox-payin.wacepay.io)
         'base_url' => env('DIGITWACE_BASE_URL', env('DIGITWACE_SANDBOX', true) ? 'https://sandbox-payinws.wacepay.io/api/v1/' : 'https://payinws.wacepay.io/api/v1/'),

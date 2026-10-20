@@ -236,6 +236,25 @@ class InternationalTransferService
         return $out;
     }
 
+    /**
+     * Frais du partenaire de versement (Console › Tarifs partenaires), calculés dans la devise du
+     * bénéficiaire puis ramenés dans celle de l'expéditeur. 0 si aucun tarif n'est saisi.
+     */
+    protected function payoutFee(?string $partner, string $iso, array $fx, string $from, string $to): int
+    {
+        $key = ['pawapay' => 'pawapay_payout', 'digitwace' => 'digitwace_payout'][$partner] ?? null;
+        if (! $key || ! config('flashpay.fees.pass_partner_fees', true) || (int) ($fx['amount'] ?? 0) <= 0) {
+            return 0;
+        }
+        try {
+            $f = \App\Support\PartnerFees::quoteFee($key, (int) $fx['amount'], $iso, \App\Support\PartnerFees::rates());
+        } catch (\Throwable) {
+            return 0;
+        }
+        $rate = (float) ($fx['rate'] ?? 1) ?: 1;
+        return $from === $to ? $f : (int) ceil($f / $rate);
+    }
+
     /** Frais du partenaire de collecte (mobile money, carte), ajoutés aux frais payés par le client. */
     protected function collectFee(array $src, int $gross): int
     {
@@ -246,7 +265,8 @@ class InternationalTransferService
             ? (config('payment_methods.card_driver') === 'wacepay' ? 'digitwace_card' : 'card')
             : ($src['collect_partner'] ?? 'peex') . '_collect';
         try {
-            return \App\Support\PartnerFees::quoteFee($key, $gross, $src['country'], \App\Support\PartnerFees::rates(), gross: true);
+            $payerBorne = $key === 'digitwace_collect' && config('flashpay.digitwace.collect_fee_bearer', 'payer') === 'payer';
+            return \App\Support\PartnerFees::quoteFee($key, $gross, $src['country'], \App\Support\PartnerFees::rates(), gross: ! $payerBorne);
         } catch (\Throwable) {
             return 0;
         }
@@ -423,8 +443,6 @@ class InternationalTransferService
         $priced = $pricing->compute($c['iso'], $bt, $method, $c['partner'] ?? null, $amount);
         $source = $this->sourceFor($user, (array) ($in['source'] ?? []), $currency);
         array_push($problems, ...$source['problems']);
-        $collectFee = $this->collectFee($source, $amount + $priced['fee']);
-        $fee = $priced['fee'] + $collectFee;
         if ($priced['threshold'] && $amount > $priced['threshold']) {
             $problems[] = 'Montant maximum par transfert vers ' . $priced['zone']->name . ' : ' . number_format($priced['threshold'], 0, ',', ' ') . " {$currency}.";
         }
@@ -434,6 +452,11 @@ class InternationalTransferService
             $fx = ['amount' => 0, 'rate' => 0, 'margin_percent' => 0, 'from' => $currency, 'to' => $c['currency'], 'source' => 'indisponible'];
             $problems[] = "Taux de change {$currency} → {$c['currency']} non disponible pour le moment.";
         }
+        // L'expéditeur paie les trois : frais de service FlashPay + versement (partenaire du pays
+        // destinataire) + collecte (partenaire qui débite son compte), calculée sur le total.
+        $payoutFee = $this->payoutFee($c['partner'] ?? null, $c['iso'], $fx, $currency, $c['currency']);
+        $collectFee = $this->collectFee($source, $amount + $priced['fee'] + $payoutFee);
+        $fee = $priced['fee'] + $payoutFee + $collectFee;
         if ($source['type'] === 'wallet' && $wallet && (int) $wallet->balance < $amount + $fee) {
             $problems[] = 'Solde insuffisant (' . number_format((int) $wallet->balance, 0, ',', ' ') . " {$currency}).";
         }
@@ -456,6 +479,7 @@ class InternationalTransferService
             'fee_ht' => $priced['fee_ht'],
             'fee_remit' => $priced['fee'],
             'collect_fee' => $collectFee,
+            'payout_fee' => $payoutFee,
             'source' => array_diff_key($source, ['problems' => 1]),
             'taxes' => $priced['taxes'],
             'taxes_total' => $priced['taxes_total'],
@@ -573,7 +597,7 @@ class InternationalTransferService
                 'debit_source' => $src['type'],
                 'linked_account_id' => $src['linked_id'],
                 'sender_phone' => $src['type'] === 'mobile' ? $src['phone'] : null,
-                'fee_breakdown' => $q['collect_fee'] ? ['flashpay' => $q['fee_remit'], 'collect' => $q['collect_fee']] : null,
+                'fee_breakdown' => ($q['collect_fee'] || ($q['payout_fee'] ?? 0)) ? ['flashpay' => $q['fee_remit'], 'collect' => $q['collect_fee'], 'payout' => (int) ($q['payout_fee'] ?? 0)] : null,
             ], fn ($v) => $v !== null && $v !== ''),
         ];
 

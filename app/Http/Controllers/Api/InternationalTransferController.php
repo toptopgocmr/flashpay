@@ -87,12 +87,24 @@ class InternationalTransferController extends Controller
             'why' => 'nullable|array',
             'why.reason' => 'nullable|string|max:80', 'why.origin_fund' => 'nullable|string|max:80', 'why.relation' => 'nullable|string|max:80',
             'note' => 'nullable|string|max:140',
+            'save_beneficiary' => 'nullable|boolean',
+            'beneficiary_label' => 'nullable|string|max:120',
+            'saved_beneficiary_id' => 'nullable|integer',
         ]);
 
         try {
-            $tx = $this->service->send($request->user(), $v);
+            $tx = $this->service->send($request->user(), \Illuminate\Support\Arr::except($v, ['save_beneficiary', 'beneficiary_label', 'saved_beneficiary_id']));
         } catch (RemitException $e) {
             throw new PeexException($e->getMessage());
+        }
+        // Carnet des bénéficiaires internationaux (case « Enregistrer ce bénéficiaire », cochée par défaut)
+        if ($tx->status !== 'failed' && $request->boolean('save_beneficiary', true)) {
+            try {
+                $book = app(\App\Services\Remit\RemitBeneficiaryBook::class);
+                $book->touch($book->remember($request->user(), $v, $v['beneficiary_label'] ?? null));
+            } catch (\Throwable $e) {
+                report($e); // le carnet ne bloque jamais l'envoi
+            }
         }
         $code = match ($tx->status) { 'successful' => 201, 'processing' => 202, default => 422 };
         return response()->json($payments->txPayload($tx), $code);

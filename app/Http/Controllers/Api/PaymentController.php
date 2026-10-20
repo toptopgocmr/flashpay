@@ -182,7 +182,9 @@ class PaymentController extends Controller
             // Même chose pour WacePay (collecte, page carte, versement) sans attendre le webhook
             $wace = app(\App\Services\Digitwace\DigitwaceStatusHandler::class);
             foreach (\App\Models\DigitwaceRequest::where('transaction_id', $transaction->id)->whereNull('finalized_at')->get() as $req) {
-                if (\Illuminate\Support\Facades\Cache::add('wace:poll:' . $req->id, 1, 4)) {
+                // WacePay limite à 10 requêtes / 60 s ; un suivi de versement coûte jusqu'à 3 appels
+                // (refresh-status, transactions, liste) → au plus une vérification / 30 s (collecte : 8 s).
+                if (\Illuminate\Support\Facades\Cache::add('wace:poll:' . $req->id, 1, $req->operation === 'payout' ? 30 : 8)) {
                     try {
                         $wace->refresh($req);
                     } catch (\Throwable $e) {
