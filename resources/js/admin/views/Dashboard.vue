@@ -56,7 +56,7 @@
             <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor"><circle cx="3" cy="3" r="1.4"/><circle cx="9" cy="3" r="1.4"/><circle cx="3" cy="8" r="1.4"/><circle cx="9" cy="8" r="1.4"/><circle cx="3" cy="13" r="1.4"/><circle cx="9" cy="13" r="1.4"/></svg>
           </span>
           <div class="w-title">
-            <h2>{{ W[w.key].title }}
+            <h2><ProviderLogo v-if="['peex', 'wacepay', 'pawapay'].includes(w.key)" :name="w.key" :size="22" />{{ W[w.key].title }}
               <span v-if="w.key === 'recent'" class="counter">({{ d?.recent.length ?? 0 }})</span>
               <span v-if="w.key === 'peex' && peex?.sandbox" class="status pending">Sandbox</span>
             </h2>
@@ -423,6 +423,7 @@
 import { computed, h, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import api from '../services/api'
 import Flag from '../components/Flag.vue'
+import ProviderLogo from '../components/ProviderLogo.vue'
 import { Bar, Doughnut } from 'vue-chartjs'
 import {
   Chart as ChartJS, Tooltip, Legend, BarElement, BarController, LineElement, LineController,

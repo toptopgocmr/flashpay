@@ -16,7 +16,7 @@
       <div class="gw-cols">
         <div v-for="p in partners" :key="p.key" class="gw-card pc" :class="'p-' + p.key">
           <div class="gw-card-h">
-            <span class="pbadge" :class="'p-' + p.key">{{ p.name }}</span>
+            <span class="pbadge" :class="'p-' + p.key"><ProviderLogo :name="p.name" :size="20" />{{ p.name }}</span>
             <div class="side">
               <span class="gw-pill" :class="p.ready ? 'ok' : 'warn'">{{ p.ready ? 'Connecté' : 'Non configuré' }}</span>
               <span class="gw-pill" :class="/sandbox/i.test(p.mode) ? 'info' : 'muted'">{{ p.mode }}</span>
@@ -103,7 +103,7 @@
             <tbody>
               <tr v-for="c in list" :key="c.country" :class="{ off: !c.collect && !c.payout }">
                 <td><Flag :iso="c.country" :size="15" /> <strong>{{ c.name }}</strong> <span class="stat-label">{{ c.country }}</span>
-                  <span v-if="c.source === 'wacepay'" class="wace-tag" title="Pays ajouté par la synchronisation WacePay">via WacePay</span>
+                  <span v-if="c.source === 'wacepay'" class="wace-tag" title="Pays ajouté par la synchronisation WacePay"><ProviderLogo name="WacePay" :size="12" /> via WacePay</span>
                   <span v-if="c.overridden" class="changed" :title="'Défaut : collecte ' + (c.default_collect ? 'ouverte' : 'fermée') + ', versement ' + (c.default_payout ? 'ouvert' : 'fermé')">modifié</span></td>
                 <td class="mono" style="white-space:nowrap;">{{ c.dial }} · {{ c.local_length }} ch.</td>
                 <td><span v-for="o in c.operators" :key="o.corridor" class="op" :title="(o.prefixes.length ? 'Préfixes : ' + o.prefixes.join(', ') : 'Préfixes non renseignés') + (o.wacepay ? ' · WacePay : ' + [o.wacepay.payin && 'collecte', o.wacepay.payout && 'versement'].filter(Boolean).join(' + ') : '')">{{ o.label }}</span><span v-for="l in (c.operators_off || [])" :key="'off-' + l" class="op op-off" title="Non proposé par WacePay dans ce pays : numéros refusés">{{ l }}</span></td>
@@ -142,7 +142,7 @@
                     WacePay ici : {{ [c.wacepay.payin && 'collecte', c.wacepay.payout && 'versement'].filter(Boolean).join(' + ') || '—' }} · {{ c.wacepay.payers.length }} opérateur(s)
                   </div>
                   <div v-if="c.payout_partner === 'peex'" class="pl" :class="{ dim: !c.payout }">
-                    <span class="lbl">API PEEX</span>
+                    <span class="lbl"><ProviderLogo name="PEEX" :size="14" /> API PEEX</span>
                     <select class="api" :value="c.payout_api" @change="update(c, { payout_api: $event.target.value })">
                       <option value="disbursement">disbursement</option><option value="remittance">remittance</option>
                     </select>
@@ -171,7 +171,7 @@
       <div class="gw-cols mb">
         <div v-for="p in remit.partners" :key="p.key" class="gw-card pc" :class="'p-' + p.key">
           <div class="gw-card-h">
-            <span class="pbadge" :class="'p-' + p.key">{{ p.name }}</span>
+            <span class="pbadge" :class="'p-' + p.key"><ProviderLogo :name="p.name" :size="20" />{{ p.name }}</span>
             <div class="side">
               <span class="gw-pill" :class="p.ready ? 'ok' : 'warn'">{{ p.ready ? 'Connecté' : 'Non configuré' }}</span>
               <span class="gw-pill" :class="/sandbox/i.test(p.mode) ? 'info' : 'muted'">{{ p.mode }}</span>
@@ -313,6 +313,7 @@ import IconAction from '../components/IconAction.vue'
 import GwHead from '../components/GwHead.vue'
 import GwField from '../components/GwField.vue'
 import Flag from '../components/Flag.vue'
+import ProviderLogo from '../components/ProviderLogo.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { useRoute } from 'vue-router'
@@ -566,7 +567,7 @@ onMounted(load)
 .pc-foot code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; min-width: 0; flex: 1; }
 .env-codes { margin-bottom: 4px; }
 .diag-h .close { float: right; padding: 0 2px; color: var(--text-2); }
-.pbadge { font-weight: 800; font-size: 13px; border-radius: 99px; padding: 3px 10px; color: #fff; background: #1e3a8a; }
+.pbadge { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; border-radius: 99px; padding: 3px 10px; color: #fff; background: #1e3a8a; }
 .pbadge.p-digitwace { background: #ea7a17; }
 .pbadge.p-wacepay_remit { background: #ea7a17; }
 .pbadge.p-terrapay { background: #7c3aed; }

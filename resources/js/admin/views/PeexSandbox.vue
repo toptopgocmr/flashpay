@@ -2,7 +2,7 @@
   <div class="gw-page">
     <div class="gw-top">
       <div class="gw-top-left">
-        <h1>Passerelle PEEX</h1>
+        <h1 class="gw-h1-logo"><ProviderLogo name="PEEX" :size="34" /> Passerelle PEEX</h1>
         <div class="gw-pills" v-if="overview">
           <span class="gw-pill" :class="overview.sandbox ? 'info' : 'accent'">{{ overview.sandbox ? 'Sandbox' : 'Production' }}</span>
         </div>
@@ -215,6 +215,7 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import api from '../services/api'
+import ProviderLogo from '../components/ProviderLogo.vue'
 import PeexRefund from '../components/PeexRefund.vue'
 import GwHead from '../components/GwHead.vue'
 import GwField from '../components/GwField.vue'
@@ -399,4 +400,5 @@ onBeforeUnmount(stopTimer)
 .tx-cell { min-width: 110px; max-width: 150px; }
 .tx-cell .mono { word-break: break-all; }
 .tx-cell .badge { margin-top: 3px; display: inline-block; }
+.gw-h1-logo { display: flex; align-items: center; gap: 10px; }
 </style>

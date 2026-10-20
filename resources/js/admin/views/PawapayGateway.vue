@@ -2,7 +2,7 @@
   <div class="gw-page accent-pawa">
     <div class="gw-top">
       <div class="gw-top-left">
-        <h1>Passerelle PawaPay</h1>
+        <h1 class="gw-h1-logo"><ProviderLogo name="PawaPay" :size="34" /> Passerelle PawaPay</h1>
         <div class="gw-pills" v-if="o">
           <span class="gw-pill" :class="o.configured && o.rail_enabled ? 'ok' : 'warn'">{{ o.configured && o.rail_enabled ? 'Configurée' : 'Non configurée' }}</span>
           <span class="gw-pill" :class="o.sandbox ? 'info' : 'accent'">{{ o.sandbox ? 'Sandbox' : 'Production' }}</span>
@@ -148,6 +148,7 @@
 import { computed, onMounted, ref } from 'vue'
 import api from '../services/api'
 import GwHead from '../components/GwHead.vue'
+import ProviderLogo from '../components/ProviderLogo.vue'
 import GwField from '../components/GwField.vue'
 import Flag from '../components/Flag.vue'
 import IconAction from '../components/IconAction.vue'
@@ -252,4 +253,5 @@ td.acts { white-space: nowrap; text-align: right; }
 .fl { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .fp-toast { position: fixed; top: 16px; right: 16px; z-index: 1000; max-width: 460px; padding: 12px 16px; border-radius: 10px; color: #fff; font-size: 13.5px; box-shadow: 0 8px 24px rgba(0,0,0,.18); cursor: pointer; background: #15803d; }
 .fp-toast.err { background: #b91c1c; }
+.gw-h1-logo { display: flex; align-items: center; gap: 10px; }
 </style>

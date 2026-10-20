@@ -51,7 +51,7 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg>
         <span v-if="badges.notifications" class="bell-count">{{ badges.notifications }}</span>
       </router-link>
-      <span v-for="e in envs" :key="e.key" class="env-pill" :class="e.sandbox ? 'sandbox' : 'live'" :title="'Environnement ' + e.name">{{ e.name }} · {{ e.sandbox ? 'SANDBOX' : 'PROD' }}</span>
+      <span v-for="e in envs" :key="e.key" class="env-pill" :class="e.sandbox ? 'sandbox' : 'live'" :title="'Environnement ' + e.name"><ProviderLogo :name="e.name" :size="18" class="env-logo" />{{ e.name }} · {{ e.sandbox ? 'SANDBOX' : 'PROD' }}</span>
 
       <div class="dropdown">
         <button class="nav-btn" :class="{ open: userOpen }" @click="toggle('user')">
@@ -99,7 +99,8 @@
           </button>
           <div v-show="isOpen(g)" class="links">
             <router-link v-for="l in g.links" :key="l.to" :to="l.to" :class="{ active: isActive(l.to) }" @click="onNav">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="ICONS[l.icon]"></svg>
+              <ProviderLogo v-if="l.logo" :name="l.logo" :size="18" />
+              <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="ICONS[l.icon]"></svg>
               <span>{{ l.label }}</span>
               <span v-if="l.badge && badges[l.badge]" class="count">{{ badges[l.badge] }}</span>
             </router-link>
@@ -132,7 +133,8 @@
     <div v-if="collapsed && flyout" class="rail-fly" :style="{ top: flyout.top + 'px' }" @click.stop @mouseenter="cancelLeave" @mouseleave="leaveRail">
       <h4>{{ flyout.name }}</h4>
       <router-link v-for="l in flyout.links" :key="l.to" :to="l.to" :class="{ active: isActive(l.to) }" @click="flyout = null">
-        <svg viewBox="0 0 24 24" v-html="ICONS[l.icon]"></svg>
+        <ProviderLogo v-if="l.logo" :name="l.logo" :size="18" />
+        <svg v-else viewBox="0 0 24 24" v-html="ICONS[l.icon]"></svg>
         <span>{{ l.label }}</span>
         <span v-if="l.badge && badges[l.badge]" class="count">{{ badges[l.badge] }}</span>
       </router-link>
@@ -162,6 +164,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import api from './services/api'
 import Flag from './components/Flag.vue'
+import ProviderLogo from './components/ProviderLogo.vue'
 import SupportCallBar from './components/SupportCallBar.vue'
 import UiHost from './components/UiHost.vue'
 import { playNotificationSound, unlockAudio } from './utils/sound'
@@ -227,9 +230,9 @@ const groups = [
     { to: '/reconciliation', label: 'Réconciliation', desc: 'Ledger, soldes, orphelines PEEX', icon: 'scale' },
   ] },
   { name: 'Intégrations', icon: 'gateway', links: [
-    { to: '/peex', label: 'Passerelle PEEX', desc: 'Collecte, décaissement, tests sandbox', icon: 'gateway' },
-    { to: '/wacepay', label: 'Passerelle WacePay', desc: 'API Digitwace : clés, IP, services, tests', icon: 'gateway' },
-    { to: '/pawapay', label: 'Passerelle PawaPay', desc: 'Collecte, versement, couverture, tests', icon: 'gateway' },
+    { to: '/peex', label: 'Passerelle PEEX', desc: 'Collecte, décaissement, tests sandbox', icon: 'gateway', logo: 'PEEX' },
+    { to: '/wacepay', label: 'Passerelle WacePay', desc: 'API Digitwace : clés, IP, services, tests', icon: 'gateway', logo: 'WacePay' },
+    { to: '/pawapay', label: 'Passerelle PawaPay', desc: 'Collecte, versement, couverture, tests', icon: 'gateway', logo: 'PawaPay' },
     { to: '/ecommerce', label: 'E-commerce & API', desc: 'Clés API, payment intents, webhooks', icon: 'code', badge: 'webhooks' },
     { to: '/mini-programs', label: 'Mini-programmes', desc: 'Services partenaires dans l\'app', icon: 'grid' },
   ] },
@@ -513,4 +516,6 @@ onBeforeUnmount(() => {
 .fp-toast.critical { border-left-color: var(--err); }
 .fp-toast.success { border-left-color: var(--ok); }
 @keyframes fpToast { from { transform: translateY(-10px); opacity: 0; } to { transform: none; opacity: 1; } }
+.env-pill { display: inline-flex; align-items: center; gap: 6px; }
+.env-pill .env-logo { box-shadow: none; border-radius: 5px; }
 </style>
