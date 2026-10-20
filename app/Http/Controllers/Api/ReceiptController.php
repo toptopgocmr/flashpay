@@ -69,6 +69,21 @@ class ReceiptController extends Controller
         return response()->view('receipt', ['tx' => $tx, 'r' => self::data($tx)]);
     }
 
+    /**
+     * Vérification publique d'un reçu (QR code de la vignette) : GET /v/{référence}?c={code}.
+     * Affiche les données ENREGISTRÉES de la transaction pour comparaison avec le reçu papier.
+     */
+    public function verify(Request $request, string $reference)
+    {
+        $tx = Transaction::where('reference', $reference)->first();
+        $code = (string) $request->query('c', '');
+        $valid = $tx && \App\Support\ReceiptSeal::valid($tx, $code);
+        $r = $valid ? self::data($tx) : null;
+
+        return response()->view('receipt-verify', ['valid' => $valid, 'reference' => $reference, 'code' => $code, 'r' => $r,
+            'checked_at' => now()->timezone('Africa/Brazzaville')->format('d/m/Y à H:i')], $valid ? 200 : 404);
+    }
+
     /** Données du reçu (aussi utilisées par les tests). */
     public static function data(Transaction $tx): array
     {
@@ -102,6 +117,12 @@ class ReceiptController extends Controller
             'note' => $m['note'] ?? null,
             'operator_ref' => $operatorRef,
             'failure' => $tx->status === 'failed' ? $tx->failure_reason : null,
+            // Vignette d'authenticité : code de contrôle, QR de vérification, motif guilloché unique
+            'seal_code' => $seal = \App\Support\ReceiptSeal::code($tx),
+            'verify_url' => $verify = \App\Support\ReceiptSeal::verifyUrl($tx),
+            'qr_svg' => \App\Support\ReceiptSeal::qrSvg($verify),
+            'guilloche' => \App\Support\ReceiptSeal::guilloche($seal),
+            'issued' => now()->timezone('Africa/Brazzaville')->format('d/m/Y à H:i'),
             // Dépôt / retrait en espèces : agent qui a servi le client
             'agent' => match ($tx->type) {
                 'cash_in' => self::agentLabel($src, $m['agent_name'] ?? null),

@@ -33,4 +33,6 @@ Route::get('/docs/api-ecommerce', [\App\Http\Controllers\PublicPagesController::
 Route::get('/cagnotte/{split}', [\App\Http\Controllers\Api\ClientFeaturesController::class, 'splitReceiptPage'])->name('split.receipt')->middleware('signed')->whereNumber('split');
 Route::get('/r-batch', [\App\Http\Controllers\Api\ReceiptController::class, 'batch'])->name('receipt.batch')->middleware('signed');
 Route::get('/r/{transaction}', [\App\Http\Controllers\Api\ReceiptController::class, 'show'])->name('receipt.show')->middleware('signed');
+// Vérification publique d'un reçu (QR code de la vignette d'authenticité)
+Route::get('/v/{reference}', [\App\Http\Controllers\Api\ReceiptController::class, 'verify'])->name('receipt.verify')->middleware('throttle:30,1');
 Route::get('/chat-media/{message}', [\App\Http\Controllers\Api\ChatController::class, 'signedFile'])->name('chat.media')->middleware('signed')->whereNumber('message');

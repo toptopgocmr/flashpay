@@ -28,6 +28,24 @@
       @if ($r['operator_ref'])<tr><td>Réf. opérateur</td><td class="mono">{{ $r['operator_ref'] }}</td></tr>@endif
       @if ($r['note'])<tr><td>Motif</td><td>{{ $r['note'] }}</td></tr>@endif
     </table>
+    @if (! empty($r['seal_code']))
+    <div class="seal">
+      {!! $r['guilloche'] !!}
+      <div class="seal-micro" aria-hidden="true">{{ str_repeat('FLASHPAY · ORIGINAL · ' . $r['reference'] . ' · ', 6) }}</div>
+      <div class="seal-body">
+        <div class="seal-qr">{!! $r['qr_svg'] !!}</div>
+        <div class="seal-txt">
+          <div class="seal-title">ORIGINAL</div>
+          <div class="seal-sub">Reçu authentique FlashPay</div>
+          <div class="seal-k">N° de contrôle</div>
+          <div class="seal-code">{{ $r['seal_code'] }}</div>
+          <div class="seal-k">Émis le {{ $r['issued'] }}</div>
+        </div>
+      </div>
+      <div class="seal-micro b" aria-hidden="true">{{ str_repeat('FLASHPAY · ORIGINAL · ' . $r['seal_code'] . ' · ', 6) }}</div>
+      <div class="seal-hint">Scannez le QR code pour vérifier ce reçu en ligne : les informations affichées doivent être identiques.</div>
+    </div>
+    @endif
     <div class="foot">
       FlashPay · Brazzaville, République du Congo<br>
       Conservez ce reçu. En cas de réclamation, indiquez la référence {{ $r['reference'] }}.
