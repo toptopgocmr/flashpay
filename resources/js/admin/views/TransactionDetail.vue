@@ -43,7 +43,11 @@
           <button v-if="t.status === 'processing' || t.status === 'failed'" class="td-btn" :disabled="checking" @click="checkStatus">
             <svg viewBox="0 0 24 24" :class="{ spin: checking }"><path d="M20 12a8 8 0 0 1-14 5.3M4 12A8 8 0 0 1 18 6.7M18 3v4h-4M6 21v-4h4"/></svg> Vérifier le statut
           </button>
-          <button class="td-btn" @click="showRefund = true">Rembourser via PEEX</button>
+          <button v-if="t.refund_source?.possible" class="td-btn" :disabled="refunding" :title="'Rendre ' + money(t.refund_source.amount, t.refund_source.currency) + ' sur ' + t.refund_source.to" @click="refundSource">
+            <ProviderLogo :name="t.refund_source.partner" :size="16" /> Rembourser via {{ t.refund_source.partner }}
+          </button>
+          <span v-else-if="t.refund_source?.reason && t.status === 'failed'" class="td-note" :title="t.refund_source.reason">Remboursement : {{ t.refund_source.reason }}</span>
+          <button v-if="t.source_rail === 'peex'" class="td-btn" title="Remboursement manuel PEEX vers un numéro ou un compte bancaire au choix" @click="showRefund = true">Remboursement manuel PEEX</button>
           <span class="grow"></span>
           <button class="td-btn ghost" title="Recharger" :disabled="loading" @click="load">
             <svg viewBox="0 0 24 24" :class="{ spin: loading }"><path d="M20 12a8 8 0 0 1-14 5.3M4 12A8 8 0 0 1 18 6.7M18 3v4h-4M6 21v-4h4"/></svg>
@@ -69,6 +73,7 @@
             <small>Expéditeur</small>
             <b>{{ sender.name || '—' }}</b>
             <span class="sub">{{ phone(sender.account) || '—' }}</span>
+            <span v-if="countryIn" class="ctry"><Flag :iso="countryIn" :size="13" /> {{ countryLabel(countryIn) }} · pays de collecte</span>
             <span class="rail"><ProviderLogo v-if="t.gateway?.in?.operator" :name="t.gateway.in.operator" :size="16" /><ProviderLogo v-if="t.gateway?.in?.partner" :name="t.gateway.in.partner" :size="16" /> {{ railLabel(t.gateway?.in, t.source_rail) }}</span>
           </div>
         </component>
@@ -81,6 +86,7 @@
             <small>Bénéficiaire</small>
             <b>{{ beneficiary.name || '—' }}</b>
             <span class="sub">{{ phone(beneficiary.account) || '—' }}</span>
+            <span v-if="countryOut" class="ctry"><Flag :iso="countryOut" :size="13" /> {{ countryLabel(countryOut) }} · pays de réception</span>
             <span class="rail"><ProviderLogo v-if="t.gateway?.out?.operator" :name="t.gateway.out.operator" :size="16" /><ProviderLogo v-if="t.gateway?.out?.partner" :name="t.gateway.out.partner" :size="16" /> {{ railLabel(t.gateway?.out, t.destination_rail) }}</span>
           </div>
         </component>
@@ -217,6 +223,8 @@ import { useRoute } from 'vue-router'
 import api from '../services/api'
 import PeexRefund from '../components/PeexRefund.vue'
 import ProviderLogo from '../components/ProviderLogo.vue'
+import Flag from '../components/Flag.vue'
+import { promptBox, toast } from '../utils/ui'
 import { openReceipt } from '../utils/receipt'
 
 const route = useRoute()
@@ -241,6 +249,34 @@ const dtLong = (d) => (d ? new Date(d).toLocaleString('fr-FR', { day: '2-digit',
 const phone = (p) => (p && /^\+?\d{8,}$/.test(String(p).replace(/\s/g, '')) ? '+' + String(p).replace(/\D/g, '') : p || '')
 const initials = (name) => (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
 const pillOf = (s) => (s === 'paid' ? 'successful' : s === 'pending' ? 'processing' : s || 'none')
+
+const countryIn = computed(() => (t.value?.gateway?.in?.country || t.value?.meta?.source_country || '').toUpperCase() || null)
+const countryOut = computed(() => (t.value?.gateway?.out?.country || t.value?.meta?.destination_country || '').toUpperCase() || null)
+let regionNames = null
+try { regionNames = new Intl.DisplayNames(['fr'], { type: 'region' }) } catch { regionNames = null }
+const countryLabel = (iso) => { try { return regionNames?.of(iso) || iso } catch { return iso } }
+
+// Remboursement par le partenaire qui a collecté (PEEX, WacePay, PawaPay) sur le compte débité
+const refunding = ref(false)
+async function refundSource() {
+  const r = t.value.refund_source
+  const reason = await promptBox('Motif du remboursement', {
+    title: `Rembourser via ${r.partner}`,
+    message: `${money(r.amount, r.currency)} (montant + frais) seront rendus sur ${r.to} par ${r.partner}, le partenaire qui a débité le client. Uniquement possible car le client a été débité et le bénéficiaire n'a pas été crédité.`,
+    confirmLabel: 'Rembourser', required: true, multiline: false,
+  })
+  if (!reason) return
+  refunding.value = true
+  try {
+    const { data } = await api.post(`/admin/transactions/${t.value.id}/refund-source`, { reason })
+    toast(data.message, data.status === 'failed' ? 'err' : 'ok', 8000)
+    await load()
+  } catch (e) {
+    toast(e?.response?.data?.message || 'Remboursement impossible.', 'err', 8000)
+  } finally {
+    refunding.value = false
+  }
+}
 
 function railLabel(side, rail) {
   if (side?.operator) return [side.operator, side.partner ? 'via ' + side.partner : null, side.country].filter(Boolean).join(' · ')
@@ -409,6 +445,8 @@ a.td-party:hover { border-color: #c7d2fe; }
 .td-party b { display: block; font-size: 15.5px; margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-party .sub { display: block; font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--t2); font-size: 12px; }
 .td-party .rail .pv-logo { margin-right: 3px; }
+.td-party .ctry { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12px; color: #475569; }
+.td-note { font-size: 12px; color: #64748b; align-self: center; max-width: 380px; }
 .td-party .rail { display: inline-flex; align-items: center; gap: 2px; margin-top: 6px; padding: 2px 8px; border-radius: 5px; background: #eff6ff; color: #1e40af; font-size: 11px; font-weight: 600; }
 .av { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; background: #fee2e2; color: #b91c1c; }
 .av.in { background: #dbeafe; color: #1e40af; } .av.sm { width: 28px; height: 28px; font-size: 11px; background: #eef2ff; color: #3730a3; }

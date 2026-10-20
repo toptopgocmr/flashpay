@@ -44,9 +44,19 @@ class PawapayMomoConnector implements PaymentRailConnector
         return $this->start('payouts', $reference, $tx, $msisdnOrAccount, $tx?->meta['destination_country'] ?? null, $amountMinor, $currency);
     }
 
-    protected function start(string $kind, string $ref, ?Transaction $tx, string $msisdn, ?string $country, int $amount, string $currency): array
+    /**
+     * Remboursement du payeur par pawaPay (partenaire qui a collecté) : versement du montant
+     * + frais sur le numéro débité (référence …-R, method = refund).
+     */
+    public function refund(Transaction $tx): array
     {
-        $method = $kind === 'deposits' ? 'deposit' : 'payout';
+        return $this->start('payouts', $tx->reference . '-R', $tx, (string) $tx->source_account, $tx->meta['source_country'] ?? null,
+            (int) $tx->amount + (int) $tx->fee, (string) $tx->currency, 'refund');
+    }
+
+    protected function start(string $kind, string $ref, ?Transaction $tx, string $msisdn, ?string $country, int $amount, string $currency, ?string $method = null): array
+    {
+        $method ??= $kind === 'deposits' ? 'deposit' : 'payout';
         $id = PawapayConnector::uuidFor($ref);
         $req = RemitRequest::firstOrCreate(['reference' => $ref], [
             'transaction_id' => $tx?->id, 'partner' => $this->railName(), 'status' => 'new', 'method' => $method,
@@ -62,11 +72,11 @@ class PawapayMomoConnector implements PaymentRailConnector
             $r = $this->client->initiate($kind, $id, [
                 'phone' => $p['phone'], 'provider' => $p['provider'], 'amount' => $amount, 'currency' => $currency,
                 'reference' => $tx?->reference ?? $ref,
-                'message' => $method === 'deposit' ? 'FlashPay ' . substr(preg_replace('/\W/', '', $tx?->reference ?? $ref), -10) : 'FlashPay',
+                'message' => $method === 'deposit' ? 'FlashPay ' . substr(preg_replace('/\W/', '', $tx?->reference ?? $ref), -10) : ($method === 'refund' ? 'FlashPay rembours.' : 'FlashPay'),
             ]);
             $req->update(['partner_ref' => $id, 'status' => 'pending', 'raw_status' => $r['raw_status'], 'last_response' => $r['raw'], 'last_checked_at' => now()]);
             if ($tx) {
-                $tx->forceFill(['meta' => array_merge($tx->meta ?? [], ['pawapay_' . $method => [
+                $tx->forceFill(['meta' => array_merge($tx->fresh()->meta ?? [], ['pawapay_' . $method => [
                     'at' => now()->toIso8601String(), 'endpoint' => 'POST v2/' . $kind, 'id' => $id, 'provider' => $p['provider'],
                     'sent' => $r['sent'], 'response' => $r['raw'],
                 ]])])->save();

@@ -58,6 +58,7 @@ class TransactionPresenter
             'gift' => 'Cadeau / cagnotte',
             'gift_claim' => 'Cadeau reçu',
             'gift_refund' => 'Cadeau non réclamé',
+            'refund' => ! empty($tx->meta['refund_of']) ? 'Remboursement de ' . $tx->meta['refund_of'] . (! empty($tx->meta['refunded_via']) ? ' via ' . $tx->meta['refunded_via'] : '') : null,
             'split_payment' => 'Contribution à une cagnotte',
             'bank_transfer' => 'Virement bancaire',
             'cash_pickup' => 'Retrait avec code',
@@ -82,8 +83,12 @@ class TransactionPresenter
             'counterparty_role' => $credit ? 'Expéditeur' : 'Bénéficiaire',
             'counterparty_name' => $name,
             'counterparty_phone' => $phone,
-            'signed_amount' => in_array($tx->status, ['failed', 'reversed'], true) ? 0 : ($credit ? 1 : -1) * ((int) $tx->amount + ($credit ? 0 : (int) $tx->fee)),
-            'fee_charged' => in_array($tx->status, ['failed', 'reversed'], true) ? 0 : (int) $tx->fee,
+            // Remboursée par une opération « Remboursement » distincte : le débit reste visible ici,
+            // le retour de l'argent apparaît sur la ligne du remboursement.
+            'signed_amount' => ($tx->status === 'failed' || ($tx->status === 'reversed' && empty($tx->meta['refund_transaction']))) ? 0 : ($credit ? 1 : -1) * ((int) $tx->amount + ($credit ? 0 : (int) $tx->fee)),
+            'fee_charged' => ($tx->status === 'failed' || ($tx->status === 'reversed' && empty($tx->meta['refund_transaction']))) ? 0 : (int) $tx->fee,
+            'refund_transaction' => $tx->meta['refund_transaction'] ?? null,
+            'refund_of' => $tx->meta['refund_of'] ?? null,
             'partner' => self::partner($tx),                    // partenaire qui a géré les flux (PEEX, WacePay…)
         ] + self::parties($tx) + ['details' => self::details($tx, $credit, $label)];
     }
@@ -347,6 +352,10 @@ class TransactionPresenter
         }
         if ($mineOut) {
             return false;
+        }
+        // Remboursement automatique sur le numéro mobile money débité : crédit pour le client concerné
+        if (in_array($tx->type, self::REFUND_TYPES, true) && $viewerId && (int) $tx->initiated_by === (int) $viewerId) {
+            return true;
         }
         // Ni source ni destination sur un wallet de l'utilisateur (ex. envoi mobile → mobile qu'il a initié)
         return false;

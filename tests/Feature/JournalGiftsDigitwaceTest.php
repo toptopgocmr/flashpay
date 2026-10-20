@@ -384,8 +384,11 @@ class JournalGiftsDigitwaceTest extends TestCase
         $this->assertStringContainsString('non prélevés', $rows['Frais']);
         $this->assertSame('0 XAF', $rows['Total débité']);
 
-        // Aucun frais comptabilisé en produit pour ces opérations
-        $fees = \App\Models\LedgerEntry::whereIn('transaction_id', [$tx->id, $tx2->id, $tx3->id])->get();
+        // Aucun frais comptabilisé en produit pour ces opérations (remboursements compris :
+        // ils sont portés par une opération « Remboursement » distincte, …-RMB)
+        $ids = \App\Models\Transaction::whereIn('reference', [$tx->reference, $tx2->reference, $tx3->reference, $tx->reference . '-RMB', $tx2->reference . '-RMB'])->pluck('id');
+        $this->assertSame(5, $ids->count());
+        $fees = \App\Models\LedgerEntry::whereIn('transaction_id', $ids)->get();
         $net = $fees->where('account', 'flashpay:fees')->sum(fn ($e) => $e->type === 'credit' ? $e->amount : -$e->amount);
         $this->assertSame(0, (int) $net);
     }

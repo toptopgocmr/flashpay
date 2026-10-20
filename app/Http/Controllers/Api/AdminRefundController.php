@@ -44,6 +44,29 @@ class AdminRefundController extends Controller
         ]);
     }
 
+    /**
+     * Remboursement de l'expéditeur par le partenaire qui a collecté (PEEX, WacePay, PawaPay),
+     * sur le compte débité ; wallet FlashPay pour une source wallet / carte, ou en repli.
+     * Uniquement si le payeur a été débité et que le bénéficiaire n'a pas été crédité.
+     */
+    public function refundSource(Request $request, Transaction $transaction, \App\Services\SwitchService $switch)
+    {
+        $v = $request->validate(['reason' => 'required|string|max:190']);
+        $before = $switch->refundEligibility($transaction);
+        $tx = $switch->refundDebited($transaction, 'Remboursement lancé par la console : ' . $v['reason']);
+        \App\Support\Audit::log('transaction.refund_source', $tx, ['partner' => $before['partner'], 'to' => $before['to'], 'amount' => $before['amount'],
+            'currency' => $before['currency'], 'reason' => $v['reason'], 'status' => $tx->status, 'stage' => $tx->stage], $request->user()->id);
+
+        return response()->json([
+            'status' => $tx->status, 'stage' => $tx->stage, 'failure_reason' => $tx->failure_reason,
+            'message' => match (true) {
+                $tx->status === 'reversed' => 'Remboursement effectué : ' . ($tx->failure_reason ?? ''),
+                $tx->stage === 'awaiting_refund' => 'Remboursement lancé chez ' . $before['partner'] . ' vers ' . $before['to'] . ' : en attente de confirmation.',
+                default => 'Remboursement non abouti : ' . ($tx->failure_reason ?? ''),
+            },
+        ]);
+    }
+
     public function store(Request $request, Transaction $transaction)
     {
         if ($request->filled('api')) {

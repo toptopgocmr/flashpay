@@ -119,7 +119,7 @@
                 <em v-for="p in gateways(t)" :key="p" :class="'p-' + p.toLowerCase()"><ProviderLogo :name="p" :size="14" /> {{ p }}</em>
                 <span v-if="!gateways(t).length" class="muted">Interne</span>
               </td>
-              <td class="c-ops"><ProviderLogo v-if="t.gateway?.in?.operator" :name="t.gateway.in.operator" :size="16" /> {{ opName(t.gateway?.in) }} <span class="arr">→</span> <ProviderLogo v-if="t.gateway?.out?.operator" :name="t.gateway.out.operator" :size="16" /> {{ opName(t.gateway?.out) }}</td>
+              <td class="c-ops"><ProviderLogo v-if="t.gateway?.in?.operator" :name="t.gateway.in.operator" :size="16" /> {{ opName(t.gateway?.in, false) }} <Flag v-if="countryIn(t)" :iso="countryIn(t)" :size="11" /> <span class="arr">→</span> <ProviderLogo v-if="t.gateway?.out?.operator" :name="t.gateway.out.operator" :size="16" /> {{ opName(t.gateway?.out, false) }} <Flag v-if="countryOut(t)" :iso="countryOut(t)" :size="11" /></td>
               <td class="c-dt">{{ dt(t.created_at) }}</td>
               <td class="c-eye" @click.stop>
                 <button title="Voir les détails" @click="detail = t"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -159,6 +159,7 @@
             <div class="kv"><span>Nom</span><b>{{ detail.sender?.name || '—' }}</b></div>
             <div class="kv"><span>Compte</span><b>{{ phone(detail.sender?.account) || '—' }}</b></div>
             <div class="kv"><span>Service</span><b class="pv-row"><template v-if="detail.gateway?.in.operator"><ProviderLogo :name="detail.gateway.in.operator" />{{ detail.gateway.in.operator }}</template><template v-else>—</template><template v-if="detail.gateway?.in.partner"><span class="sep">·</span><ProviderLogo :name="detail.gateway.in.partner" />{{ detail.gateway.in.partner }}</template></b></div>
+            <div class="kv" v-if="countryIn(detail)"><span>Pays de collecte</span><b class="pv-row"><Flag :iso="countryIn(detail)" :size="14" />{{ countryLabel(countryIn(detail)) }}</b></div>
           </div>
 
           <div class="wp-sec">
@@ -166,7 +167,7 @@
             <div class="kv"><span>Nom</span><b>{{ detail.beneficiary?.name || '—' }}</b></div>
             <div class="kv"><span>Compte</span><b>{{ phone(detail.beneficiary?.account) || '—' }}</b></div>
             <div class="kv"><span>Service</span><b class="pv-row"><template v-if="detail.gateway?.out.operator"><ProviderLogo :name="detail.gateway.out.operator" />{{ detail.gateway.out.operator }}</template><template v-else>—</template><template v-if="detail.gateway?.out.partner"><span class="sep">·</span><ProviderLogo :name="detail.gateway.out.partner" />{{ detail.gateway.out.partner }}</template></b></div>
-            <div class="kv" v-if="detail.gateway?.out.country"><span>Pays</span><b>{{ detail.gateway.out.country }}</b></div>
+            <div class="kv" v-if="countryOut(detail)"><span>Pays de réception</span><b class="pv-row"><Flag :iso="countryOut(detail)" :size="14" />{{ countryLabel(countryOut(detail)) }}</b></div>
           </div>
 
           <div class="wp-sec">
@@ -217,7 +218,9 @@
             </button>
             <button class="wp-btn" title="Format imprimante thermique 58/80 mm" @click="openReceipt(detail.id, { ticket: true })">Ticket</button>
             <button v-if="detail.status === 'processing' || detail.status === 'failed'" class="wp-btn" :disabled="check?.loading" @click="checkStatus(detail)">Vérifier le statut</button>
-            <button v-if="detail.refundable > 0" class="wp-btn" @click="refundTx = detail.id; detail = null">Rembourser via PEEX</button>
+            <button v-if="detail.refund_source?.possible" class="wp-btn" :disabled="refunding" :title="'Rendre ' + money(detail.refund_source.amount, detail.refund_source.currency) + ' sur ' + detail.refund_source.to" @click="refundSource(detail)"><ProviderLogo :name="detail.refund_source.partner" :size="16" /> Rembourser via {{ detail.refund_source.partner }}</button>
+            <button v-else-if="detail.refund_source?.reason && (detail.status === 'failed')" class="wp-btn" disabled :title="detail.refund_source.reason">Remboursement : {{ detail.refund_source.reason }}</button>
+            <button v-if="detail.source_rail === 'peex' && detail.refundable > 0" class="wp-btn" title="Remboursement manuel PEEX vers un numéro ou un compte bancaire au choix" @click="refundTx = detail.id; detail = null">Remboursement manuel PEEX</button>
             <router-link class="wp-btn primary" :to="'/transactions/' + detail.id">Fiche complète ›</router-link>
           </div>
         </div>
@@ -256,7 +259,8 @@
 </template>
 
 <script setup>
-import { confirmBox, toast } from '../utils/ui'
+import { confirmBox, promptBox, toast } from '../utils/ui'
+import Flag from '../components/Flag.vue'
 import PeexRefund from '../components/PeexRefund.vue'
 import ExportButton from '../components/ExportButton.vue'
 import Modal from '../components/Modal.vue'
@@ -316,10 +320,39 @@ const svc = (t) => {
 }
 // Passerelles utilisées (collecte et/ou versement) et opérateurs débité → crédité
 const gateways = (t) => [...new Set([t.gateway?.in.partner, t.gateway?.out.partner].filter(Boolean).map((p) => p.replace(/ \(.*\)/, '').replace('Carte (3-D Secure)', '3DS')))]
-const opName = (side) => {
+const opName = (side, withCountry = true) => {
   if (!side) return '—'
   const op = (side.operator || '—').replace(/ Mobile Money| Money/g, '').replace('Wallet FlashPay', 'Wallet').replace('Carte Visa / Mastercard', 'Carte')
-  return side.country ? `${op} (${side.country})` : op
+  return side.country && withCountry ? `${op} (${side.country})` : op
+}
+// Pays de collecte (expéditeur) et de réception (bénéficiaire), avec drapeau
+const countryIn = (t) => (t?.gateway?.in?.country || t?.meta?.source_country || '').toUpperCase() || null
+const countryOut = (t) => (t?.gateway?.out?.country || t?.meta?.destination_country || '').toUpperCase() || null
+let regionNames = null
+try { regionNames = new Intl.DisplayNames(['fr'], { type: 'region' }) } catch { regionNames = null }
+const countryLabel = (iso) => { try { return `${regionNames?.of(iso) || iso} (${iso})` } catch { return iso } }
+
+// Remboursement par le partenaire qui a collecté (PEEX, WacePay, PawaPay) sur le compte débité
+const refunding = ref(false)
+async function refundSource(t) {
+  const r = t.refund_source
+  const reason = await promptBox('Motif du remboursement', {
+    title: `Rembourser via ${r.partner}`,
+    message: `${money(r.amount, r.currency)} (montant + frais) seront rendus sur ${r.to} par ${r.partner}, le partenaire qui a débité le client. Uniquement possible car le client a été débité et le bénéficiaire n'a pas été crédité.`,
+    confirmLabel: 'Rembourser', required: true, multiline: false,
+  })
+  if (!reason) return
+  refunding.value = true
+  try {
+    const { data } = await api.post(`/admin/transactions/${t.id}/refund-source`, { reason })
+    toast(data.message, data.status === 'failed' ? 'err' : 'ok', 8000)
+    detail.value = null
+    await load(meta.value?.current_page || 1)
+  } catch (e) {
+    toast(e?.response?.data?.message || 'Remboursement impossible.', 'err', 8000)
+  } finally {
+    refunding.value = false
+  }
 }
 const isEstimate = (t) => (t.costs?.legs || []).some((l) => l.fee_source === 'estimate' && l.status !== 'failed')
 const legsTxt = (t, f) => (t.costs?.legs || []).map(f).filter(Boolean).join(' | ')

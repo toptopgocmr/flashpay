@@ -17,7 +17,9 @@ use Illuminate\Support\Facades\DB;
  *  1. équilibre du ledger (débits = crédits par transaction et devise) ;
  *  2. cohérence solde wallet ↔ ledger ;
  *  3. opérations bloquées (timeout opérateur) → « en cours de vérification » ;
- *  4. écritures orphelines PEEX (succès opérateur / échec FlashPay et inversement).
+ *  4. écritures orphelines PEEX (succès opérateur / échec FlashPay et inversement) ;
+ *  5. orphelines WacePay et PawaPay (mêmes règles : collecte, versement, remboursement) ;
+ *  6. clients débités ni crédités ni remboursés (opération en échec après débit) : à rembourser.
  * Toute anomalie alerte l'administrateur (§11.4).
  */
 class ReconciliationService
@@ -34,6 +36,8 @@ class ReconciliationService
             'wallet_mismatches' => $this->walletMismatches(),
             'stuck_transactions' => $this->stuck(),
             'peex_orphans' => $this->peexOrphans(),
+            'partner_orphans' => $this->partnerOrphans(),
+            'to_refund' => $this->toRefund(),
         ];
         $count = array_sum(array_map('count', $results));
 
@@ -41,7 +45,7 @@ class ReconciliationService
 
         if ($count > 0) {
             $this->notify->toAdmins('reconciliation_anomaly', "Réconciliation : {$count} anomalie(s) détectée(s)", collect($results)->map(fn ($v, $k) => count($v) . ' ' . str_replace('_', ' ', $k))->filter(fn ($s) => ! str_starts_with($s, '0 '))->implode(', '), [
-                'severity' => $results['peex_orphans'] || $results['unbalanced_transactions'] ? 'critical' : 'warning',
+                'severity' => $results['peex_orphans'] || $results['partner_orphans'] || $results['to_refund'] || $results['unbalanced_transactions'] ? 'critical' : 'warning',
                 'data' => ['report_id' => $report->id],
             ]);
         }
@@ -117,6 +121,74 @@ class ReconciliationService
                 }
             }
         });
+        return $out;
+    }
+
+    /**
+     * WacePay (digitwace_requests) et PawaPay (remit_requests) : statut du partenaire incohérent
+     * avec celui de la transaction FlashPay.
+     */
+    protected function partnerOrphans(): array
+    {
+        $out = [];
+        $check = function (string $partner, string $op, string $status, ?Transaction $tx, int $id, string $ref) use (&$out) {
+            if (! $tx || count($out) >= 200) {
+                return;
+            }
+            $refunded = $tx->status === 'reversed' || (($tx->meta['outcome']['refund']['done'] ?? false) === true);
+            $issue = match ($op) {
+                // débité chez l'opérateur, transaction en échec, client non remboursé
+                'collect' => $status === 'successful' && $tx->status === 'failed' && ! $refunded && $tx->stage !== 'awaiting_refund'
+                    ? 'Collecte payée, opération en échec non remboursée' : null,
+                // bénéficiaire payé alors que le client a été remboursé (double paiement), ou l'inverse
+                'payout' => match (true) {
+                    $status === 'successful' && $tx->status === 'reversed' => 'Bénéficiaire payé ET client remboursé',
+                    $status === 'failed' && $tx->status === 'successful' => 'Versement en échec, opération marquée réussie',
+                    default => null,
+                },
+                // remboursement payé mais transaction non remboursée
+                'refund' => $status === 'successful' && $tx->status !== 'reversed' && $tx->stage !== 'awaiting_refund'
+                    ? 'Remboursement payé, opération non marquée remboursée' : null,
+                default => null,
+            };
+            if ($issue) {
+                $out[] = ['partner' => $partner, 'operation' => $op, 'reference' => $ref, 'partner_status' => $status,
+                    'transaction_id' => $tx->id, 'transaction' => $tx->reference, 'transaction_status' => $tx->status, 'issue' => $issue];
+            }
+        };
+        \App\Models\DigitwaceRequest::with('transaction')->whereNotNull('transaction_id')->where('updated_at', '>=', now()->subDays(7))
+            ->chunk(300, function ($rows) use ($check) {
+                foreach ($rows as $r) {
+                    $check('WacePay', ['payin' => 'collect', 'checkout' => 'collect', 'refund' => 'refund'][$r->operation] ?? 'payout', (string) $r->status, $r->transaction, $r->id, (string) $r->reference);
+                }
+            });
+        \App\Models\RemitRequest::with('transaction')->whereNotNull('transaction_id')->where('updated_at', '>=', now()->subDays(7))
+            ->chunk(300, function ($rows) use ($check) {
+                foreach ($rows as $r) {
+                    $name = $r->partner === 'pawapay_momo' ? 'PawaPay' : \App\Services\Remit\RemitCountries::partnerName($r->partner);
+                    $check($name, ['deposit' => 'collect', 'refund' => 'refund'][$r->method] ?? 'payout', (string) $r->status, $r->transaction, $r->id, (string) $r->reference);
+                }
+            });
+        return $out;
+    }
+
+    /**
+     * Clients débités dont le bénéficiaire n'a pas été crédité et qui n'ont pas été remboursés
+     * (30 derniers jours) : à rembourser depuis la fiche de la transaction.
+     */
+    protected function toRefund(): array
+    {
+        $switch = app(\App\Services\SwitchService::class);
+        $out = [];
+        Transaction::where('status', 'failed')->where('created_at', '>=', now()->subDays(30))
+            ->whereNotIn('type', \App\Support\TransactionPresenter::REFUND_TYPES)->orderByDesc('id')->limit(500)->get()
+            ->each(function (Transaction $t) use ($switch, &$out) {
+                $e = $switch->refundEligibility($t);
+                if ($e['possible'] && count($out) < 200) {
+                    $out[] = ['transaction_id' => $t->id, 'reference' => $t->reference, 'amount' => $e['amount'], 'currency' => $e['currency'],
+                        'refund_via' => $e['partner'], 'refund_to' => $e['to'], 'since' => $t->created_at?->toIso8601String()];
+                }
+            });
         return $out;
     }
 

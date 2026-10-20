@@ -222,6 +222,8 @@ class AdminDashboardController extends Controller
             $t->gateway = \App\Support\TransactionPresenter::gateway($t);
             $t->outcome = \App\Support\TransactionPresenter::outcome($t);
             $t->refundable = \App\Services\Peex\ManualRefundService::refundableOf($t);
+            // Remboursement par le partenaire qui a collecté (seulement après débit, sans crédit du bénéficiaire)
+            $t->refund_source = in_array($t->status, ['failed', 'processing'], true) ? app(\App\Services\SwitchService::class)->refundEligibility($t) : null;
             $t->setRelation('peexRequests', $t->peexRequests->map->only(['id', 'transaction_id', 'track_id', 'status', 'amount']));
             $t->unsetRelation('digitwaceRequests');
             return $this->withParties($t);

@@ -28,6 +28,7 @@ class SupportController extends Controller
         $out['parties'] = \App\Support\TransactionPresenter::parties($transaction);
         $out['details'] = \App\Support\TransactionPresenter::details($transaction);
         $out['outcome'] = \App\Support\TransactionPresenter::outcome($transaction);
+        $out['refund_source'] = app(\App\Services\SwitchService::class)->refundEligibility($transaction);
         if ($request->user()->hasRole('super_admin')) {
             unset($costs['flow']);
             $out['costs'] = $costs;

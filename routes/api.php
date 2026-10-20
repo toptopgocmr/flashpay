@@ -342,6 +342,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/transactions/{transaction}/receipt', [\App\Http\Controllers\Api\ReceiptController::class, 'adminLink'])->whereNumber('transaction');
         Route::get('/transactions/{transaction}/refunds', [\App\Http\Controllers\Api\AdminRefundController::class, 'index']);
         Route::post('/transactions/{transaction}/refunds', [\App\Http\Controllers\Api\AdminRefundController::class, 'store'])->middleware('throttle:20,1');
+        Route::post('/transactions/{transaction}/refund-source', [\App\Http\Controllers\Api\AdminRefundController::class, 'refundSource'])->whereNumber('transaction')->middleware('throttle:20,1');
         Route::post('/transactions/{transaction}/refunds/{peexRequest}/refresh', [\App\Http\Controllers\Api\AdminRefundController::class, 'refresh']);
         Route::get('/users', [AdminController::class, 'users']);
         Route::post('/users', [AdminController::class, 'createInternalUser']);

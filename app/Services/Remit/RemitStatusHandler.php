@@ -47,6 +47,12 @@ class RemitStatusHandler
         $req->update(['status' => $status, 'finalized_at' => now()]);
         if ($tx = $req->transaction) {
             $name = $req->partner === 'pawapay_momo' ? 'PawaPay' : RemitCountries::partnerName($req->partner);
+            if ($req->method === 'refund') {
+                // Remboursement du payeur par pawaPay (partenaire qui a collecté)
+                return tap($req->fresh(), fn () => $status === 'successful'
+                    ? $this->switch->onRefundConfirmed($tx)
+                    : $this->switch->onRefundFailed($tx, $name . ' : ' . $reason));
+            }
             if ($req->method === 'deposit') {
                 // Collecte pawaPay (passerelle nationale) : le paiement du client
                 return tap($req->fresh(), fn () => $status === 'successful'

@@ -331,32 +331,40 @@ class SwitchService
      */
     protected function failAndRefund(Transaction $tx, string $reason): Transaction
     {
+        // On ne rembourse QUE si l'expéditeur a été débité et que le bénéficiaire n'a pas été crédité
+        $outcome = (array) (($tx->fresh()?->meta ?? [])['outcome'] ?? []);
+        if (($outcome['credit']['done'] ?? false) === true || ($outcome['refund']['done'] ?? false) === true) {
+            Log::warning('Remboursement ignoré : bénéficiaire déjà crédité ou client déjà remboursé', ['reference' => $tx->reference]);
+            return $tx->fresh();
+        }
         // Débit effectué, crédit en échec : on le garde sur la transaction (console, app, reçus)
         $tx = $this->noteOutcome($tx, ['credit' => ['done' => false, 'error' => mb_substr($reason, 0, 200),
             'partner' => $this->partnerLabel($tx->destination_rail), 'account' => $tx->destination_account]]);
         $reason = $this->debitCreditText($tx, $reason);
 
+        // Source wallet FlashPay → retour sur le même wallet
         if ($tx->source_rail === 'wallet' && $tx->source_wallet_id) {
-            $wallet = Wallet::find($tx->source_wallet_id);
-            $this->walletService->credit($wallet, $tx->amount + $tx->fee);
-            $this->ledgerService->recordDoubleEntry($tx, 'flashpay:suspense', "wallet:{$wallet->id}", $tx->amount, null, 'Remboursement');
-            if ($tx->fee > 0) {
-                $this->ledgerService->recordDoubleEntry($tx, 'flashpay:fees', "wallet:{$wallet->id}", $tx->fee, null, 'Remboursement des frais');
-            }
-            $tx->update(['status' => 'reversed', 'stage' => null, 'failure_reason' => mb_substr($reason . ' · Remboursé sur votre wallet', 0, 250)]);
-            $this->noteOutcome($tx, ['refund' => ['done' => true, 'to' => 'wallet']]);
-            return $this->notified($tx->fresh());
+            return DB::transaction(function () use ($tx, $reason) {
+                $wallet = Wallet::find($tx->source_wallet_id);
+                $this->walletService->credit($wallet, $tx->amount + $tx->fee);
+                $refund = $this->recordRefund($tx, 'wallet', null, $wallet, 'FlashPay');
+                $tx->update(['status' => 'reversed', 'stage' => null, 'failure_reason' => mb_substr($reason . ' · Remboursé sur votre wallet', 0, 250)]);
+                $this->noteOutcome($tx, ['refund' => ['done' => true, 'to' => 'wallet', 'reference' => $refund->reference, 'at' => now()->toIso8601String()]]);
+                return $this->notified($tx->fresh());
+            });
         }
 
-        // Source mobile money (PEEX) : remboursement automatique sur le numéro débité.
-        // N'est appelé qu'après un échec de versement CERTAIN (vérifié auprès de PEEX).
-        if ($tx->source_rail === 'peex' && $tx->source_account) {
+        // Source mobile money : remboursement sur le numéro débité, PAR LE PARTENAIRE QUI A COLLECTÉ
+        // (PEEX, WacePay, PawaPay). N'est appelé qu'après un échec de versement CERTAIN.
+        // Si ce partenaire ne peut pas rembourser, repli sur le wallet FlashPay du client.
+        if ($this->canRefundToSource($tx)) {
             return $this->startRefund($tx, $reason);
         }
 
-        // Source carte bancaire ou collecte WacePay : montant ET frais recrédités
-        // immédiatement sur le wallet FlashPay du client (aucun frais conservé).
-        if (in_array($tx->source_rail, ['card', 'bank', 'digitwace', 'pawapay_momo'], true) && ($done = $this->refundToWallet($tx, $reason))) {
+        // Carte bancaire / compte bancaire (pas de remboursement par API chez le partenaire),
+        // ou partenaire de collecte indisponible : montant ET frais recrédités sur le wallet FlashPay.
+        if (in_array($tx->source_rail, ['card', 'bank', 'peex', 'digitwace', 'pawapay_momo'], true)
+            && ($done = $this->refundToWallet($tx, $reason, in_array($tx->source_rail, ['card', 'bank'], true) ? 'Remboursement sur la carte / le compte bancaire non disponible chez le partenaire' : null))) {
             return $done;
         }
 
@@ -374,12 +382,9 @@ class SwitchService
         return DB::transaction(function () use ($tx, $wallet, $reason, $why) {
             $from = "{$tx->source_rail}:" . ($tx->source_account ?: 'client');
             $this->walletService->credit($wallet, $tx->amount + $tx->fee);
-            $this->ledgerService->recordDoubleEntry($tx, 'flashpay:suspense', "wallet:{$wallet->id}", $tx->amount, null, 'Remboursement sur wallet');
-            if ($tx->fee > 0) {
-                $this->ledgerService->recordDoubleEntry($tx, 'flashpay:fees', "wallet:{$wallet->id}", $tx->fee, null, 'Remboursement des frais');
-            }
+            $refund = $this->recordRefund($tx, 'wallet', null, $wallet, 'FlashPay', $why);
             $meta = array_merge($tx->fresh()->meta ?? [], ['refunded_to' => "wallet:{$wallet->id}", 'refunded_from' => $from]);
-            $meta['outcome']['refund'] = ['done' => true, 'to' => 'wallet', 'why' => $why ? mb_substr($why, 0, 200) : null, 'at' => now()->toIso8601String()];
+            $meta['outcome']['refund'] = ['done' => true, 'to' => 'wallet', 'why' => $why ? mb_substr($why, 0, 200) : null, 'reference' => $refund->reference, 'at' => now()->toIso8601String()];
             $tx->update(['status' => 'reversed', 'stage' => null, 'meta' => $meta,
                 'failure_reason' => mb_substr($reason . ' · Montant et frais remboursés sur votre wallet FlashPay', 0, 250)]);
             return $this->notified($tx->fresh());
@@ -419,14 +424,147 @@ class SwitchService
         return Wallet::where('user_id', $tx->initiated_by)->orderBy('id')->first();
     }
 
-    /** Lance le remboursement PEEX du payeur (montant + frais). */
+    /**
+     * Remboursement possible ? Seulement si l'expéditeur a été DÉBITÉ (écriture source → compte
+     * d'attente, ou collecte payée chez le partenaire) et que le bénéficiaire n'a PAS été crédité
+     * (ni versement réussi, ni versement encore en cours chez un partenaire).
+     *
+     * @return array{possible:bool, reason:?string, partner:string, to:string, amount:int, currency:string}
+     */
+    public function refundEligibility(Transaction $tx): array
+    {
+        $out = ['possible' => false, 'reason' => null, 'partner' => $this->canRefundToSource($tx) ? $this->partnerLabel($tx->source_rail) : 'FlashPay',
+            'to' => $this->canRefundToSource($tx) ? (string) $tx->source_account : 'Wallet FlashPay', 'amount' => (int) $tx->amount + (int) $tx->fee, 'currency' => (string) $tx->currency];
+        $outcome = (array) (($tx->meta ?? [])['outcome'] ?? []);
+        $no = fn (string $why) => ['reason' => $why] + $out;
+
+        if (in_array($tx->type, \App\Support\TransactionPresenter::REFUND_TYPES, true)) {
+            return $no('Opération de remboursement.');
+        }
+        if ($tx->status === 'reversed' || ($outcome['refund']['done'] ?? false) === true) {
+            return $no('Déjà remboursée.');
+        }
+        if ($tx->stage === 'awaiting_refund') {
+            return $no('Remboursement déjà en cours chez ' . $this->partnerLabel($tx->source_rail) . '.');
+        }
+        if ($tx->status === 'successful' || ($outcome['credit']['done'] ?? false) === true) {
+            return $no('Le bénéficiaire a été crédité : rien à rembourser.');
+        }
+        if (! $this->debitConfirmed($tx)) {
+            return $no('Aucun débit confirmé de l\'expéditeur : rien à rembourser.');
+        }
+        if ($pending = $this->payoutInFlight($tx)) {
+            return $no($pending);
+        }
+        if ($this->creditedDestination($tx)) {
+            return $no('Le bénéficiaire a été crédité : rien à rembourser.');
+        }
+        return ['possible' => true] + $out;
+    }
+
+    /** Débit de l'expéditeur confirmé : écriture du payeur dans le grand livre, ou collecte payée chez le partenaire. */
+    public function debitConfirmed(Transaction $tx): bool
+    {
+        if (\App\Models\LedgerEntry::where('transaction_id', $tx->id)->where('account', $this->payerAccount($tx))->where('type', 'debit')->exists()) {
+            return true;
+        }
+        return $this->sourcePaidAtPartner($tx);
+    }
+
+    protected function payerAccount(Transaction $tx): string
+    {
+        return $tx->source_rail === 'wallet' ? "wallet:{$tx->source_wallet_id}" : "{$tx->source_rail}:{$tx->source_account}";
+    }
+
+    protected function sourcePaidAtPartner(Transaction $tx): bool
+    {
+        return match ($tx->source_rail) {
+            'peex' => \App\Models\PeexRequest::where('transaction_id', $tx->id)->get()
+                ->contains(fn ($r) => PeexConnector::legOf((string) $r->track_id) === 'C' && \App\Models\PeexRequest::normalize($r->status) === 'successful'),
+            'digitwace' => \App\Models\DigitwaceRequest::where('transaction_id', $tx->id)->where('operation', 'payin')->where('status', 'successful')->exists(),
+            'pawapay_momo' => \App\Models\RemitRequest::where('transaction_id', $tx->id)->where('method', 'deposit')->where('status', 'successful')->exists(),
+            default => false,
+        };
+    }
+
+    /** Versement au bénéficiaire encore en cours chez un partenaire : on attend son statut final (jamais de double paiement). */
+    protected function payoutInFlight(Transaction $tx): ?string
+    {
+        if ($tx->status === 'processing' && $tx->stage === 'awaiting_destination') {
+            return 'Versement au bénéficiaire encore en cours chez ' . $this->partnerLabel($tx->destination_rail) . ' : attendez son statut final (ou « Vérifier le statut »).';
+        }
+        $open = \App\Models\DigitwaceRequest::where('transaction_id', $tx->id)->where('operation', 'payout')->whereNull('finalized_at')->whereNotIn('status', ['failed'])->exists()
+            || \App\Models\RemitRequest::where('transaction_id', $tx->id)->whereNotIn('method', ['deposit', 'refund'])->whereNull('finalized_at')->whereNotIn('status', ['failed'])->exists()
+            || \App\Models\PeexRequest::where('transaction_id', $tx->id)->whereNull('finalized_at')->get()
+                ->contains(fn ($r) => PeexConnector::legOf((string) $r->track_id) === 'D' && \App\Models\PeexRequest::normalize($r->status) !== 'failed');
+        return $open ? 'Un versement au bénéficiaire est encore ouvert chez un partenaire : vérifiez son statut avant de rembourser.' : null;
+    }
+
+    /** Bénéficiaire crédité : écriture de crédit vers le compte / wallet du bénéficiaire, ou versement réussi chez un partenaire. */
+    protected function creditedDestination(Transaction $tx): bool
+    {
+        $payer = $this->payerAccount($tx);
+        $credited = \App\Models\LedgerEntry::where('transaction_id', $tx->id)->where('type', 'credit')
+            ->where('account', 'not like', 'flashpay:%')->where('account', '!=', $payer)->exists();
+        return $credited
+            || \App\Models\DigitwaceRequest::where('transaction_id', $tx->id)->where('operation', 'payout')->where('status', 'successful')->exists()
+            || \App\Models\RemitRequest::where('transaction_id', $tx->id)->whereNotIn('method', ['deposit', 'refund'])->where('status', 'successful')->exists()
+            || \App\Models\PeexRequest::where('transaction_id', $tx->id)->get()
+                ->contains(fn ($r) => PeexConnector::legOf((string) $r->track_id) === 'D' && \App\Models\PeexRequest::normalize($r->status) === 'successful');
+    }
+
+    /**
+     * Remboursement lancé depuis la console (opération échouée après débit, ou orpheline) :
+     * par le partenaire qui a collecté, vers le compte débité ; repli sur le wallet FlashPay.
+     */
+    public function refundDebited(Transaction $tx, string $reason): Transaction
+    {
+        return \Illuminate\Support\Facades\Cache::lock('refund:' . $tx->id, 30)->block(10, function () use ($tx, $reason) {
+            $tx = $tx->fresh();
+            $e = $this->refundEligibility($tx);
+            if (! $e['possible']) {
+                throw new \App\Exceptions\BusinessException('Remboursement impossible : ' . $e['reason'], 'refund_not_allowed', 422);
+            }
+            // Collecte payée chez le partenaire mais jamais comptabilisée (opération « orpheline »)
+            if (! \App\Models\LedgerEntry::where('transaction_id', $tx->id)->where('account', $this->payerAccount($tx))->where('type', 'debit')->exists()) {
+                $this->ledgerService->recordDoubleEntry($tx, $this->payerAccount($tx), 'flashpay:suspense', (int) $tx->amount, null, 'Collecte confirmée par le partenaire (réconciliation)');
+                $this->recordFee($tx, $this->payerAccount($tx));
+            }
+            $tx->update(['status' => 'processing', 'stage' => 'awaiting_destination']);
+            $this->noteOutcome($tx, ['credit' => ['done' => false, 'error' => mb_substr($reason, 0, 200), 'partner' => $this->partnerLabel($tx->destination_rail), 'account' => $tx->destination_account]]);
+            return $this->failAndRefund($tx->fresh(), $reason);
+        });
+    }
+
+    /** Le partenaire qui a collecté peut-il rembourser le numéro débité ? */
+    protected function canRefundToSource(Transaction $tx): bool
+    {
+        if (! $tx->source_account || ! in_array($tx->source_rail, ['peex', 'digitwace', 'pawapay_momo'], true)) {
+            return false;
+        }
+        if ($tx->source_rail !== 'peex' && ! config('flashpay.failover.refund_to_source', true)) {
+            return false;
+        }
+        try {
+            return method_exists($this->refundConnector($tx), 'refund');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    protected function refundConnector(Transaction $tx): object
+    {
+        return $tx->source_rail === 'peex' ? app(PeexConnector::class) : $this->connectorFor($tx->source_rail);
+    }
+
+    /** Lance le remboursement du payeur (montant + frais) chez le partenaire qui a collecté. */
     protected function startRefund(Transaction $tx, string $reason): Transaction
     {
         $reason = mb_substr($reason, 0, 200);
         $tx->update(['stage' => 'awaiting_refund', 'failure_reason' => $reason . ' · Remboursement en cours']);
 
         try {
-            $result = app(PeexConnector::class)->refund($tx->fresh());
+            $result = $this->refundConnector($tx)->refund($tx->fresh());
         } catch (\Throwable $e) {
             $result = ['status' => 'failed', 'raw' => ['error' => $e->getMessage()]];
         }
@@ -467,16 +605,49 @@ class SwitchService
     /** Remboursement confirmé : écritures inverses et statut « reversed ». */
     protected function refunded(Transaction $tx, string $reason): Transaction
     {
-        $payer = "{$tx->source_rail}:{$tx->source_account}";
-        $this->ledgerService->recordDoubleEntry($tx, 'flashpay:suspense', $payer, $tx->amount, null, 'Remboursement');
-        if ($tx->fee > 0) {
-            $this->ledgerService->recordDoubleEntry($tx, 'flashpay:fees', $payer, $tx->fee, null, 'Remboursement des frais');
-        }
+        $refund = $this->recordRefund($tx, (string) $tx->source_rail, (string) $tx->source_account, null, $this->partnerLabel($tx->source_rail));
         $reason = str_replace(' · Remboursement en cours', '', $reason);
-        $tx->update(['status' => 'reversed', 'stage' => null, 'failure_reason' => mb_substr($reason . ' · Remboursé sur ' . $tx->source_account, 0, 250)]);
-        $this->noteOutcome($tx, ['refund' => ['done' => true, 'to' => (string) $tx->source_account]]);
+        $tx->update(['status' => 'reversed', 'stage' => null, 'failure_reason' => mb_substr($reason . ' · Remboursé sur ' . $tx->source_account . ' via ' . $this->partnerLabel($tx->source_rail), 0, 250)]);
+        $this->noteOutcome($tx, ['refund' => ['done' => true, 'to' => (string) $tx->source_account, 'partner' => $this->partnerLabel($tx->source_rail),
+            'reference' => $refund->reference, 'at' => now()->toIso8601String()]]);
 
         return $this->notified($tx->fresh());
+    }
+
+    /**
+     * Opération « Remboursement » visible dans les journaux (client, console) : montant + frais
+     * rendus au payeur, liée à l'opération d'origine (meta.refund_of). Les écritures du grand
+     * livre du remboursement sont portées par cette opération (solde du wallet juste).
+     */
+    protected function recordRefund(Transaction $tx, string $toRail, ?string $toAccount, ?Wallet $wallet, string $via, ?string $why = null): Transaction
+    {
+        $m = $tx->meta ?? [];
+        $total = (int) $tx->amount + (int) $tx->fee;
+        $refund = Transaction::firstOrCreate(['reference' => $tx->reference . '-RMB'], [
+            'type' => 'refund', 'scope' => $tx->scope ?: 'national',
+            'source_rail' => 'treasury', 'destination_rail' => $toRail,
+            'destination_account' => $toRail === 'wallet' ? null : $toAccount,
+            'destination_wallet_id' => $wallet?->id,
+            'amount' => $total, 'fee' => 0, 'currency' => $tx->currency,
+            'status' => 'successful', 'completed_at' => now(), 'initiated_by' => $tx->initiated_by,
+            'meta' => array_filter([
+                'channel' => 'auto_refund', 'refund_of' => $tx->reference, 'refund_of_id' => $tx->id, 'refunded_via' => $via,
+                'refund_reason' => $why ? mb_substr($why, 0, 200) : null,
+                'sender_name' => 'FlashPay (remboursement)',
+                'beneficiary_name' => $m['payer_verified_name'] ?? $m['payer_name'] ?? $m['sender_name'] ?? $tx->initiator?->full_name,
+                'destination_country' => $m['source_country'] ?? null, 'destination_operator' => $m['source_operator'] ?? null,
+                'refund_breakdown' => ['amount' => (int) $tx->amount, 'fee' => (int) $tx->fee],
+            ], fn ($v) => $v !== null && $v !== ''),
+        ]);
+        if ($refund->wasRecentlyCreated) {
+            $to = $toRail === 'wallet' ? "wallet:{$wallet?->id}" : "{$toRail}:{$toAccount}";
+            $this->ledgerService->recordDoubleEntry($refund, 'flashpay:suspense', $to, (int) $tx->amount, null, "Remboursement {$tx->reference}");
+            if ($tx->fee > 0) {
+                $this->ledgerService->recordDoubleEntry($refund, 'flashpay:fees', $to, (int) $tx->fee, null, "Remboursement des frais {$tx->reference}");
+            }
+            $tx->forceFill(['meta' => array_merge($tx->fresh()->meta ?? [], ['refund_transaction' => $refund->reference])])->save();
+        }
+        return $refund;
     }
 
     /** Montant et devise versés au bénéficiaire (après change éventuel). */

@@ -73,25 +73,45 @@ class DigitwaceConnector implements PaymentRailConnector
     {
         $tx = Transaction::where('reference', $reference)->first();
         $meta = $tx?->meta ?? [];
-        $route = $this->corridors->resolve($msisdnOrAccount, $meta['destination_country'] ?? null);
+
+        return $this->payoutTo($reference, 'payout', $tx, $msisdnOrAccount, $meta['destination_country'] ?? null, $meta['destination_operator'] ?? null,
+            $meta['beneficiary_verified_name'] ?? $meta['beneficiary_name'] ?? null, $amountMinor, $currency);
+    }
+
+    /**
+     * Remboursement du payeur par WacePay (partenaire qui a collecté) : versement du montant
+     * + frais sur le numéro débité (référence …-R, operation = refund).
+     */
+    public function refund(Transaction $tx): array
+    {
+        $meta = $tx->meta ?? [];
+        return $this->payoutTo($tx->reference . '-R', 'refund', $tx, (string) $tx->source_account, $meta['source_country'] ?? null, $meta['source_operator'] ?? null,
+            $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $meta['sender_name'] ?? $tx->initiator?->full_name, (int) $tx->amount + (int) $tx->fee, (string) $tx->currency);
+    }
+
+    /** Versement WacePay (bénéficiaire, ou payeur pour un remboursement). */
+    protected function payoutTo(string $reference, string $operation, ?Transaction $tx, string $msisdnOrAccount, ?string $country, ?string $operator, ?string $name, int $amountMinor, string $currency): array
+    {
+        $meta = $tx?->meta ?? [];
+        $route = $this->corridors->resolve($msisdnOrAccount, $country);
+        $refund = $operation === 'refund';
 
         $req = DigitwaceRequest::firstOrCreate(['reference' => $reference], [
-            'transaction_id' => $tx?->id, 'operation' => 'payout', 'status' => 'new',
+            'transaction_id' => $tx?->id, 'operation' => $operation, 'status' => 'new',
         ]);
 
         try {
-            $payer = $this->client->payerCodeFor($route['country'], $meta['destination_operator'] ?? $route['operator'] ?? null);
+            $payer = $this->client->payerCodeFor($route['country'], $operator ?? $route['operator'] ?? null);
             if (! $payer) {
-                throw new DigitwaceException("Aucun payerCode WacePay pour {$route['country']} / " . ($meta['destination_operator'] ?? 'opérateur inconnu') . ' (DIGITWACE_PAYER_CODES).', '1001');
+                throw new DigitwaceException("Aucun service de versement WacePay pour {$route['country']} / " . ($operator ?? 'opérateur inconnu') . ' (DIGITWACE_PAYER_CODES).', '1001');
             }
             if ($this->client->partner()) {
                 // API Partenaire : un seul appel (payout/execute), payerCode = payoutSubscriptionId
-                $r = $this->client->payoutDirect($reference, $payer, $amountMinor, $route['phone'],
-                    $meta['beneficiary_verified_name'] ?? $meta['beneficiary_name'] ?? null);
+                $r = $this->client->payoutDirect($reference, $payer, $amountMinor, $route['phone'], $name);
                 $req->update(['wace_id' => $r['wace_id'], 'status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'last_response' => $r['raw'], 'last_checked_at' => now()]);
                 // Requête + réponse de payout/execute gardées sur la transaction (les vérifications de statut écrasent last_response)
                 if ($tx) {
-                    $tx->forceFill(['meta' => array_merge($tx->meta ?? [], ['wacepay_payout' => [
+                    $tx->forceFill(['meta' => array_merge($tx->fresh()->meta ?? [], [($refund ? 'wacepay_refund' : 'wacepay_payout') => [
                         'at' => now()->toIso8601String(), 'endpoint' => 'POST payout/execute', 'service_id' => $payer,
                         'sent' => $r['sent'] ?? null, 'response' => $r['raw'], 'wace_id' => $r['wace_id'],
                     ]])])->save();
@@ -99,13 +119,16 @@ class DigitwaceConnector implements PaymentRailConnector
 
                 return ['status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'external_ref' => $r['wace_id'] ?: $reference, 'raw' => $r['raw']];
             }
-            $sender = $this->client->senderCode([
+            $sender = $this->client->senderCode($refund ? [
+                'name' => 'FlashPay Remboursement', 'phone' => (string) config('flashpay.peex.sender_phone', ''),
+                'country' => config('flashpay.peex.sender_country', 'CG'),
+            ] : [
                 'name' => $meta['sender_name'] ?? $tx?->initiator?->full_name ?? 'Client FlashPay',
                 'phone' => (string) ($meta['sender_phone'] ?? $tx?->initiator?->phone ?? ''),
                 'country' => $meta['source_country'] ?? config('flashpay.peex.sender_country', 'CG'),
             ]);
             $beneficiary = $this->client->beneficiaryCode([
-                'name' => $meta['beneficiary_verified_name'] ?? $meta['beneficiary_name'] ?? 'Beneficiaire FlashPay',
+                'name' => $name ?: 'Beneficiaire FlashPay',
                 'phone' => $route['phone'],
                 'country' => $route['country'],
             ]);
@@ -119,7 +142,7 @@ class DigitwaceConnector implements PaymentRailConnector
             // Refus explicite = rien n'est parti : échec certain. Sinon issue incertaine → on vérifiera.
             $definitive = $e->isDefinitive();
             $req->update(['status' => $definitive ? 'failed' : 'pending', 'message' => mb_substr($e->getMessage(), 0, 250), 'last_response' => $e->response, 'last_checked_at' => now()]);
-            Log::warning('WacePay : versement ' . ($definitive ? 'refusé' : 'incertain'), ['reference' => $reference, 'error' => $e->getMessage()]);
+            Log::warning('WacePay : ' . ($refund ? 'remboursement' : 'versement') . ' ' . ($definitive ? 'refusé' : 'incertain'), ['reference' => $reference, 'error' => $e->getMessage()]);
 
             return $definitive
                 ? ['status' => 'failed', 'external_ref' => $reference, 'raw' => ['error' => $e->getMessage()]]

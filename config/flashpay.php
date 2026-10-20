@@ -138,6 +138,8 @@ return [
         'max_switches' => (int) env('FLASHPAY_FAILOVER_MAX', 2),
         // Remboursement mobile money impossible → montant + frais recrédités sur le wallet FlashPay du client
         'refund_to_wallet' => (bool) env('FLASHPAY_REFUND_TO_WALLET', true),
+        // Remboursement sur le compte débité par le partenaire qui a collecté (WacePay, PawaPay ; PEEX toujours)
+        'refund_to_source' => (bool) env('FLASHPAY_REFUND_TO_SOURCE', true),
     ],
 
     'pawapay' => [

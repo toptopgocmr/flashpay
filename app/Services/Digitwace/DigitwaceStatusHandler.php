@@ -31,7 +31,10 @@ class DigitwaceStatusHandler
         // Versement envoyé avant le correctif « status -1 » : payout/execute avait répondu par un
         // refus (HTTP 201 + status -1) mais la demande était restée « en attente » → échec certain.
         $sent = data_get($req->transaction?->meta, 'wacepay_payout.response');
-        if (! $req->wace_id && $req->operation === 'payout' && is_array($sent) && DigitwaceClient::refused($sent)) {
+        if ($req->operation === 'refund') {
+            $sent = data_get($req->transaction?->meta, 'wacepay_refund.response');
+        }
+        if (! $req->wace_id && in_array($req->operation, ['payout', 'refund'], true) && is_array($sent) && DigitwaceClient::refused($sent)) {
             $msg = 'Versement refusé par WacePay : ' . mb_substr((string) data_get($sent, 'message', 'refus'), 0, 200);
             $req->update(['status' => 'failed', 'message' => $msg]);
             return $this->finalize($req->fresh(), 'failed', $msg);
@@ -45,7 +48,7 @@ class DigitwaceStatusHandler
         // n'a jamais renvoyé d'identifiant : il n'a pas été créé chez eux. Passé le délai de grâce
         // (DIGITWACE_PAYOUT_NOT_FOUND_SECONDS, 120 s), échec certain → remboursement, sans faire
         // attendre le client des dizaines de minutes.
-        if ($check['status'] === 'pending' && $req->operation === 'payout' && ! $req->wace_id
+        if ($check['status'] === 'pending' && in_array($req->operation, ['payout', 'refund'], true) && ! $req->wace_id
             && self::notFound($check['raw'] ?? [])
             && $req->created_at && $req->created_at->lt(now()->subSeconds(max(60, (int) config('flashpay.digitwace.payout_not_found_seconds', 120))))) {
             $msg = 'Versement introuvable chez WacePay (jamais exécuté)';
@@ -128,6 +131,11 @@ class DigitwaceStatusHandler
             } else {
                 $this->switch->onSourceFailed($tx, 'WacePay : ' . $reason);
             }
+        } elseif ($tx && $req->operation === 'refund') {
+            // Remboursement du payeur par WacePay (partenaire qui a collecté)
+            $status === 'successful'
+                ? $this->switch->onRefundConfirmed($tx)
+                : $this->switch->onRefundFailed($tx, 'WacePay : ' . $reason);
         } elseif ($tx) {
             $status === 'successful'
                 ? $this->switch->onDestinationConfirmed($tx)
