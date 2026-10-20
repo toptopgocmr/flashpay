@@ -69,7 +69,7 @@
             <small>Expéditeur</small>
             <b>{{ sender.name || '—' }}</b>
             <span class="sub">{{ phone(sender.account) || '—' }}</span>
-            <span class="rail">{{ railLabel(t.gateway?.in, t.source_rail) }}</span>
+            <span class="rail"><ProviderLogo v-if="t.gateway?.in?.operator" :name="t.gateway.in.operator" :size="16" /><ProviderLogo v-if="t.gateway?.in?.partner" :name="t.gateway.in.partner" :size="16" /> {{ railLabel(t.gateway?.in, t.source_rail) }}</span>
           </div>
         </component>
         <div class="td-arrow">
@@ -81,7 +81,7 @@
             <small>Bénéficiaire</small>
             <b>{{ beneficiary.name || '—' }}</b>
             <span class="sub">{{ phone(beneficiary.account) || '—' }}</span>
-            <span class="rail">{{ railLabel(t.gateway?.out, t.destination_rail) }}</span>
+            <span class="rail"><ProviderLogo v-if="t.gateway?.out?.operator" :name="t.gateway.out.operator" :size="16" /><ProviderLogo v-if="t.gateway?.out?.partner" :name="t.gateway.out.partner" :size="16" /> {{ railLabel(t.gateway?.out, t.destination_rail) }}</span>
           </div>
         </component>
       </div>
@@ -110,7 +110,7 @@
                 <div>
                   <b>{{ s.label }}</b>
                   <span>{{ s.account }}</span>
-                  <small>{{ s.partner }} · {{ ST[s.status] || '—' }}</small>
+                  <small><ProviderLogo v-if="s.partner" :name="s.partner" :size="14" /> {{ s.partner }} · {{ ST[s.status] || '—' }}</small>
                 </div>
               </li>
             </ol>
@@ -123,11 +123,11 @@
               <tbody>
                 <tr>
                   <td><b>Facturé par FlashPay</b><small>frais client{{ t.costs.merchant_fee ? ' + commission marchand' : '' }}</small></td>
-                  <td>FlashPay</td><td class="mono">{{ t.reference }}</td><td><span class="pill sm" :class="t.status">{{ ST[t.status] || t.status }}</span></td><td></td>
+                  <td><ProviderLogo name="FlashPay" :size="16" /> FlashPay</td><td class="mono">{{ t.reference }}</td><td><span class="pill sm" :class="t.status">{{ ST[t.status] || t.status }}</span></td><td></td>
                   <td class="num pos"><b>+{{ n(t.costs.billed) }} {{ t.costs.currency }}</b></td>
                 </tr>
                 <tr v-for="l in t.costs.legs" :key="l.kind + l.reference">
-                  <td>{{ l.label }}<small v-if="l.country">Pays {{ l.country }}<template v-if="l.fee_source === 'estimate' && l.rate"> · tarif {{ l.rate.pct ? l.rate.pct + ' %' : '' }}{{ l.rate.pct && l.rate.fixed ? ' + ' : '' }}{{ l.rate.fixed ? n(l.rate.fixed) + ' fixe' : '' }}</template></small></td><td>{{ l.partner }}</td><td class="mono">{{ l.reference || '—' }}</td>
+                  <td>{{ l.label }}<small v-if="l.country">Pays {{ l.country }}<template v-if="l.fee_source === 'estimate' && l.rate"> · tarif {{ l.rate.pct ? l.rate.pct + ' %' : '' }}{{ l.rate.pct && l.rate.fixed ? ' + ' : '' }}{{ l.rate.fixed ? n(l.rate.fixed) + ' fixe' : '' }}</template></small></td><td><ProviderLogo :name="l.partner" :size="16" /> {{ l.partner }}</td><td class="mono">{{ l.reference || '—' }}</td>
                   <td><span class="pill sm" :class="pillOf(l.status)">{{ ST[l.status] || '—' }}</span></td>
                   <td class="num">{{ n(l.amount) }} {{ l.currency }}</td>
                   <td class="num neg">
@@ -216,6 +216,7 @@ import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../services/api'
 import PeexRefund from '../components/PeexRefund.vue'
+import ProviderLogo from '../components/ProviderLogo.vue'
 import { openReceipt } from '../utils/receipt'
 
 const route = useRoute()
@@ -407,7 +408,8 @@ a.td-party:hover { border-color: #c7d2fe; }
 .td-party small { display: block; color: var(--t2); font-size: 11px; text-transform: uppercase; letter-spacing: .4px; font-weight: 600; }
 .td-party b { display: block; font-size: 15.5px; margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-party .sub { display: block; font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--t2); font-size: 12px; }
-.td-party .rail { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 5px; background: #eff6ff; color: #1e40af; font-size: 11px; font-weight: 600; }
+.td-party .rail .pv-logo { margin-right: 3px; }
+.td-party .rail { display: inline-flex; align-items: center; gap: 2px; margin-top: 6px; padding: 2px 8px; border-radius: 5px; background: #eff6ff; color: #1e40af; font-size: 11px; font-weight: 600; }
 .av { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; background: #fee2e2; color: #b91c1c; }
 .av.in { background: #dbeafe; color: #1e40af; } .av.sm { width: 28px; height: 28px; font-size: 11px; background: #eef2ff; color: #3730a3; }
 .td-arrow { display: grid; place-items: center; color: var(--t3); }

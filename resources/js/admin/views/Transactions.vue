@@ -116,10 +116,10 @@
                 <b v-if="t.costs" :class="t.costs.margin < 0 ? 'neg' : t.costs.margin > 0 ? 'pos' : 'muted'">{{ money(t.costs.margin, t.currency) }}</b>
               </td>
               <td class="c-svc">
-                <em v-for="p in gateways(t)" :key="p" :class="'p-' + p.toLowerCase()">{{ p }}</em>
+                <em v-for="p in gateways(t)" :key="p" :class="'p-' + p.toLowerCase()"><ProviderLogo :name="p" :size="14" /> {{ p }}</em>
                 <span v-if="!gateways(t).length" class="muted">Interne</span>
               </td>
-              <td class="c-ops">{{ opName(t.gateway?.in) }} <span class="arr">→</span> {{ opName(t.gateway?.out) }}</td>
+              <td class="c-ops"><ProviderLogo v-if="t.gateway?.in?.operator" :name="t.gateway.in.operator" :size="16" /> {{ opName(t.gateway?.in) }} <span class="arr">→</span> <ProviderLogo v-if="t.gateway?.out?.operator" :name="t.gateway.out.operator" :size="16" /> {{ opName(t.gateway?.out) }}</td>
               <td class="c-dt">{{ dt(t.created_at) }}</td>
               <td class="c-eye" @click.stop>
                 <button title="Voir les détails" @click="detail = t"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -158,14 +158,14 @@
             <h4>Expéditeur</h4>
             <div class="kv"><span>Nom</span><b>{{ detail.sender?.name || '—' }}</b></div>
             <div class="kv"><span>Compte</span><b>{{ phone(detail.sender?.account) || '—' }}</b></div>
-            <div class="kv"><span>Service</span><b>{{ detail.gateway?.in.operator || '—' }}<template v-if="detail.gateway?.in.partner"> · {{ detail.gateway.in.partner }}</template></b></div>
+            <div class="kv"><span>Service</span><b class="pv-row"><template v-if="detail.gateway?.in.operator"><ProviderLogo :name="detail.gateway.in.operator" />{{ detail.gateway.in.operator }}</template><template v-else>—</template><template v-if="detail.gateway?.in.partner"><span class="sep">·</span><ProviderLogo :name="detail.gateway.in.partner" />{{ detail.gateway.in.partner }}</template></b></div>
           </div>
 
           <div class="wp-sec">
             <h4>Bénéficiaire</h4>
             <div class="kv"><span>Nom</span><b>{{ detail.beneficiary?.name || '—' }}</b></div>
             <div class="kv"><span>Compte</span><b>{{ phone(detail.beneficiary?.account) || '—' }}</b></div>
-            <div class="kv"><span>Service</span><b>{{ detail.gateway?.out.operator || '—' }}<template v-if="detail.gateway?.out.partner"> · {{ detail.gateway.out.partner }}</template></b></div>
+            <div class="kv"><span>Service</span><b class="pv-row"><template v-if="detail.gateway?.out.operator"><ProviderLogo :name="detail.gateway.out.operator" />{{ detail.gateway.out.operator }}</template><template v-else>—</template><template v-if="detail.gateway?.out.partner"><span class="sep">·</span><ProviderLogo :name="detail.gateway.out.partner" />{{ detail.gateway.out.partner }}</template></b></div>
             <div class="kv" v-if="detail.gateway?.out.country"><span>Pays</span><b>{{ detail.gateway.out.country }}</b></div>
           </div>
 
@@ -260,6 +260,7 @@ import { confirmBox, toast } from '../utils/ui'
 import PeexRefund from '../components/PeexRefund.vue'
 import ExportButton from '../components/ExportButton.vue'
 import Modal from '../components/Modal.vue'
+import ProviderLogo from '../components/ProviderLogo.vue'
 import { fetchAllPages, fmtDate } from '../utils/export'
 import { openReceipt, openReceipts } from '../utils/receipt'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
@@ -575,7 +576,7 @@ const expFetch = (onP) => fetchAllPages('/admin/transactions', Object.fromEntrie
 .c-code b, .c-who b { display: block; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: 12.5px; }
 .c-code b { font-size: 12px; letter-spacing: .2px; }
 .c-code small, .c-who small { display: block; color: var(--t2); font-size: 11px; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
-.c-svc em { font-style: normal; font-size: 10px; font-weight: 700; margin-right: 3px; padding: 1px 5px; border-radius: 4px; background: #e0e7ff; color: #1e3a8a; }
+.c-svc em { display: inline-flex; align-items: center; gap: 3px; font-style: normal; font-size: 10px; font-weight: 700; margin-right: 3px; padding: 1px 5px; border-radius: 4px; background: #e0e7ff; color: #1e3a8a; }
 .c-svc em.p-wacepay { background: #ffedd5; color: #c2410c; }
 .c-ops { font-size: 12px; } .c-ops .arr { color: var(--t3); margin: 0 2px; }
 .c-dt { color: var(--t2); font-size: 11.5px; }
