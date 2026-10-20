@@ -128,7 +128,7 @@ class TransactionPresenter
             ['Type', self::channel($tx)],
             ['Statut', $tx->statusLabel()],
             ['Expéditeur', $who($p['sender_name'], $p['sender_phone'])],
-            ['Compte débité', $tx->source_rail === 'wallet' ? 'Wallet FlashPay' : ($tx->source_rail === 'card' ? ($tx->source_account ?: 'Carte bancaire' . (! empty($m['card_last4']) ? ' •••• ' . $m['card_last4'] : '')) : ($tx->source_rail === 'bank' ? ($tx->source_account ?: 'Compte bancaire') : ($tx->source_account ? self::phone($tx->source_account) . ($operator($m['source_operator'] ?? null, $m['source_country'] ?? null) ? ' (' . $operator($m['source_operator'] ?? null, $m['source_country'] ?? null) . ')' : '') : null)))],
+            ['Compte débité', $tx->source_rail === 'wallet' ? 'Wallet FlashPay' : ($tx->source_rail === 'card' ? ($tx->source_account ?: self::cardLabel($m)) : ($tx->source_rail === 'bank' ? ($tx->source_account ?: 'Compte bancaire') : ($tx->source_account ? self::phone($tx->source_account) . ($operator($m['source_operator'] ?? null, $m['source_country'] ?? null) ? ' (' . $operator($m['source_operator'] ?? null, $m['source_country'] ?? null) . ')' : '') : null)))],
             ['Bénéficiaire', $who($p['beneficiary_name'], $p['beneficiary_phone'])],
             ['Compte crédité', $tx->destination_rail === 'wallet' ? 'Wallet FlashPay' : match ($tx->destination_rail) {
                 'cash' => 'Retrait en espèces', 'atm' => 'Retrait au GAB', 'bank' => trim('Compte bancaire ' . ($m['bank_name'] ?? '')),
@@ -287,7 +287,7 @@ class TransactionPresenter
                     }
                     break;
                 case 'card':
-                    $out['operator'] = $account ?: 'Carte Visa / Mastercard';
+                    $out['operator'] = $account ?: self::cardLabel($tx->meta ?? []);
                     $out['partner'] = $hosted ? 'WacePay' : 'Carte (3-D Secure)';
                     $out['rail'] = $hosted ? 'digitwace' : 'card';
                     break;
@@ -297,7 +297,8 @@ class TransactionPresenter
                     $out['rail'] = $hosted ? 'digitwace' : 'bank';
                     break;
                 case 'cash':
-                    $out['operator'] = 'Espèces (agent)';
+                case 'atm':
+                    $out['operator'] = $rail === 'atm' ? 'Retrait au GAB' : 'Espèces (agent)';
                     break;
                 default:
                     $out['operator'] = 'Wallet FlashPay';
@@ -309,12 +310,39 @@ class TransactionPresenter
             ? $tx->peexRequests->pluck('track_id')->all()
             : [];
 
+        $in = $leg($tx->source_rail, $tx->source_account, $meta['source_country'] ?? null, true);
+        $out = $leg($tx->destination_rail, $tx->destination_account, $meta['destination_country'] ?? null);
+        // Agent (dépôt / retrait d'espèces) et marchand : nommés à la place de « Wallet FlashPay »
+        if (in_array($tx->type, ['cash_in', 'float_topup'], true) && ! empty($meta['agent_name']) && $in['rail'] === 'wallet') {
+            $in['operator'] = 'Agent · ' . $meta['agent_name'];
+            $in['kind'] = 'agent';
+        }
+        if (in_array($tx->type, ['cash_out'], true) && ! empty($meta['agent_name']) && $out['rail'] === 'wallet') {
+            $out['operator'] = 'Agent · ' . $meta['agent_name'];
+            $out['kind'] = 'agent';
+        }
+        if (in_array($tx->type, self::PAYMENT_TYPES, true) && ! empty($meta['merchant_name']) && $out['rail'] === 'wallet') {
+            $out['operator'] = 'Marchand · ' . $meta['merchant_name'];
+            $out['kind'] = 'merchant';
+        }
+        if ($tx->source_rail === 'treasury') {
+            $in['operator'] = 'Trésorerie FlashPay';
+        }
+
         return [
-            'in' => $leg($tx->source_rail, $tx->source_account, $meta['source_country'] ?? null, true),
-            'out' => $leg($tx->destination_rail, $tx->destination_account, $meta['destination_country'] ?? null),
+            'in' => $in,
+            'out' => $out,
             'partner' => self::partner($tx),
             'track_ids' => $tracks,
         ];
+    }
+
+    /** « Visa •••• 4242 » (marque de la carte liée débitée), sinon « Carte bancaire ». */
+    public static function cardLabel(array $m): string
+    {
+        $brand = trim((string) ($m['card_brand'] ?? ''));
+        $last4 = trim((string) ($m['card_last4'] ?? ''));
+        return trim(($brand !== '' ? $brand : 'Carte bancaire') . ($last4 !== '' ? ' •••• ' . $last4 : ''));
     }
 
     public static function phone(?string $p): ?string

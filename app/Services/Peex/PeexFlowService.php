@@ -399,6 +399,18 @@ class PeexFlowService
         // Carte : la source est confirmée par la page de paiement sécurisée (3-D Secure)
         if (in_array($src['type'], ['card', 'bank'], true)) {
             $payload['source_rail'] = $src['type'];
+            // Marque et 4 derniers chiffres de la carte liée débitée (logo Visa / Mastercard, reçus)
+            if ($src['type'] === 'card' && empty($payload['meta']['card_brand'])) {
+                try {
+                    if ($card = $this->linkedCard($initiator, $meta)) {
+                        $payload['meta'] = array_merge((array) ($payload['meta'] ?? []), array_filter([
+                            'card_brand' => $card->card_brand, 'card_last4' => $card->card_last4, 'linked_account_id' => $card->id,
+                        ]));
+                    }
+                } catch (\Throwable) {
+                    // pas de carte liée : la page de paiement le signalera
+                }
+            }
             $tx = $this->switch->createPending($payload, 'awaiting_card');
             return app(\App\Services\Payments\CardPaymentService::class)->startCheckout($tx);
         }

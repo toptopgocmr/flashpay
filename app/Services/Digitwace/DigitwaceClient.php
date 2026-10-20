@@ -665,8 +665,22 @@ class DigitwaceClient
             $rows = \App\Models\WacepayCoverage::where('payin', true)->get()
                 ->filter(fn ($r) => self::serviceType(array_merge((array) ($r->raw ?? []), ['name' => $r->payer_name, 'method' => $r->method])) === $method);
             $pick = ($country ? $rows->firstWhere('country', strtoupper($country)) : null) ?? $rows->first();
-            return $pick?->payer_code;
+            if ($pick?->payer_code) {
+                return $pick->payer_code;
+            }
         } catch (\Throwable) {
+            // couverture illisible : on lit les services en direct
+        }
+        // Un service carte / banque WacePay n'a souvent pas de pays : il n'est donc pas gardé par la
+        // synchronisation de couverture (par pays). On le cherche dans payments/services en direct.
+        try {
+            $svcs = \Illuminate\Support\Facades\Cache::remember('digitwace:checkout-services', 600, fn () => $this->partnerServices());
+            $rows = collect($svcs)->filter(fn ($s) => ($s['payin'] ?? false)
+                && self::serviceType(array_merge((array) ($s['raw_service'] ?? []), ['name' => $s['payerName'] ?? null])) === $method);
+            $pick = ($country ? $rows->first(fn ($s) => strtoupper((string) ($s['countryCode'] ?? '')) === strtoupper($country)) : null) ?? $rows->first();
+            return $pick['payerCode'] ?? null;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('WacePay : services carte / banque illisibles', ['error' => $e->getMessage()]);
             return null;
         }
     }
