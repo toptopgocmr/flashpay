@@ -19,8 +19,8 @@ class FlashpayMaintenanceCommand extends Command
     public function handle(PaymentRequestService $requests, PaymentIntentService $intents, GiftService $gifts, WebhookService $webhooks, PendingTimeoutService $timeouts): int
     {
         $this->info(sprintf(
-            '%d validation(s) mobile money expirée(s), %d demande(s) expirée(s), %d intent(s) expiré(s), %d cadeau(x) clôturé(s), %d webhook(s) relancé(s).',
-            $timeouts->expireDue(), $requests->expireDue(), $intents->expireDue(), $gifts->expireDue(), $webhooks->retryDue(),
+            '%d paiement(s) carte non finalisé(s), %d validation(s) mobile money expirée(s), %d demande(s) expirée(s), %d intent(s) expiré(s), %d cadeau(x) clôturé(s), %d webhook(s) relancé(s).',
+            app(\App\Services\Payments\CardPaymentService::class)->expireAbandoned(), $timeouts->expireDue(), $requests->expireDue(), $intents->expireDue(), $gifts->expireDue(), $webhooks->retryDue(),
         ));
         return self::SUCCESS;
     }

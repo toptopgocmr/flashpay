@@ -69,6 +69,9 @@ class ComplianceGuard
         if (($p['source_rail'] ?? null) === 'card') {
             $this->assertChannel('card');
         }
+        if (($p['source_rail'] ?? null) === 'crypto') {
+            $this->assertChannel('crypto');
+        }
         if (($p['meta']['channel'] ?? null) === 'agent') {
             $this->assertChannel('agents');
         }

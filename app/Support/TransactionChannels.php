@@ -50,7 +50,7 @@ class TransactionChannels
     public static function sql(): string
     {
         $pay = "'qr_payment','merchant_payment','nfc_payment','manual_payment','ecommerce_payment','mini_program_payment'";
-        $bank = "'card','bank'";
+        $bank = "'card','bank','crypto'";
         return "CASE
             WHEN type = 'float_topup' THEN 'agent_float'
             WHEN type = 'refund' THEN 'refund'

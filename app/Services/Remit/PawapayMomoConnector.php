@@ -58,7 +58,7 @@ class PawapayMomoConnector implements PaymentRailConnector
     {
         $method ??= $kind === 'deposits' ? 'deposit' : 'payout';
         $id = PawapayConnector::uuidFor($ref);
-        $req = RemitRequest::firstOrCreate(['reference' => $ref], [
+        $req = RemitRequest::firstOrCreate(['partner' => $this->railName(), 'reference' => $ref], [
             'transaction_id' => $tx?->id, 'partner' => $this->railName(), 'status' => 'new', 'method' => $method,
         ]);
         if ($req->partner_ref) {

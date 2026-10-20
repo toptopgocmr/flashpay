@@ -131,7 +131,7 @@ class TransactionPresenter
             ['Type', self::channel($tx)],
             ['Statut', $tx->statusLabel()],
             ['Expéditeur', $who($p['sender_name'], $p['sender_phone'])],
-            ['Compte débité', $tx->source_rail === 'wallet' ? 'Wallet FlashPay' : ($tx->source_rail === 'card' ? ($tx->source_account ?: self::cardLabel($m)) : ($tx->source_rail === 'bank' ? ($tx->source_account ?: 'Compte bancaire') : ($tx->source_account ? self::phone($tx->source_account) . ($operator($m['source_operator'] ?? null, $m['source_country'] ?? null) ? ' (' . $operator($m['source_operator'] ?? null, $m['source_country'] ?? null) . ')' : '') : null)))],
+            ['Compte débité', $tx->source_rail === 'wallet' ? 'Wallet FlashPay' : ($tx->source_rail === 'card' ? ($tx->source_account ?: self::cardLabel($m)) : ($tx->source_rail === 'bank' ? ($tx->source_account ?: 'Compte bancaire') : ($tx->source_rail === 'crypto' ? ($tx->source_account ?: trim('Crypto ' . ($m['crypto_asset'] ?? ''))) : ($tx->source_account ? self::phone($tx->source_account) . ($operator($m['source_operator'] ?? null, $m['source_country'] ?? null) ? ' (' . $operator($m['source_operator'] ?? null, $m['source_country'] ?? null) . ')' : '') : null))))],
             ['Bénéficiaire', $who($p['beneficiary_name'], $p['beneficiary_phone'])],
             ['Compte crédité', $tx->destination_rail === 'wallet' ? 'Wallet FlashPay' : match ($tx->destination_rail) {
                 'cash' => 'Retrait en espèces', 'atm' => 'Retrait au GAB', 'bank' => trim('Compte bancaire ' . ($m['bank_name'] ?? '')),
@@ -243,9 +243,10 @@ class TransactionPresenter
             \App\Services\Peex\PeexCorridors::partnerName($in),
             \App\Services\Peex\PeexCorridors::partnerName($out),
         ])));
-        if (in_array($tx->source_rail, ['card', 'bank'], true)) {
+        if (in_array($tx->source_rail, ['card', 'bank', 'crypto'], true)) {
             $via = ['wacepay' => 'WacePay', 'maishapay' => 'MaishaPay'][$tx->meta['card_driver'] ?? ''] ?? null;
-            $label = $tx->source_rail === 'bank' ? 'Prélèvement bancaire' : 'Carte (3-D Secure)';
+            $label = match ($tx->source_rail) { 'bank' => 'Prélèvement bancaire', 'crypto' => 'Crypto ' . ($tx->meta['crypto_asset'] ?? ''), default => 'Carte (3-D Secure)' };
+            $label = trim($label);
             array_unshift($names, $via ? "{$via} ({$label})" : $label);
         }
         return $names ? implode(' → ', $names) : null;
@@ -295,6 +296,11 @@ class TransactionPresenter
                     $out['operator'] = $account ?: self::cardLabel($tx->meta ?? []);
                     $out['partner'] = $hosted ? ($driver === 'maishapay' ? 'MaishaPay' : 'WacePay') : 'Carte (3-D Secure)';
                     $out['rail'] = $hosted ? ($driver === 'maishapay' ? 'maishapay' : 'digitwace') : 'card';
+                    break;
+                case 'crypto':
+                    $out['operator'] = $account ?: trim('Crypto-monnaie ' . ($tx->meta['crypto_asset'] ?? ''));
+                    $out['partner'] = 'MaishaPay';
+                    $out['rail'] = 'maishapay';
                     break;
                 case 'bank':
                     $out['operator'] = $leg_in ? ($account ?: 'Compte bancaire (prélèvement)') : 'Virement bancaire';
@@ -406,6 +412,7 @@ class TransactionPresenter
         $src = match (true) {
             ($meta['channel'] ?? null) === 'agent' && $tx->type === 'cash_in' => 'Cash',
             $tx->source_rail === 'card' => 'Carte bancaire',
+            $tx->source_rail === 'crypto' => 'Crypto',
             $tx->source_rail === 'wallet', $tx->source_rail === 'treasury' => 'Wallet',
             $tx->source_rail === 'cash' => 'Cash',
             in_array($tx->source_rail, ['peex', 'digitwace', 'pawapay_momo', 'maishapay', 'mobile'], true) => 'Mobile',

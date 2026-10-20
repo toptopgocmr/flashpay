@@ -18,6 +18,7 @@ class MaishapayTest extends TestCase
     protected array $status = [];   // transactionId MaishaPay → statut renvoyé par check
     protected int $seq = 1000;
     protected array $ids = [];      // notre référence → transactionId MaishaPay
+    protected array $reject = [];   // chemins MaishaPay qui répondent 404 (rejet de l'API)
 
     protected function setUp(): void
     {
@@ -36,11 +37,25 @@ class MaishapayTest extends TestCase
             if ($ref && ! str_contains($path, '/check')) {
                 $id = $this->ids[$ref] ??= (string) ++$this->seq;
             }
+            foreach ($this->reject as $suffix) {
+                if (str_ends_with($path, $suffix)) {
+                    return Http::response([], 404);
+                }
+            }
+            $data = $req->data();
             return match (true) {
+                str_ends_with($path, 'clients/verify_wallet') => Http::response(['valid' => true, 'accountTitle' => 'BENEF TEST', 'accountStatus' => 'ACTIVE']),
+                str_ends_with($path, 'collection/me') => Http::response(['name' => 'flashpay', 'is_activated' => true, 'collect_solde' => 0]),
+                str_ends_with($path, 'disbursement/me') => Http::response(['name' => 'flashpay', 'is_activated' => true, 'disbursement_solde' => 1_000_000, 'mtn_fees' => 1, 'orange_fees' => 1]),
+                str_ends_with($path, 'collection/request_payment') => Http::response(['id' => 1, 'track_id' => $data['track_id'] ?? 'x', 'status' => 'pending']),
+                str_ends_with($path, 'disbursement/request_payment') => Http::response(['request' => ['id' => 2, 'track_id' => $data['track_id'] ?? 'x', 'status' => 'new']]),
+                str_contains($path, 'all_requests') => Http::response([]),
                 str_ends_with($path, '/collect/v2/store/mobileMoney') => Http::response(['status_code' => 202, 'transactionStatus' => 'PENDING ', 'transactionId' => (int) $id, 'originatingTransactionId' => $ref], 202),
                 str_ends_with($path, '/b2c/store/transfert/mobilemoney') => Http::response(['status_code' => 202, 'transactionStatus' => 'PENDING', 'transactionId' => (int) $id]),
                 str_ends_with($path, '/collect/v3/store/card') => Http::response(['status' => 'success', 'data' => ['status_code' => 202, 'transactionId' => (int) $id, 'transactionStatus' => 'Pending',
                     'transactionDescription' => 'Accepted', 'paymentPage' => 'https://marchand.maishapay.test/api/collect/postRedirectionRequest/' . $id]]),
+                str_ends_with($path, '/collect/v3/store/crypto') => Http::response(['status' => 'success', 'data' => ['transactionId' => (int) $id, 'transactionStatus' => 'Pending',
+                    'paymentPage' => 'https://marchand.maishapay.test/api/collect/crypto/' . $id]]),
                 str_contains($path, '/services/') => Http::response(['status' => 'success', 'data' => ['transaction_id' => $id, 'payment_status' => 'PENDING']], 201),
                 str_ends_with($path, '/transaction/rest/v2/check') => Http::response(['status_code' => 200, 'transactionId' => (int) $req['transactionId'],
                     'transactionStatus' => $this->status[(string) $req['transactionId']] ?? 'PENDING']),
@@ -133,6 +148,84 @@ class MaishapayTest extends TestCase
         $this->get('/api/card-checkout/' . $tx->source_external_ref)->assertOk();
         $this->assertSame('successful', $tx->fresh()->status);
         $this->assertSame(5000, (int) $u->wallet->fresh()->balance);
+    }
+
+    public function test_rejected_collect_and_payout_switch_gateway_according_to_corridor_routing(): void
+    {
+        config(['flashpay.peex.secret_key' => 'test-key', 'flashpay.rails.peex.enabled' => true, 'flashpay.failover.enabled' => true]);
+        $admin = $this->admin();
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/CG', ['partner' => 'maishapay'])->assertOk();
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/CG', ['routing_mode' => 'mixed', 'collect_backups' => ['peex'], 'payout_backups' => ['peex']])
+            ->assertOk()->assertJsonPath('corridor.routing_mode', 'mixed')->assertJsonPath('corridor.payout_backups', ['peex']);
+        $this->assertSame(['maishapay', 'peex'], app(\App\Services\Payments\GatewayRouting::class)->chain('CG', 'payout'));
+
+        // MaishaPay rejette collecte et versement (HTTP 404) → PEEX prend le relais
+        $this->reject = ['/collect/v2/store/mobileMoney', '/b2c/store/transfert/mobilemoney'];
+        $u = $this->user('242061112244');
+        $tx = app(\App\Services\Peex\PeexFlowService::class)->mobileTransfer($u, '+242061112244', '+242051112244', 1000, ['beneficiary_name' => 'BENEF TEST']);
+        $this->assertSame(['peex', 'awaiting_source'], [$tx->source_rail, $tx->stage]);
+        $this->assertSame('maishapay', $tx->meta['collect_attempts'][0]['rail']);
+        $this->assertSame('failed', RemitRequest::where('partner', 'maishapay')->where('method', 'deposit')->value('status'));
+
+        $tx = app(\App\Services\SwitchService::class)->onSourceConfirmed($tx->fresh());
+        $this->assertSame(['peex', 'awaiting_destination', 'processing'], [$tx->destination_rail, $tx->stage, $tx->status]);
+        $this->assertSame('maishapay', $tx->meta['payout_attempts'][0]['rail']);
+        $this->assertStringContainsString('404', $tx->meta['payout_attempts'][0]['error']);
+
+        // Manuel : aucune bascule, la collecte rejetée fait échouer l'opération (rien débité)
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/CG', ['routing_mode' => 'fixed'])->assertOk();
+        $tx2 = app(\App\Services\Peex\PeexFlowService::class)->mobileTransfer($u, '+242061112244', '+242051112244', 500, ['beneficiary_name' => 'BENEF TEST']);
+        $this->assertSame(['failed', 'maishapay'], [$tx2->status, $tx2->source_rail]);
+
+        // Une même référence peut exister chez deux partenaires (bascule MaishaPay → PawaPay)
+        RemitRequest::create(['partner' => 'pawapay_momo', 'reference' => $tx->reference, 'method' => 'payout', 'status' => 'new']);
+        $this->assertSame(2, RemitRequest::where('reference', $tx->reference)->count());
+    }
+
+    public function test_card_payment_left_pending_is_cancelled_then_reopened_if_paid_late(): void
+    {
+        $u = $this->user('242069990055');
+        \App\Models\LinkedAccount::create(['user_id' => $u->id, 'type' => 'card', 'card_brand' => 'Visa', 'card_last4' => '4242', 'account_holder' => 'JEAN TEST', 'is_default' => true, 'country' => 'CG']);
+        $tx = app(\App\Services\Peex\PeexFlowService::class)->cardDeposit($u->fresh(), 2000);
+        $this->travel(11)->minutes();
+        Artisan::call('flashpay:maintenance');
+        $tx = $tx->fresh();
+        $this->assertSame('failed', $tx->status);
+        $this->assertStringContainsString('10 minutes', $tx->failure_reason);
+
+        // MaishaPay confirme finalement le paiement : opération rouverte, wallet crédité
+        $req = RemitRequest::where('method', 'checkout')->firstOrFail();
+        $this->status[$req->partner_ref] = 'APPROVED';
+        Artisan::call('remit:sync');
+        $this->assertSame('successful', $tx->fresh()->status);
+        $this->assertSame(2000, (int) $u->wallet->fresh()->balance);
+    }
+
+    public function test_crypto_deposit_hidden_until_enabled_then_credits_wallet(): void
+    {
+        $u = $this->user('242069990066');
+        $methods = fn () => collect(app(\App\Services\Payments\PaymentMethodsService::class)->for('CG', 'deposit')['methods'])->keyBy('key');
+        $this->assertFalse($methods()->has('crypto'));
+
+        config(['payment_methods.crypto_driver' => 'maishapay', 'payment_methods.crypto_countries' => ['CG']]);
+        $this->assertTrue($methods()['crypto']['available']);
+        $this->assertSame(['BTC', 'ETH', 'USDT'], $methods()['crypto']['assets']);
+
+        $this->actingAs($u)->postJson('/api/pay/quote', ['operation' => 'deposit', 'source' => 'crypto', 'amount' => 10000])->assertOk();
+        $tx = app(\App\Services\Peex\PeexFlowService::class)->cryptoDeposit($u->fresh(), 10000, 'usdt');
+        $this->assertSame(['crypto', 'awaiting_card', 'USDT'], [$tx->source_rail, $tx->stage, $tx->meta['crypto_asset']]);
+        $sent = collect($this->sent)->first(fn ($r) => str_ends_with($r->url(), 'store/crypto'));
+        $this->assertSame(['CRYPTO', 'USDT'], [$sent['paymentChannel']['channel'], $sent['paymentChannel']['provider']]);
+
+        $req = RemitRequest::where('method', 'checkout')->firstOrFail();
+        $this->status[$req->partner_ref] = 'SUCCESS';
+        $this->get('/api/card-checkout/' . $tx->source_external_ref)->assertOk();
+        $tx = $tx->fresh();
+        $this->assertSame('successful', $tx->status);
+        $this->assertSame(10000, (int) $u->wallet->fresh()->balance);
+        $this->assertStringContainsString('Crypto USDT', (string) $tx->source_account);
+        $leg = collect(\App\Support\PartnerFees::of($tx)['legs'])->first();
+        $this->assertSame(['collect', 'MaishaPay'], [$leg['kind'], $leg['partner']]);
     }
 
     public function test_airtime_tv_and_bills_paid_from_wallet_with_refund_on_failure(): void

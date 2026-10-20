@@ -74,6 +74,10 @@ class QuoteService
         if ($src['type'] === 'bank') {
             $fee += $this->fees->fee('bank_debit', 'national', $amount);
         }
+        // Crypto (MaishaPay) : frais « crypto » de la grille (0 si non défini)
+        if ($src['type'] === 'crypto') {
+            $fee += $this->fees->fee('crypto', 'national', $amount);
+        }
 
         try {
             $fx = $this->fx->convert($amount, $src['currency'], $dst['currency']);
@@ -126,7 +130,7 @@ class QuoteService
             'available' => empty($problems),
             'problems' => array_values(array_unique($problems)),
             'problem_codes' => array_values(array_unique($this->codes)),
-            'async' => in_array($src['type'], ['mobile', 'card', 'bank'], true) || $dst['type'] === 'mobile',
+            'async' => in_array($src['type'], ['mobile', 'card', 'bank', 'crypto'], true) || $dst['type'] === 'mobile',
         ];
     }
 
@@ -269,6 +273,7 @@ class QuoteService
             'mobile' => $this->partnerFor($src['country'], 'collect_partner') . '_collect',
             'card' => ['wacepay' => 'digitwace_card', 'maishapay' => 'maishapay_card'][config('payment_methods.card_driver')] ?? 'card',
             'bank' => config('payment_methods.bank_debit_driver') === 'wacepay' ? 'digitwace_card' : null,
+            'crypto' => config('payment_methods.crypto_driver') === 'maishapay' ? 'maishapay_crypto' : null,
             default => null,
         };
         if ($collectKey) {
@@ -346,6 +351,30 @@ class QuoteService
                 'currency' => $wallet->currency ?: $c['currency'],
                 'operator' => 'Compte bancaire',
                 'rail' => 'bank',
+            ];
+        }
+
+        // Crypto-monnaie (MaishaPay Crypto Money) : page de paiement sécurisée, pays et devise du wallet
+        if ($type === 'crypto' && $side === 'source') {
+            $wallet = $e['wallet'] ?? throw new PeexException('Wallet introuvable');
+            $country = strtoupper($wallet->country ?: $this->countryOfUser($wallet->user));
+            $c = $this->corridors->country($country);
+            if (! PaymentMethodsService::cryptoEnabled($country)) {
+                $problems[] = 'La recharge en crypto-monnaie n\'est pas disponible.';
+            }
+            $asset = strtoupper((string) ($e['asset'] ?? ''));
+            return [
+                'type' => 'crypto',
+                'name' => $wallet->user?->full_name,
+                'phone' => null,
+                'asset' => $asset ?: null,
+                'country' => $country,
+                'country_name' => $c['name'],
+                'flag' => $c['flag'] ?? '',
+                'zone' => $c['zone'],
+                'currency' => $wallet->currency ?: $c['currency'],
+                'operator' => 'Crypto' . ($asset ? ' · ' . $asset : '') . ' (MaishaPay)',
+                'rail' => 'crypto',
             ];
         }
 

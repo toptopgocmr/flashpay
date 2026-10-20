@@ -62,6 +62,7 @@ class PaymentController extends Controller
             'deposit' => match ($v['source'] ?? null) {
                 'card' => $this->flows->quoteCardDeposit($user, $v['amount']),
                 'bank' => $this->flows->quoteBankDeposit($user, $v['amount']),
+                'crypto' => $this->flows->quoteCryptoDeposit($user, $v['amount'], $request->input('asset')),
                 default => $this->flows->quoteDeposit($user, $v['source_phone'] ?? $user->phone, $v['amount'], $v),
             },
             'withdraw' => $this->flows->quoteWithdraw($user, $v['destination_phone'] ?? $user->phone, $v['amount'], $v),
@@ -83,15 +84,17 @@ class PaymentController extends Controller
     public function deposit(Request $request)
     {
         $v = $request->validate([
-            'method' => 'nullable|in:mobile_money,card,bank',
+            'method' => 'nullable|in:mobile_money,card,bank,crypto',
             'phone' => 'nullable|string|max:25',
             'amount' => 'required|integer|min:10',
             'source_country' => 'nullable|string|size:2',
             'linked_account_id' => 'nullable|integer',
+            'asset' => 'nullable|string|max:10',
         ]);
         $tx = match ($v['method'] ?? 'mobile_money') {
             'card' => $this->flows->cardDeposit($request->user(), $v['amount'], array_filter(['linked_account_id' => $v['linked_account_id'] ?? null])),
             'bank' => $this->flows->bankDeposit($request->user(), $v['amount']),
+            'crypto' => $this->flows->cryptoDeposit($request->user(), $v['amount'], $v['asset'] ?? null),
             default => $this->flows->deposit($request->user(), $v['phone'] ?? $request->user()->phone, $v['amount'], $v),
         };
 
@@ -217,7 +220,7 @@ class PaymentController extends Controller
     {
         return $request->validate([
             'operation' => ($quote ? 'required' : 'nullable') . '|in:transfer,deposit,withdraw,merchant',
-            'source' => 'required_if:operation,transfer,merchant|in:wallet,mobile,card',
+            'source' => 'required_if:operation,transfer,merchant|in:wallet,mobile,card,bank,crypto',
             'source_phone' => 'nullable|string|max:25',
             'source_country' => 'nullable|string|size:2',
             'destination_phone' => 'required_if:operation,transfer|nullable|string|max:25',
@@ -306,6 +309,7 @@ class PaymentController extends Controller
             'outcome' => \App\Support\TransactionPresenter::outcome($tx),
             'checkout_url' => $pending && $tx->stage === 'awaiting_card' ? ($meta['checkout_url'] ?? null) : null,
             'message' => match (true) {
+                $pending && $tx->stage === 'awaiting_card' && $tx->source_rail === 'crypto' => 'Finalisez le paiement en crypto-monnaie sur la page sécurisée MaishaPay qui s\'est ouverte.',
                 $pending && $tx->stage === 'awaiting_card' => 'Finalisez le paiement par carte sur la page sécurisée qui s\'est ouverte.',
                 $tx->status === 'successful' => 'Opération réussie.',
                 $pending && $tx->stage === 'awaiting_pickup' => 'Présentez votre code de retrait ' . ($tx->destination_rail === 'atm' ? 'au GAB partenaire.' : 'à un agent FlashPay.'),

@@ -17,6 +17,7 @@ class PlatformSettings
         'peex_collect' => 'Recharges et paiements depuis mobile money (PEEX)',
         'peex_payout' => 'Envois et retraits vers mobile money (PEEX)',
         'card' => 'Paiement par carte',
+        'crypto' => 'Recharge en crypto-monnaie (MaishaPay)',
         'bank' => 'Virements bancaires',
         'agents' => 'Réseau d\'agents (dépôts / retraits cash)',
         'ecommerce' => 'API e-commerce',

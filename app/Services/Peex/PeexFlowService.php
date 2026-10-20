@@ -240,6 +240,23 @@ class PeexFlowService
         return $this->execute($user, $this->quoteBankDeposit($user, $amount), 'cash_in', $meta);
     }
 
+    /** Recharge du wallet en crypto-monnaie (MaishaPay Crypto Money, page de paiement sécurisée). */
+    public function quoteCryptoDeposit(User $user, int $amount, ?string $asset = null): array
+    {
+        $wallet = $this->walletOf($user);
+        return $this->quotes->quote([
+            'operation' => 'cash_in',
+            'amount' => $amount,
+            'source' => ['type' => 'crypto', 'wallet' => $wallet, 'asset' => $asset],
+            'destination' => ['type' => 'wallet', 'wallet' => $wallet],
+        ]);
+    }
+
+    public function cryptoDeposit(User $user, int $amount, ?string $asset = null, array $meta = []): Transaction
+    {
+        return $this->execute($user, $this->quoteCryptoDeposit($user, $amount, $asset), 'cash_in', $meta + array_filter(['crypto_asset' => $asset ? strtoupper($asset) : null]));
+    }
+
     public function quoteWithdraw(User $user, string $phone, int $amount, array $opt = []): array
     {
         return $this->quotes->quote([
@@ -378,7 +395,7 @@ class PeexFlowService
         $payload = [
             'type' => $type,
             'scope' => $q['scope'],
-            'source_rail' => match ($src['type']) { 'wallet' => 'wallet', 'card' => 'card', 'bank' => 'bank', default => $collectRail },
+            'source_rail' => match ($src['type']) { 'wallet' => 'wallet', 'card' => 'card', 'bank' => 'bank', 'crypto' => 'crypto', default => $collectRail },
             'source_account' => $src['type'] === 'mobile' ? $src['phone'] : null,
             'source_wallet_id' => $src['wallet_id'] ?? null,
             'destination_rail' => $payoutRail,
@@ -412,7 +429,7 @@ class PeexFlowService
         ];
 
         // Carte : la source est confirmée par la page de paiement sécurisée (3-D Secure)
-        if (in_array($src['type'], ['card', 'bank'], true)) {
+        if (in_array($src['type'], ['card', 'bank', 'crypto'], true)) {
             $payload['source_rail'] = $src['type'];
             // Marque et 4 derniers chiffres de la carte liée débitée (logo Visa / Mastercard, reçus)
             if ($src['type'] === 'card' && empty($payload['meta']['card_brand'])) {

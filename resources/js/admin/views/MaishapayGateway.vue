@@ -49,6 +49,9 @@
             <div class="gw-row"><span class="gw-dot" :class="{ off: !o.bills }"></span>
               <div class="gw-main"><b>Services (crédit, TV, factures)</b><small>FLASHPAY_BILLS_ENABLED</small></div>
               <div class="gw-end"><span class="gw-pill" :class="o.bills ? 'ok' : 'muted'">{{ o.bills ? 'Actifs' : 'Inactifs' }}</span></div></div>
+            <div class="gw-row"><span class="gw-dot" :class="{ off: !o.crypto?.enabled }"></span>
+              <div class="gw-main"><b>Crypto-monnaie ({{ (o.crypto?.assets || []).join(', ') }})</b><small>FLASHPAY_CRYPTO_DRIVER=maishapay · FLASHPAY_CRYPTO_COUNTRIES={{ (o.crypto?.countries || []).join(',') || '—' }}</small><small v-if="o.crypto?.note" style="color:#a16207">{{ o.crypto.note }}</small></div>
+              <div class="gw-end"><span class="gw-pill" :class="o.crypto?.enabled ? 'warn' : 'muted'">{{ o.crypto?.enabled ? 'Active (à valider)' : 'Inactive' }}</span></div></div>
           </div>
           <div class="gw-card-b">
             <button class="btn-normal" :disabled="testing || !o.configured" @click="test">{{ testing ? 'Test…' : 'Tester la connexion' }}</button>
@@ -126,7 +129,7 @@ const error = ref('')
 const toastMsg = ref(null)
 const testing = ref(false)
 const testRes = ref(null)
-const PATHS = { collect_mobile: 'Collecte mobile money', collect_card: 'Paiement carte', payout_mobile: 'Versement mobile money', check: 'Statut', airtime: 'Crédit téléphonique', paytv: 'Abonnement TV', utility: 'Factures' }
+const PATHS = { collect_mobile: 'Collecte mobile money', collect_card: 'Paiement carte', collect_crypto: 'Paiement crypto', payout_mobile: 'Versement mobile money', check: 'Statut', airtime: 'Crédit téléphonique', paytv: 'Abonnement TV', utility: 'Factures' }
 const STATUS = { new: 'Nouveau', pending: 'En cours', successful: 'Réussi', failed: 'Échoué' }
 const STATUS_CLS = { pending: 'info', successful: 'ok', failed: 'err' }
 let dn = null

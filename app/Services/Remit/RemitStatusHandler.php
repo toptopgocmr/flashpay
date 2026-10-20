@@ -49,9 +49,10 @@ class RemitStatusHandler
             $name = match ($req->partner) { 'pawapay_momo' => 'PawaPay', 'maishapay' => 'MaishaPay', default => RemitCountries::partnerName($req->partner) };
             if ($req->method === 'checkout') {
                 // Page de paiement carte (MaishaPay) : résultat relu auprès de l'API
-                $masked = \App\Support\TransactionPresenter::cardLabel($tx->meta ?? []);
+                $crypto = $tx->source_rail === 'crypto';
+                $masked = $crypto ? trim('Crypto ' . ($tx->meta['crypto_asset'] ?? '')) : \App\Support\TransactionPresenter::cardLabel($tx->meta ?? []);
                 app(\App\Services\Payments\CardPaymentService::class)->complete((string) $tx->source_external_ref, $status === 'successful',
-                    $status === 'successful' ? $masked . ' (' . $name . ')' : null, $status === 'successful' ? null : $name . ' : paiement par carte refusé (' . $reason . ')');
+                    $status === 'successful' ? $masked . ' (' . $name . ')' : null, $status === 'successful' ? null : $name . ' : paiement ' . ($crypto ? 'crypto' : 'par carte') . ' refusé (' . $reason . ')');
                 return $req->fresh();
             }
             if (in_array($req->method, ['airtime', 'paytv', 'utility'], true)) {

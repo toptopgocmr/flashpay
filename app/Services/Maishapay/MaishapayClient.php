@@ -151,6 +151,36 @@ class MaishapayClient
     }
 
     /**
+     * Page de paiement crypto (Bitcoin, Ethereum, USDT…) — « Collection via Crypto Money ».
+     * Format calqué sur la collecte carte v3 (même order, paymentChannel CRYPTO) tant que
+     * MaishaPay n'a pas publié la spécification : chemin et provider ajustables par variables.
+     * @param array{amount:int, currency:string, asset?:?string, first_name?:?string, last_name?:?string, phone?:?string, email?:?string, return_url:string} $p
+     * @return array{id:?string, status:string, raw_status:?string, raw:array, sent:array, url:?string}
+     */
+    public function collectCrypto(string $reference, array $p): array
+    {
+        $body = $this->base($reference) + [
+            'order' => [
+                'amount' => self::amount($p['amount']),
+                'currency' => strtoupper($p['currency']),
+                'customerFirstname' => $p['first_name'] ?: 'Client',
+                'customerLastname' => $p['last_name'] ?: 'FlashPay',
+                'customerPhoneNumber' => '+' . preg_replace('/\D/', '', (string) ($p['phone'] ?? '')),
+                'customerEmailAdress' => $p['email'] ?: config('flashpay.digitwace.default_email', 'clients@flashpay.cg'),
+            ],
+            'paymentChannel' => array_filter([
+                'channel' => 'CRYPTO',
+                'provider' => strtoupper((string) ($p['asset'] ?? '')) ?: null,
+                'callbackUrl' => $p['return_url'],
+            ]),
+        ];
+        $r = $this->operation('collect_crypto', $body);
+        $r['url'] = collect(['paymentPage', 'data.paymentPage', 'payment_page', 'data.payment_page', 'redirectUrl', 'data.redirectUrl', 'paymentUrl', 'data.paymentUrl'])
+            ->map(fn ($k) => data_get($r['raw'], $k))->first(fn ($v) => is_string($v) && str_starts_with($v, 'http'));
+        return $r;
+    }
+
+    /**
      * Versement vers un wallet mobile money (B2C).
      * @param array{phone:string, provider:string, amount:int, currency:string, name?:?string, motif?:?string} $p
      */

@@ -32,6 +32,16 @@ return [
     // sandbox = page de paiement simulée (aucune carte réelle débitée) ; none = « bientôt ».
     'card_driver' => env('FLASHPAY_CARD_DRIVER', filter_var(env('PEEX_SANDBOX', true), FILTER_VALIDATE_BOOLEAN) ? 'sandbox' : 'none'),
     'card_countries' => $list('FLASHPAY_CARD_COUNTRIES', '*'),
+    // Page de paiement carte / crypto non finalisée : annulée après ce délai (statut relu avant)
+    'card_checkout_timeout_minutes' => (int) env('FLASHPAY_CARD_TIMEOUT_MINUTES', 10),
+
+    // Crypto-monnaies (Bitcoin, Ethereum, USDT…) via MaishaPay « Crypto Money » : recharge du wallet.
+    // Désactivé par défaut : l'API crypto MaishaPay n'est pas encore publiée et la COBAC (mai 2022)
+    // interdit aux établissements de la CEMAC et à leurs partenaires techniques de régler en FCFA des
+    // opérations crypto. À n'activer qu'après accord écrit de MaishaPay et avis conformité.
+    'crypto_driver' => env('FLASHPAY_CRYPTO_DRIVER', 'none'), // maishapay | none
+    'crypto_countries' => $list('FLASHPAY_CRYPTO_COUNTRIES', ''),
+    'crypto_assets' => $list('FLASHPAY_CRYPTO_ASSETS', 'BTC,ETH,USDT'),
 
     // Prélèvement sur compte bancaire (recharge du wallet) : wacepay | sandbox | none
     'bank_debit_driver' => env('FLASHPAY_BANK_DEBIT_DRIVER', 'none'),
@@ -54,6 +64,7 @@ return [
             'mobile_money' => ['label' => 'Mobile money', 'description' => 'Depuis votre compte {operators}. Validation avec votre code secret.', 'icon' => 'phone', 'needs' => 'collect'],
             'card' => ['label' => 'Carte Visa / Mastercard', 'description' => 'Carte prépayée ou bancaire. Paiement sécurisé 3-D Secure.', 'icon' => 'card', 'needs' => 'card'],
             'bank' => ['label' => 'Depuis un compte bancaire', 'description' => 'Prélèvement sur votre compte en banque, validé sur la page sécurisée de la banque.', 'icon' => 'bank', 'needs' => 'bank_debit'],
+            'crypto' => ['label' => 'Crypto-monnaie', 'description' => 'Bitcoin, Ethereum, USDT… payés sur la page sécurisée MaishaPay ; votre wallet est crédité du montant.', 'icon' => 'crypto', 'needs' => 'crypto'],
             'agent_qr' => ['label' => 'Espèces chez un agent', 'description' => 'Montrez votre QR FlashPay à un agent et remettez-lui les espèces.', 'icon' => 'store', 'needs' => 'agents'],
         ],
         'withdraw' => [

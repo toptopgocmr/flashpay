@@ -35,6 +35,7 @@ class PartnerFees
         'maishapay_collect' => 'MaishaPay — collecte mobile money',
         'maishapay_payout' => 'MaishaPay — versement',
         'maishapay_card' => 'MaishaPay — carte bancaire',
+        'maishapay_crypto' => 'MaishaPay — crypto-monnaie',
         'card' => 'Carte (autre prestataire)',
     ];
 
@@ -179,6 +180,10 @@ class PartnerFees
                 $p = $srcRail === 'pawapay_momo' ? 'pawapay' : 'maishapay';
                 $req = $remit->first(fn ($r) => in_array($r->method, ['deposit', 'checkout'], true));
                 $legs[] = self::leg('collect', $p === 'pawapay' ? 'PawaPay' : 'MaishaPay', $p . ($srcRail === 'card' ? '_card' : '_collect'), $req?->partner_ref ?? $tx->source_external_ref, $req?->status,
+                    (int) $tx->amount + (int) $tx->fee, $tx->currency, self::reported($req, 'remit'), $rates, self::countryOf($tx, 'in'));
+            } elseif ($srcRail === 'crypto') {
+                $req = $remit->first(fn ($r) => $r->method === 'checkout');
+                $legs[] = self::leg('collect', 'MaishaPay', 'maishapay_crypto', $req?->partner_ref ?? $tx->source_external_ref, $req?->status,
                     (int) $tx->amount + (int) $tx->fee, $tx->currency, self::reported($req, 'remit'), $rates, self::countryOf($tx, 'in'));
             } elseif ($srcRail === 'card') {
                 $legs[] = self::leg('collect', 'Carte', 'card', $tx->source_external_ref, null,

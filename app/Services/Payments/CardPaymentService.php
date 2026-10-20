@@ -30,18 +30,21 @@ class CardPaymentService
 
     public function driver(?Transaction $tx = null): string
     {
-        return $tx && $tx->source_rail === 'bank'
-            ? (string) config('payment_methods.bank_debit_driver', 'none')
-            : (string) config('payment_methods.card_driver', 'none');
+        return match ($tx?->source_rail) {
+            'bank' => (string) config('payment_methods.bank_debit_driver', 'none'),
+            'crypto' => (string) config('payment_methods.crypto_driver', 'none'),
+            default => (string) config('payment_methods.card_driver', 'none'),
+        };
     }
 
     public function startCheckout(Transaction $tx): Transaction
     {
         $driver = $this->driver($tx);
         $bank = $tx->source_rail === 'bank';
-        $label = $bank ? 'La recharge depuis un compte bancaire' : 'Le paiement par carte';
-        if (! in_array($driver, ['sandbox', 'wacepay', 'maishapay'], true) || ($driver === 'maishapay' && $bank)) {
-            $tx->update(['status' => 'failed', 'stage' => null, 'failure_reason' => 'Passerelle ' . ($bank ? 'bancaire' : 'carte') . ' non configurée']);
+        $crypto = $tx->source_rail === 'crypto';
+        $label = $crypto ? 'La recharge en crypto-monnaie' : ($bank ? 'La recharge depuis un compte bancaire' : 'Le paiement par carte');
+        if (! in_array($driver, ['sandbox', 'wacepay', 'maishapay'], true) || ($driver === 'maishapay' && $bank) || ($crypto && $driver !== 'maishapay')) {
+            $tx->update(['status' => 'failed', 'stage' => null, 'failure_reason' => 'Passerelle ' . ($crypto ? 'crypto' : ($bank ? 'bancaire' : 'carte')) . ' non configurée']);
             throw new CashNetworkException("{$label} n'est pas encore disponible.");
         }
 
@@ -49,7 +52,7 @@ class CardPaymentService
         $ourUrl = url("/api/card-checkout/{$token}");
         $tx->update([
             'source_external_ref' => $token,
-            'meta' => ($tx->meta ?? []) + ['card_driver' => $driver, 'checkout_url' => $ourUrl, 'checkout_method' => $bank ? 'bank' : 'card'],
+            'meta' => ($tx->meta ?? []) + ['card_driver' => $driver, 'checkout_url' => $ourUrl, 'checkout_method' => $crypto ? 'crypto' : ($bank ? 'bank' : 'card')],
         ]);
 
         if ($driver === 'wacepay') {
@@ -78,13 +81,18 @@ class CardPaymentService
         }
 
         if ($driver === 'maishapay') {
-            // Page de paiement MaishaPay (carte 3-D Secure) ; retour et notification sur la page FlashPay
+            // Page de paiement MaishaPay (carte 3-D Secure ou crypto) ; retour et notification sur la page FlashPay
             $reference = $tx->reference . '-K' . (\App\Models\RemitRequest::where('transaction_id', $tx->id)->where('method', 'checkout')->count() + 1);
             $req = \App\Models\RemitRequest::create(['transaction_id' => $tx->id, 'partner' => 'maishapay', 'reference' => $reference, 'method' => 'checkout', 'status' => 'new']);
             try {
                 $user = $tx->initiator;
                 $names = preg_split('/\s+/', trim((string) ($user?->full_name ?: 'Client FlashPay'))) ?: ['Client'];
-                $res = app(\App\Services\Maishapay\MaishapayClient::class)->collectCard($reference, [
+                $client = app(\App\Services\Maishapay\MaishapayClient::class);
+                $res = $crypto ? $client->collectCrypto($reference, [
+                    'amount' => (int) $tx->amount + (int) $tx->fee, 'currency' => $tx->currency, 'asset' => $tx->meta['crypto_asset'] ?? null,
+                    'first_name' => array_shift($names), 'last_name' => implode(' ', $names) ?: 'FlashPay',
+                    'phone' => $user?->phone, 'email' => $user?->email, 'return_url' => $ourUrl,
+                ]) : $client->collectCard($reference, [
                     'amount' => (int) $tx->amount + (int) $tx->fee, 'currency' => $tx->currency, 'brand' => $tx->meta['card_brand'] ?? null,
                     'first_name' => array_shift($names), 'last_name' => implode(' ', $names) ?: 'FlashPay',
                     'phone' => $user?->phone, 'email' => $user?->email, 'address' => $user ? ($user->getAttributes()['address'] ?? null) : null, 'city' => $user ? ($user->getAttributes()['city'] ?? null) : null,
@@ -145,6 +153,18 @@ class CardPaymentService
             ->where('status', 'processing')->where('stage', 'awaiting_card')
             ->update(['stage' => 'awaiting_source', 'source_account' => $maskedCard]);
 
+        if (! $claimed && $ok) {
+            // Paiement confirmé APRÈS l'expiration de la page (client lent, 3-D Secure tardif) :
+            // la carte a bien été débitée → on rouvre l'opération pour créditer le client.
+            $late = Transaction::whereKey($tx->id)->where('status', 'failed')->first();
+            if ($late && ! empty(($late->meta ?? [])['card_expired'])) {
+                \Illuminate\Support\Facades\Log::warning('Carte : paiement confirmé après expiration — opération rouverte', ['reference' => $late->reference]);
+                $late->forceFill(['status' => 'processing', 'stage' => 'awaiting_card', 'failure_reason' => null,
+                    'meta' => array_merge($late->meta ?? [], ['card_late_success' => now()->toIso8601String()])])->saveQuietly();
+                $claimed = Transaction::whereKey($tx->id)->where('status', 'processing')->where('stage', 'awaiting_card')
+                    ->update(['stage' => 'awaiting_source', 'source_account' => $maskedCard]);
+            }
+        }
         if (! $claimed) {
             return $tx->fresh();
         }
@@ -172,20 +192,27 @@ class CardPaymentService
             : $this->switch->onSourceFailed($tx, $reason ?: 'Paiement par carte refusé');
     }
 
-    /** Paiements carte abandonnés (page jamais validée) : annulés après 30 min. */
-    public function expireAbandoned(int $minutes = 30): int
+    /**
+     * Paiements carte / crypto abandonnés (page jamais validée) : statut relu chez la passerelle,
+     * puis annulés après FLASHPAY_CARD_TIMEOUT_MINUTES (10 min par défaut). Un paiement confirmé
+     * plus tard par la passerelle rouvre l'opération (voir complete()).
+     */
+    public function expireAbandoned(?int $minutes = null): int
     {
+        $minutes ??= max(3, (int) config('payment_methods.card_checkout_timeout_minutes', 10));
         $n = 0;
         Transaction::where('status', 'processing')->where('stage', 'awaiting_card')
             ->where('created_at', '<', now()->subMinutes($minutes))
-            ->each(function (Transaction $tx) use (&$n) {
+            ->each(function (Transaction $tx) use (&$n, $minutes) {
                 if (in_array($tx->meta['card_driver'] ?? null, ['wacepay', 'maishapay'], true)) {
                     $tx = ($tx->meta['card_driver'] ?? null) === 'maishapay' ? $this->syncMaishapay($tx) : $this->syncWacepay($tx);
                     if ($tx->stage !== 'awaiting_card') {
                         return;
                     }
                 }
-                $this->complete($tx->source_external_ref, false, null, 'Paiement par carte abandonné');
+                $tx->forceFill(['meta' => array_merge($tx->meta ?? [], ['card_expired' => true])])->saveQuietly();
+                $this->complete($tx->source_external_ref, false, null, ($tx->source_rail === 'crypto' ? 'Paiement crypto' : 'Paiement par carte')
+                    . " non finalisé dans les {$minutes} minutes : opération annulée, aucun montant n'a été débité");
                 $n++;
             });
         return $n;

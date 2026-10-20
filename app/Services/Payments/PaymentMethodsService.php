@@ -26,6 +26,10 @@ class PaymentMethodsService
 
         $methods = [];
         foreach ($defs as $key => $def) {
+            // Crypto : invisible tant que le pilote n'est pas activé (aucune promesse « bientôt »)
+            if (($def['needs'] ?? null) === 'crypto' && config('payment_methods.crypto_driver', 'none') === 'none') {
+                continue;
+            }
             [$available, $reason] = $this->availability($def['needs'] ?? null, $iso, $c);
             $methods[] = [
                 'key' => $key,
@@ -35,7 +39,7 @@ class PaymentMethodsService
                 'available' => $available,
                 'reason' => $available ? null : $reason,
                 'operators' => $key === 'mobile_money' ? $operators : [],
-            ];
+            ] + (($def['needs'] ?? null) === 'crypto' ? ['assets' => array_values((array) config('payment_methods.crypto_assets', []))] : []);
         }
 
         // Disponibles d'abord, « bientôt » ensuite
@@ -68,6 +72,15 @@ class PaymentMethodsService
             && (in_array('*', $countries, true) || in_array(strtoupper($iso), $countries, true));
     }
 
+    /** Recharge en crypto (MaishaPay Crypto Money) : pilote actif, MaishaPay configuré, pays ouvert. */
+    public static function cryptoEnabled(string $iso): bool
+    {
+        $countries = config('payment_methods.crypto_countries', []);
+        return config('payment_methods.crypto_driver', 'none') === 'maishapay'
+            && app(\App\Services\Maishapay\MaishapayClient::class)->enabled()
+            && (in_array('*', $countries, true) || in_array(strtoupper($iso), $countries, true));
+    }
+
     public static function bankDebitEnabled(string $iso): bool
     {
         $countries = config('payment_methods.bank_debit_countries', []);
@@ -84,6 +97,7 @@ class PaymentMethodsService
             'atm' => [in_array($iso, config('payment_methods.atm_countries', []), true), 'Bientôt disponible (banque partenaire en cours)'],
             'card' => [self::cardEnabled($iso), 'Paiement par carte bientôt disponible (passerelle carte en cours)'],
             'bank_debit' => [self::bankDebitEnabled($iso), 'Recharge depuis un compte bancaire bientôt disponible'],
+            'crypto' => [self::cryptoEnabled($iso), 'Recharge en crypto-monnaie non disponible dans ce pays'],
             'bank' => [in_array($iso, config('payment_methods.bank_countries', []), true), 'Virement bancaire bientôt disponible (banque partenaire en cours)'],
             default => [true, null],
         };

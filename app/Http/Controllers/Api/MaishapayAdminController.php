@@ -30,6 +30,13 @@ class MaishapayAdminController extends \App\Http\Controllers\Controller
             'callback_url' => $client->callbackUrl(),
             'webhook_signed' => (bool) config('flashpay.maishapay.webhook_secret'),
             'card' => config('payment_methods.card_driver') === 'maishapay',
+            'crypto' => [
+                'enabled' => config('payment_methods.crypto_driver') === 'maishapay',
+                'countries' => array_values((array) config('payment_methods.crypto_countries', [])),
+                'assets' => array_values((array) config('payment_methods.crypto_assets', [])),
+                'path' => (string) config('flashpay.maishapay.paths.collect_crypto'),
+                'note' => 'API « Crypto Money » non publiée par MaishaPay (dossier Postman vide) : format à confirmer. Règlement en FCFA d\'opérations crypto interdit par la COBAC (mai 2022) — avis conformité requis.',
+            ],
             'bills' => app(\App\Services\Bills\BillPaymentService::class)->available(),
             'paths' => (array) config('flashpay.maishapay.paths', []),
             'countries' => $client->countries(),

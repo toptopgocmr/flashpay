@@ -19,6 +19,7 @@ class Tariff extends Model
         'cash_pickup' => 'Retrait cash avec code (agent)',
         'atm' => 'Retrait au GAB',
         'card' => 'Frais carte Visa / Mastercard',
+        'crypto' => 'Frais recharge crypto-monnaie',
         'bank_transfer' => 'Virement bancaire (règlement marchand)',
     ];
 

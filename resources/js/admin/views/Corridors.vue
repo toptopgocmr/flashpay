@@ -117,7 +117,7 @@
                       <option value="digitwace" :disabled="!waceOk(c, 'payin') && !waceOk(c, 'payout')">WacePay</option>
                       <option value="pawapay" :disabled="!c.pawapay?.collect || !c.pawapay?.payout">PawaPay{{ pawaNote(c) }}</option>
                       <option value="maishapay" :disabled="!c.maishapay">MaishaPay{{ c.maishapay ? '' : ' — non couvert' }}</option>
-                      <option value="mixed" disabled>Mixte</option>
+                      <option value="mixed" disabled>Par flux</option>
                     </select>
                     <button type="button" class="custom-btn" @click="custom[c.country] = !custom[c.country]">{{ custom[c.country] ? 'Masquer' : 'Par flux' }}</button>
                   </div>
@@ -141,6 +141,24 @@
                     </select>
                   </div>
                   </template>
+                  <div class="pl pl-route">
+                    <span class="lbl">Routage</span>
+                    <select class="api" :value="c.routing_mode || 'auto'" @change="update(c, { routing_mode: $event.target.value })" :title="ROUTING_HELP[c.routing_mode || 'auto']">
+                      <option value="auto">Automatique</option>
+                      <option value="mixed">Mixte (secours choisis)</option>
+                      <option value="fixed">Manuel (aucune bascule)</option>
+                    </select>
+                  </div>
+                  <template v-if="c.routing_mode === 'mixed'">
+                    <div v-for="flow in ['collect', 'payout']" :key="flow" class="pl pl-backup" :class="{ dim: !c[flow] }">
+                      <span class="lbl">{{ flow === 'collect' ? 'Secours coll.' : 'Secours vers.' }}</span>
+                      <select v-for="i in [0, 1]" :key="i" class="api sm" :value="(c[flow + '_backups'] || [])[i] || ''" @change="setBackup(c, flow, i, $event.target.value)">
+                        <option value="">{{ i === 0 ? '— aucun —' : '— 2e secours —' }}</option>
+                        <option v-for="p in PARTNERS.filter((p) => p !== c[flow + '_partner'])" :key="p" :value="p" :disabled="!backupOk(c, p, flow)">{{ partnerName(p) }}{{ backupOk(c, p, flow) ? '' : ' — non couvert' }}</option>
+                      </select>
+                    </div>
+                  </template>
+                  <div class="route-note">{{ routeSummary(c) }}</div>
                   <div v-if="c.wacepay" class="wace-avail" :title="c.wacepay.payers.map((p) => p.name || p.code).join(', ')">
                     WacePay ici : {{ [c.wacepay.payin && 'collecte', c.wacepay.payout && 'versement'].filter(Boolean).join(' + ') || '—' }} · {{ c.wacepay.payers.length }} opérateur(s)
                   </div>
@@ -452,6 +470,31 @@ async function diagnose() {
 }
 const rowErr = reactive({})
 const custom = reactive({})
+// Routage : bascule vers une autre passerelle quand l'API rejette l'opération (rien débité / versé)
+const PARTNERS = ['peex', 'digitwace', 'pawapay', 'maishapay']
+const ROUTING_HELP = {
+  auto: 'Si la passerelle rejette l\'opération, toute autre passerelle active qui couvre le pays prend le relais.',
+  mixed: 'Si la passerelle rejette l\'opération, les passerelles de secours choisies prennent le relais, dans l\'ordre.',
+  fixed: 'Une seule passerelle par flux : en cas de rejet, l\'opération échoue (et le client est remboursé).',
+}
+const backupOk = (c, p, flow) => ({
+  peex: c.source !== 'wacepay' && c.source !== 'world',
+  digitwace: waceOk(c, flow === 'collect' ? 'payin' : 'payout'),
+  pawapay: !!c.pawapay?.[flow],
+  maishapay: !!c.maishapay,
+})[p]
+function setBackup(c, flow, i, value) {
+  const list = [...(c[flow + '_backups'] || [])]
+  list[i] = value
+  update(c, { [flow + '_backups']: list.filter(Boolean) })
+}
+function routeSummary(c) {
+  const mode = c.routing_mode || 'auto'
+  if (mode === 'fixed') return 'Aucune bascule'
+  if (mode === 'auto') return 'Bascule automatique si rejet'
+  const f = (flow) => [c[flow + '_partner'], ...(c[flow + '_backups'] || [])].map(partnerName).join(' → ')
+  return 'Collecte : ' + f('collect') + ' · Versement : ' + f('payout')
+}
 // Passerelle du pays : la même pour tous les flux, sinon « Mixte » (réglage par flux)
 const gw = (c) => (c.collect_partner === c.payout_partner ? c.collect_partner : 'mixed')
 async function setGateway(c, partner) {
@@ -586,6 +629,8 @@ onMounted(load)
 .pl-gw .lbl { font-weight: 700; color: var(--text); }
 .custom-btn { background: none; border: 0; color: var(--link); font-size: 12px; cursor: pointer; padding: 0; white-space: nowrap; }
 .pl .lbl { width: 72px; font-size: 12px; color: var(--text-2); }
+.pl-backup select.sm { max-width: 120px; font-size: 12px; }
+.route-note { font-size: 11px; color: var(--text-2); margin: 2px 0 4px 80px; }
 .api.p-peex { border-color: #1e3a8a; color: #1e3a8a; font-weight: 700; }
 .api.p-digitwace { border-color: #ea7a17; color: #b45309; font-weight: 700; }
 .api.p-wacepay_remit { border-color: #ea7a17; color: #b45309; font-weight: 700; }

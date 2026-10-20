@@ -56,7 +56,7 @@ class MaishapayConnector implements PaymentRailConnector
 
     protected function start(string $method, string $ref, ?Transaction $tx, string $msisdn, ?string $country, ?string $operator, int $amount, string $currency, ?string $name, ?string $motif = null): array
     {
-        $req = RemitRequest::firstOrCreate(['reference' => $ref], [
+        $req = RemitRequest::firstOrCreate(['partner' => $this->railName(), 'reference' => $ref], [
             'transaction_id' => $tx?->id, 'partner' => 'maishapay', 'status' => 'new', 'method' => $method,
         ]);
         if ($req->partner_ref || in_array($req->status, ['pending', 'successful'], true)) {

@@ -54,7 +54,12 @@ class PayoutFailover
         $amount = (int) ($tx->destination_amount ?? $tx->amount);
         $currency = $tx->destination_currency ?: $tx->currency;
 
-        foreach ((array) config('flashpay.failover.order', self::RAILS) as $rail) {
+        // Ordre défini par le corridor : Manuel (aucune bascule), Mixte (secours choisis), Automatique
+        $routing = app(GatewayRouting::class);
+        if ($routing->mode($iso) === 'fixed') {
+            return null;
+        }
+        foreach ($routing->chain($iso, 'payout') as $rail) {
             if (in_array($rail, $tried, true) || ! in_array($rail, self::RAILS, true)) {
                 continue;
             }

@@ -54,7 +54,7 @@ class PeexCorridors
             if (! isset($all[$iso])) {
                 continue;
             }
-            foreach (['collect', 'payout', 'payout_api', 'collect_partner', 'payout_partner'] as $k) {
+            foreach (['collect', 'payout', 'payout_api', 'collect_partner', 'payout_partner', 'routing_mode', 'collect_backups', 'payout_backups'] as $k) {
                 if (($o[$k] ?? null) !== null) {
                     $all[$iso][$k] = $o[$k];
                 }
@@ -187,7 +187,8 @@ class PeexCorridors
         try {
             return Cache::remember('flashpay:corridor_settings', 300, fn () => \App\Models\CorridorSetting::all()
                 ->mapWithKeys(fn ($o) => [$o->country => ['collect' => $o->collect, 'payout' => $o->payout, 'payout_api' => $o->payout_api,
-                    'collect_partner' => $o->collect_partner, 'payout_partner' => $o->payout_partner]])
+                    'collect_partner' => $o->collect_partner, 'payout_partner' => $o->payout_partner,
+                    'routing_mode' => $o->routing_mode ?? null, 'collect_backups' => $o->collect_backups ?? null, 'payout_backups' => $o->payout_backups ?? null]])
                 ->all());
         } catch (\Throwable) {
             return []; // table absente (migration non lancée)
@@ -368,6 +369,9 @@ class PeexCorridors
                 'source' => $c['source'] ?? 'config',
                 'collect_partner' => $c['collect_partner'] ?? 'peex',
                 'payout_partner' => $c['payout_partner'] ?? 'peex',
+                'routing_mode' => $c['routing_mode'] ?? (string) config('flashpay.failover.default_mode', 'auto'),
+                'collect_backups' => array_values((array) ($c['collect_backups'] ?? [])),
+                'payout_backups' => array_values((array) ($c['payout_backups'] ?? [])),
                 'operators' => collect($c['operators'])->map(fn ($op, $key) => [
                     'corridor' => $key, 'label' => $op['label'], 'rail' => $op['rail'], 'prefixes' => $op['prefixes'],
                     'wacepay' => $op['wacepay'] ?? null,

@@ -139,8 +139,12 @@ return [
 
     'failover' => [
         'enabled' => (bool) env('FLASHPAY_FAILOVER', true),
-        'order' => array_filter(array_map('trim', explode(',', (string) env('FLASHPAY_FAILOVER_ORDER', 'peex,pawapay_momo,digitwace')))),
+        'order' => array_values(array_filter(array_map('trim', explode(',', (string) env('FLASHPAY_FAILOVER_ORDER', 'peex,pawapay_momo,digitwace,maishapay'))))),
         'max_switches' => (int) env('FLASHPAY_FAILOVER_MAX', 2),
+        // Mode de routage des pays sans réglage console : auto | mixed | fixed
+        'default_mode' => env('FLASHPAY_ROUTING_DEFAULT', 'auto'),
+        // Bascule aussi de la COLLECTE quand l'API rejette la demande (rien n'est débité)
+        'collect' => (bool) env('FLASHPAY_FAILOVER_COLLECT', true),
         // Remboursement mobile money impossible → montant + frais recrédités sur le wallet FlashPay du client
         'refund_to_wallet' => (bool) env('FLASHPAY_REFUND_TO_WALLET', true),
         // Remboursement sur le compte débité par le partenaire qui a collecté (WacePay, PawaPay ; PEEX toujours)
@@ -190,6 +194,8 @@ return [
         'paths' => [
             'collect_mobile' => env('MAISHAPAY_PATH_COLLECT_MOBILE', 'collect/v2/store/mobileMoney'),
             'collect_card' => env('MAISHAPAY_PATH_COLLECT_CARD', 'collect/v3/store/card'),
+            // Crypto Money : dossier Postman encore vide — chemin à confirmer par MaishaPay
+            'collect_crypto' => env('MAISHAPAY_PATH_COLLECT_CRYPTO', 'collect/v3/store/crypto'),
             'payout_mobile' => env('MAISHAPAY_PATH_PAYOUT_MOBILE', 'b2c/store/transfert/mobilemoney'),
             'check' => env('MAISHAPAY_PATH_CHECK', 'transaction/rest/v2/check'),
             // Services (doc Web API v2.1, à confirmer avec MaishaPay)

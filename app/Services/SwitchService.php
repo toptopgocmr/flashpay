@@ -138,8 +138,9 @@ class SwitchService
                     $tx->update(['stage' => 'awaiting_source']);
                     return $tx->fresh();
                 }
-                if ($result['status'] === 'failed' && ($fallback = $this->collectFallback($tx, $result))) {
+                if ($result['status'] === 'failed' && ($fallback = $this->collectFailover($tx, $result) ?? $this->collectFallback($tx, $result))) {
                     $result = $fallback;
+                    $tx->refresh();
                     if ($result['status'] === 'pending') {
                         $tx->update(['stage' => 'awaiting_source']);
                         return $tx->fresh();
@@ -156,6 +157,50 @@ class SwitchService
         }
 
         return $this->runDestination($tx);
+    }
+
+    /**
+     * Collecte REJETÉE par l'API du partenaire (rien n'a été prélevé) : nouvel essai via la
+     * passerelle de secours du corridor (mode Mixte ou Automatique). Renvoie le dernier
+     * résultat, ou null s'il n'y a pas d'alternative.
+     */
+    protected function collectFailover(Transaction $tx, array $result): ?array
+    {
+        if (! in_array($tx->source_rail, \App\Services\Payments\PayoutFailover::RAILS, true)) {
+            return null;
+        }
+        $iso = strtoupper((string) ($tx->meta['source_country'] ?? ''));
+        if ($iso === '') {
+            try {
+                $iso = app(\App\Services\Peex\PeexCorridors::class)->resolve((string) $tx->source_account)['country'];
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+        $routing = app(\App\Services\Payments\GatewayRouting::class);
+        $switched = false;
+        while ($result['status'] === 'failed') {
+            $meta = $tx->meta ?? [];
+            $attempts = (array) ($meta['collect_attempts'] ?? []);
+            $tried = array_merge(array_column($attempts, 'rail'), [$tx->source_rail]);
+            $next = $routing->nextCollect($iso, $tried, $tx->source_rail);
+            if (! $next) {
+                break;
+            }
+            $attempts[] = ['rail' => $tx->source_rail, 'partner' => $this->partnerLabel($tx->source_rail),
+                'error' => mb_substr($this->reason($result), 0, 200), 'ref' => $tx->source_external_ref, 'at' => now()->toIso8601String()];
+            Log::warning('Collecte : bascule automatique de partenaire', ['reference' => $tx->reference, 'from' => $tx->source_rail, 'to' => $next, 'error' => $this->reason($result)]);
+            $tx->update(['source_rail' => $next, 'source_external_ref' => null, 'meta' => array_merge($meta, ['collect_attempts' => $attempts])]);
+            $tx = $tx->fresh();
+            try {
+                $result = $this->connectorFor($next)->collect($tx->source_account, $tx->amount + $tx->fee, $tx->currency, $tx->reference);
+            } catch (\Throwable $e) {
+                $result = ['status' => 'failed', 'external_ref' => null, 'raw' => ['error' => $e->getMessage()]];
+            }
+            $tx->update(['source_external_ref' => $result['external_ref'] ?? null]);
+            $switched = true;
+        }
+        return $switched ? $result : null;
     }
 
     /**
@@ -367,8 +412,8 @@ class SwitchService
 
         // Carte bancaire / compte bancaire (pas de remboursement par API chez le partenaire),
         // ou partenaire de collecte indisponible : montant ET frais recrédités sur le wallet FlashPay.
-        if (in_array($tx->source_rail, ['card', 'bank', 'peex', 'digitwace', 'pawapay_momo', 'maishapay'], true)
-            && ($done = $this->refundToWallet($tx, $reason, in_array($tx->source_rail, ['card', 'bank'], true) ? 'Remboursement sur la carte / le compte bancaire non disponible chez le partenaire' : null))) {
+        if (in_array($tx->source_rail, ['card', 'bank', 'crypto', 'peex', 'digitwace', 'pawapay_momo', 'maishapay'], true)
+            && ($done = $this->refundToWallet($tx, $reason, in_array($tx->source_rail, ['card', 'bank', 'crypto'], true) ? 'Remboursement sur la carte / le compte bancaire / en crypto non disponible chez le partenaire' : null))) {
             return $done;
         }
 

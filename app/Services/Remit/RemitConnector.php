@@ -42,7 +42,7 @@ abstract class RemitConnector implements PaymentRailConnector
     {
         $tx = Transaction::where('reference', $reference)->first();
         $remit = (array) ($tx?->meta['remit'] ?? []);
-        $req = RemitRequest::firstOrCreate(['reference' => $reference], [
+        $req = RemitRequest::firstOrCreate(['partner' => $this->railName(), 'reference' => $reference], [
             'transaction_id' => $tx?->id, 'partner' => $this->railName(), 'status' => 'new',
             'method' => $remit['method'] ?? null, 'business_type' => $remit['business_type'] ?? null,
         ]);

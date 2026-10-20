@@ -217,7 +217,18 @@ class PricingAdminController extends Controller
             // Passerelle unique : collecte ET versement confiés au même partenaire
             'partner' => 'sometimes|in:peex,digitwace,pawapay,maishapay',
             'note' => 'sometimes|nullable|string|max:190',
+            // Routage : Manuel (passerelle unique), Mixte (secours choisis), Automatique (toute passerelle active)
+            'routing_mode' => 'sometimes|in:fixed,mixed,auto',
+            'collect_backups' => 'sometimes|nullable|array|max:2',
+            'collect_backups.*' => 'in:peex,digitwace,pawapay,maishapay',
+            'payout_backups' => 'sometimes|nullable|array|max:2',
+            'payout_backups.*' => 'in:peex,digitwace,pawapay,maishapay',
         ]);
+        foreach (['collect_backups', 'payout_backups'] as $f) {
+            if (array_key_exists($f, $v)) {
+                $v[$f] = array_values(array_unique(array_filter((array) $v[$f])));
+            }
+        }
         // PEEX ne couvre que ses pays (config) : refusé pour les pays ajoutés (WacePay / reste du monde)
         foreach (['collect_partner', 'payout_partner'] as $f) {
             if (($v[$f] ?? null) === 'peex' && ($this->corridors->defaults()[$iso]['source'] ?? null) === 'world') {
@@ -279,6 +290,12 @@ class PricingAdminController extends Controller
                 . ($off($v['payout_partner']) ? ' Attention : ' . $offName($v['payout_partner']) . ' n\'est pas encore configuré, les envois vers ce pays seront refusés.' : ''),
             isset($v['collect_partner']) => 'Collecte depuis ' . $iso . ' gérée par ' . PeexCorridors::partnerName($v['collect_partner']) . '.'
                 . ($off($v['collect_partner']) ? ' Attention : ' . $offName($v['collect_partner']) . ' n\'est pas encore configuré, les recharges / paiements depuis ce pays seront refusés.' : ''),
+            isset($v['routing_mode']) => match ($v['routing_mode']) {
+                'fixed' => "Routage manuel pour {$iso} : une seule passerelle par flux, aucune bascule.",
+                'mixed' => "Routage mixte pour {$iso} : en cas de rejet, les passerelles de secours choisies prennent le relais, dans l'ordre.",
+                default => "Routage automatique pour {$iso} : en cas de rejet, toute autre passerelle active qui couvre le pays prend le relais.",
+            },
+            isset($v['collect_backups']) || isset($v['payout_backups']) => "Passerelles de secours de {$iso} enregistrées.",
             default => 'Corridor mis à jour.',
         };
 
