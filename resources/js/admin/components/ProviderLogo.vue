@@ -35,6 +35,7 @@ const BRANDS = [
   ['notchpay', /notch/i, '#111827', 'NP', 'png'],
   ['terrapay', /terra\s*pay/i, '#00a19a', 'TP', 'png'],
   ['maishapay', /maisha\s*pay/i, '#16a34a', 'MP', 'png'],
+  ['fincra', /fincra/i, '#6d28d9', 'FC', 'png'],
   ['flashpay', /flash\s*pay|wallet|interne/i, '#ffffff', 'FP', 'svg'],
 ]
 

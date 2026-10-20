@@ -62,6 +62,15 @@ return [
             'driver' => \App\Services\Maishapay\MaishapayConnector::class,
             'enabled' => (bool) env('MAISHAPAY_ENABLED', false),
         ],
+        // Fincra : collecte (checkout/charges), versements (disbursements/payouts) et remittance internationale
+        'fincra' => [
+            'driver' => \App\Services\Fincra\FincraConnector::class,
+            'enabled' => (bool) env('FINCRA_ENABLED', false),
+        ],
+        'fincra_remit' => [
+            'driver' => \App\Services\Fincra\FincraRemitConnector::class,
+            'enabled' => (bool) env('FINCRA_ENABLED', false),
+        ],
     ],
 
     /*
@@ -139,7 +148,7 @@ return [
 
     'failover' => [
         'enabled' => (bool) env('FLASHPAY_FAILOVER', true),
-        'order' => array_values(array_filter(array_map('trim', explode(',', (string) env('FLASHPAY_FAILOVER_ORDER', 'peex,pawapay_momo,digitwace,maishapay'))))),
+        'order' => array_values(array_filter(array_map('trim', explode(',', (string) env('FLASHPAY_FAILOVER_ORDER', 'peex,pawapay_momo,digitwace,maishapay,fincra'))))),
         'max_switches' => (int) env('FLASHPAY_FAILOVER_MAX', 2),
         // Mode de routage des pays sans réglage console : auto | mixed | fixed
         'default_mode' => env('FLASHPAY_ROUTING_DEFAULT', 'auto'),
@@ -205,6 +214,45 @@ return [
         ],
         // Opération inconnue chez MaishaPay après ce délai : jamais arrivée → échec
         'not_found_minutes' => (int) env('MAISHAPAY_NOT_FOUND_MINUTES', 2),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fincra (https://docs.fincra.com) — collecte mobile money, versements, remittance
+    |--------------------------------------------------------------------------
+    | Sandbox : https://sandboxapi.fincra.com — production : https://api.fincra.com
+    | En-têtes : api-key (clé secrète), x-pub-key (clé publique), x-business-id (identifiant entreprise).
+    | Clés : portail Fincra › Settings › Portal Settings / API keys. Variables Railway uniquement.
+    | Webhooks (à saisir dans le portail Fincra) : {APP_URL}/api/webhooks/fincra
+    | Signature : en-tête « signature » = HMAC-SHA512 (hex) du corps, clé = webhook secret (FINCRA_WEBHOOK_SECRET).
+    */
+    'fincra' => [
+        'enabled' => (bool) env('FINCRA_ENABLED', false),
+        'base_url' => env('FINCRA_BASE_URL', 'https://sandboxapi.fincra.com'),
+        'secret_key' => env('FINCRA_SECRET_KEY', ''),
+        'public_key' => env('FINCRA_PUBLIC_KEY', ''),
+        'business_id' => env('FINCRA_BUSINESS_ID', ''),
+        'webhook_secret' => env('FINCRA_WEBHOOK_SECRET', ''),
+        'timeout' => (int) env('FINCRA_TIMEOUT', 40),
+        // Pays où Fincra est proposé comme passerelle nationale (Pays & change) — devises de collecte
+        // publiées : XAF, XOF, KES, GHS, UGX, ZMW, TZS. À confirmer avec Fincra (grille tarifaire par pays).
+        'countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('FINCRA_COUNTRIES', 'CG,CM,GA,SN,CI,BJ,BF,TG,ML,KE,GH,UG,ZM,TZ'))))),
+        // Pays de destination proposés pour la remittance internationale via Fincra
+        'remit_countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('FINCRA_REMIT_COUNTRIES',
+            'CM,GA,TD,CF,GQ,SN,CI,BJ,BF,TG,ML,NE,GW,GH,NG,KE,UG,TZ,ZM,RW,MW,ZA,FR,BE,DE,ES,IT,PT,NL,LU,GB,US,CA,CN'))))),
+        // Remittance : devise du solde Fincra débité (vide = même devise que le bénéficiaire, sans conversion).
+        // Ex. USD : FlashPay garde un solde USD chez Fincra, Fincra convertit (devis /quotes/generate valable 30 s).
+        'remit_source_currency' => strtoupper((string) env('FINCRA_REMIT_SOURCE_CURRENCY', '')),
+        // Qui supporte les frais Fincra d'une conversion : business (FlashPay) | customer (déduits du montant reçu)
+        'fee_bearer' => env('FINCRA_FEE_BEARER', 'business'),
+        // Numéro mobile money envoyé avec « + » (doc v3 : indicatif + numéro, sans « + »)
+        'msisdn_plus' => (bool) env('FINCRA_MSISDN_PLUS', false),
+        // Solde Fincra vérifié avant chaque versement (GET /wallets)
+        'check_balance' => (bool) env('FINCRA_CHECK_BALANCE', true),
+        // Opération inconnue chez Fincra après ce délai : jamais arrivée → échec (remboursement)
+        'not_found_minutes' => (int) env('FINCRA_NOT_FOUND_MINUTES', 2),
+        // E-mail client par défaut (champ customer.email obligatoire pour une collecte)
+        'default_email' => env('FINCRA_DEFAULT_EMAIL', 'clients@flashpay.cg'),
     ],
 
     // Services payés depuis le wallet (crédit, TV, factures) — exécutés par MaishaPay

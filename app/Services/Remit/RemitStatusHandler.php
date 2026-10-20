@@ -46,7 +46,7 @@ class RemitStatusHandler
     {
         $req->update(['status' => $status, 'finalized_at' => now()]);
         if ($tx = $req->transaction) {
-            $name = match ($req->partner) { 'pawapay_momo' => 'PawaPay', 'maishapay' => 'MaishaPay', default => RemitCountries::partnerName($req->partner) };
+            $name = match ($req->partner) { 'pawapay_momo' => 'PawaPay', 'maishapay' => 'MaishaPay', 'fincra', 'fincra_remit' => 'Fincra', default => RemitCountries::partnerName($req->partner) };
             if ($req->method === 'checkout') {
                 // Page de paiement carte (MaishaPay) : résultat relu auprès de l'API
                 $crypto = $tx->source_rail === 'crypto';

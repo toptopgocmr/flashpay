@@ -52,6 +52,13 @@ class SwitchService
         if ($rail === 'maishapay' && config('flashpay.rails.maishapay.enabled', false)) {
             return app(\App\Services\Maishapay\MaishapayConnector::class);
         }
+        // Fincra : collecte / versements mobile money (national) et remittance internationale
+        if ($rail === 'fincra' && config('flashpay.rails.fincra.enabled', false)) {
+            return app(\App\Services\Fincra\FincraConnector::class);
+        }
+        if ($rail === 'fincra_remit' && config('flashpay.rails.fincra_remit.enabled', false)) {
+            return app(\App\Services\Fincra\FincraRemitConnector::class);
+        }
         if ($rail === 'pawapay_momo' && config('flashpay.rails.pawapay_momo.enabled', false)) {
             return app(\App\Services\Remit\PawapayMomoConnector::class);
         }
@@ -312,7 +319,7 @@ class SwitchService
     protected function partnerLabel(?string $rail): string
     {
         return \App\Services\Payments\PayoutFailover::NAMES[$rail] ?? match ($rail) {
-            'wacepay_remit' => 'WacePay', 'terrapay' => 'TerraPay', 'pawapay' => 'PawaPay', 'maishapay' => 'MaishaPay', default => ucfirst((string) $rail),
+            'wacepay_remit' => 'WacePay', 'terrapay' => 'TerraPay', 'pawapay' => 'PawaPay', 'maishapay' => 'MaishaPay', 'fincra', 'fincra_remit' => 'Fincra', default => ucfirst((string) $rail),
         };
     }
 
@@ -412,7 +419,7 @@ class SwitchService
 
         // Carte bancaire / compte bancaire (pas de remboursement par API chez le partenaire),
         // ou partenaire de collecte indisponible : montant ET frais recrédités sur le wallet FlashPay.
-        if (in_array($tx->source_rail, ['card', 'bank', 'crypto', 'peex', 'digitwace', 'pawapay_momo', 'maishapay'], true)
+        if (in_array($tx->source_rail, ['card', 'bank', 'crypto', 'peex', 'digitwace', 'pawapay_momo', 'maishapay', 'fincra'], true)
             && ($done = $this->refundToWallet($tx, $reason, in_array($tx->source_rail, ['card', 'bank', 'crypto'], true) ? 'Remboursement sur la carte / le compte bancaire / en crypto non disponible chez le partenaire' : null))) {
             return $done;
         }
@@ -531,7 +538,7 @@ class SwitchService
             'peex' => \App\Models\PeexRequest::where('transaction_id', $tx->id)->get()
                 ->contains(fn ($r) => PeexConnector::legOf((string) $r->track_id) === 'C' && \App\Models\PeexRequest::normalize($r->status) === 'successful'),
             'digitwace' => \App\Models\DigitwaceRequest::where('transaction_id', $tx->id)->where('operation', 'payin')->where('status', 'successful')->exists(),
-            'pawapay_momo', 'maishapay' => \App\Models\RemitRequest::where('transaction_id', $tx->id)->where('partner', $tx->source_rail)->where('method', 'deposit')->where('status', 'successful')->exists(),
+            'pawapay_momo', 'maishapay', 'fincra' => \App\Models\RemitRequest::where('transaction_id', $tx->id)->where('partner', $tx->source_rail)->where('method', 'deposit')->where('status', 'successful')->exists(),
             default => false,
         };
     }
@@ -588,7 +595,7 @@ class SwitchService
     /** Le partenaire qui a collecté peut-il rembourser le numéro débité ? */
     protected function canRefundToSource(Transaction $tx): bool
     {
-        if (! $tx->source_account || ! in_array($tx->source_rail, ['peex', 'digitwace', 'pawapay_momo', 'maishapay'], true)) {
+        if (! $tx->source_account || ! in_array($tx->source_rail, ['peex', 'digitwace', 'pawapay_momo', 'maishapay', 'fincra'], true)) {
             return false;
         }
         if ($tx->source_rail !== 'peex' && ! config('flashpay.failover.refund_to_source', true)) {

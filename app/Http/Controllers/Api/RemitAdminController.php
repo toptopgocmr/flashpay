@@ -50,6 +50,7 @@ class RemitAdminController extends Controller
         $wace = app(WacepayRemitClient::class);
         $terra = app(TerrapayClient::class);
         $pawa = app(PawapayClient::class);
+        $fincra = app(\App\Services\Fincra\FincraClient::class);
         $info = [
             'wacepay_remit' => ['client' => $wace, 'env' => ['WACEPAY_REMIT_ENABLED', 'WACEPAY_REMIT_EMAIL', 'WACEPAY_REMIT_PASSWORD'],
                 'missing' => array_keys(array_filter(['WACEPAY_REMIT_ENABLED' => ! config('flashpay.wacepay_remit.enabled'), 'WACEPAY_REMIT_EMAIL' => ! config('flashpay.wacepay_remit.email'), 'WACEPAY_REMIT_PASSWORD' => ! config('flashpay.wacepay_remit.password')])),
@@ -60,6 +61,9 @@ class RemitAdminController extends Controller
             'pawapay' => ['client' => $pawa,
                 'missing' => array_keys(array_filter(['PAWAPAY_ENABLED' => ! config('flashpay.pawapay.enabled'), 'PAWAPAY_API_TOKEN' => ! config('flashpay.pawapay.token')])),
                 'note' => 'Mobile money en Afrique · mode ' . $pawa->mode()],
+            'fincra_remit' => ['client' => $fincra,
+                'missing' => array_keys(array_filter(['FINCRA_ENABLED' => ! config('flashpay.fincra.enabled'), 'FINCRA_SECRET_KEY' => ! config('flashpay.fincra.secret_key'), 'FINCRA_BUSINESS_ID' => ! config('flashpay.fincra.business_id')])),
+                'note' => 'Mobile money et banque · Afrique, Europe, Amériques' . (config('flashpay.fincra.remit_source_currency') ? ' · solde ' . config('flashpay.fincra.remit_source_currency') . ' converti' : '')],
         ];
         $partners = collect(RemitCountries::PARTNERS)->map(fn ($p, $key) => [
             'key' => $key,
@@ -85,12 +89,12 @@ class RemitAdminController extends Controller
         ]);
     }
 
-    /** { partner: wacepay_remit | terrapay | pawapay | off | default } */
+    /** { partner: wacepay_remit | terrapay | pawapay | fincra_remit | off | default } */
     public function updateCountry(Request $request, PlatformSettings $settings, string $iso)
     {
         $iso = strtoupper($iso);
         abort_unless(RemitCountries::get($iso), 404, 'Pays inconnu.');
-        $v = $request->validate(['partner' => 'required|in:wacepay_remit,terrapay,pawapay,off,default']);
+        $v = $request->validate(['partner' => 'required|in:wacepay_remit,terrapay,pawapay,fincra_remit,off,default']);
         if (! in_array($v['partner'], ['off', 'default'], true) && ! in_array($v['partner'], $this->availableFor($iso), true)) {
             return response()->json(['message' => RemitCountries::partnerName($v['partner']) . " ne couvre pas {$iso}."], 422);
         }
@@ -134,6 +138,14 @@ class RemitAdminController extends Controller
                 $out['pawapay'] = ['ok' => false, 'error' => $e->getMessage(), 'accounts' => []];
             }
         }
+        $fincra = app(\App\Services\Fincra\FincraClient::class);
+        if ($fincra->enabled()) {
+            try {
+                $out['fincra_remit'] = ['ok' => true, 'accounts' => array_map(fn ($b) => ['currency' => $b['currency'], 'balance' => $b['available']], $fincra->balances())];
+            } catch (\Throwable $e) {
+                $out['fincra_remit'] = ['ok' => false, 'error' => $e->getMessage(), 'accounts' => []];
+            }
+        }
         return response()->json($out);
     }
 
@@ -143,6 +155,9 @@ class RemitAdminController extends Controller
         $out = ['wacepay_remit', 'terrapay'];
         if (PawapayClient::iso3($iso) && ! in_array($iso, ['FR', 'US', 'BE', 'GB'], true)) {
             $out[] = 'pawapay';
+        }
+        if (in_array(strtoupper($iso), app(\App\Services\Fincra\FincraClient::class)->remitCountries(), true)) {
+            $out[] = 'fincra_remit';
         }
         return $out;
     }

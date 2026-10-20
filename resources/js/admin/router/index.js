@@ -21,6 +21,7 @@ const routes = [
   { path: '/wacepay', component: () => import('../views/WacepayGateway.vue') },
   { path: '/pawapay', component: () => import('../views/PawapayGateway.vue') },
   { path: '/maishapay', component: () => import('../views/MaishapayGateway.vue') },
+  { path: '/fincra', component: () => import('../views/FincraGateway.vue') },
   { path: '/corridors', component: () => import('../views/Corridors.vue') },
   // Cahier des charges v1.5
   { path: '/notifications', component: () => import('../views/Notifications.vue') },

@@ -98,7 +98,9 @@ class InternationalTransferService
         protected TerrapayClient $terra,
         protected PawapayClient $pawa,
         protected RemitProfileService $profiles,
+        protected ?\App\Services\Fincra\FincraClient $fincra = null,
     ) {
+        $this->fincra ??= app(\App\Services\Fincra\FincraClient::class);
     }
 
     // ------------------------------------------------------------ Options pour l'app
@@ -215,7 +217,7 @@ class InternationalTransferService
                 $out['problems'][] = str_replace('Recharge refusée', 'Débit refusé', $e->getMessage());
                 return $out;
             }
-            $out['collect_partner'] = match ($out['rail']) { 'digitwace' => 'digitwace', 'pawapay_momo' => 'pawapay', 'maishapay' => 'maishapay', default => 'peex' };
+            $out['collect_partner'] = match ($out['rail']) { 'digitwace' => 'digitwace', 'pawapay_momo' => 'pawapay', 'maishapay' => 'maishapay', 'fincra' => 'fincra', default => 'peex' };
         } elseif ($type === 'card') {
             $out['rail'] = 'card';
             $out['label'] = 'Carte bancaire';
@@ -242,7 +244,7 @@ class InternationalTransferService
      */
     protected function payoutFee(?string $partner, string $iso, array $fx, string $from, string $to): int
     {
-        $key = ['pawapay' => 'pawapay_payout', 'digitwace' => 'digitwace_payout', 'maishapay' => 'maishapay_payout'][$partner] ?? null;
+        $key = ['pawapay' => 'pawapay_payout', 'digitwace' => 'digitwace_payout', 'maishapay' => 'maishapay_payout', 'fincra_remit' => 'fincra_remit'][$partner] ?? null;
         if (! $key || ! config('flashpay.fees.pass_partner_fees', true) || (int) ($fx['amount'] ?? 0) <= 0) {
             return 0;
         }
@@ -286,6 +288,26 @@ class InternationalTransferService
         $message = null;
         if ($p === 'terrapay') {
             $methods = ['wallet' => [['code' => '', 'name' => 'Mobile money (opérateur détecté automatiquement)']], 'bank' => [['code' => '', 'name' => 'Virement bancaire']]];
+        } elseif ($p === 'fincra_remit') {
+            // Opérateurs mobile money et banques publiés par Fincra pour ce pays (/core/banks)
+            foreach (['wallet' => 'mobile_money_wallet', 'bank' => 'bank_account'] as $m => $dest) {
+                try {
+                    $list = $this->fincra->institutions($iso, $dest, $c['currency']);
+                } catch (\Throwable) {
+                    $list = null;
+                }
+                if ($list === null) {
+                    // Liste illisible : mobile money avec opérateur détecté, banque en saisie libre
+                    $methods[$m] = [['code' => '', 'name' => $m === 'wallet' ? 'Mobile money (opérateur détecté automatiquement)' : 'Virement bancaire']];
+                } elseif ($m === 'wallet' && $list) {
+                    $methods[$m] = array_map(fn ($i) => ['code' => $i['code'], 'name' => $i['name']], $list);
+                } elseif ($m === 'bank' && $list) {
+                    $methods[$m] = [['code' => '', 'name' => 'Virement bancaire']];
+                }
+            }
+            if (! $methods) {
+                $message = "Fincra ne verse pas encore vers {$c['name']} ({$c['currency']}).";
+            }
         } elseif ($p === 'pawapay') {
             $providers = null;
             try {
@@ -351,6 +373,14 @@ class InternationalTransferService
     public function banks(string $iso, array $service): array
     {
         $c = $this->country($iso);
+        if ($c['partner'] === 'fincra_remit') {
+            try {
+                $banks = array_map(fn ($b) => ['id' => $b['id'], 'name' => $b['name'], 'code' => $b['code']], $this->fincra->institutions($iso, 'bank_account', $c['currency']));
+            } catch (\Throwable) {
+                return ['free_text' => true, 'banks' => [], 'warning' => 'Liste des banques indisponible : saisissez le nom de la banque.'];
+            }
+            return ['free_text' => ! $banks, 'banks' => array_values(array_filter($banks, fn ($b) => $b['id'] > 0))];
+        }
         if ($c['partner'] !== 'wacepay_remit') {
             return ['free_text' => true, 'banks' => []];
         }
@@ -463,6 +493,11 @@ class InternationalTransferService
         if (! $problems && ($p = $this->partnerBalanceProblem($c['partner'], $amount, $currency))) {
             $problems[] = $p;
         }
+        // Fincra sans conversion : le solde Fincra dans la devise du bénéficiaire doit couvrir le versement
+        if (! $problems && ($c['partner'] ?? null) === 'fincra_remit' && ! config('flashpay.fincra.remit_source_currency')
+            && ($avail = $this->fincra->availableFor($c['currency'])) !== null && $avail < (float) ($fx['amount'] ?? 0)) {
+            $problems[] = 'Transferts vers ' . $c['name'] . ' momentanément suspendus (réapprovisionnement en cours). Réessayez plus tard ou envoyez un montant plus petit.';
+        }
 
         return [
             'operation' => 'international_transfer',
@@ -554,6 +589,10 @@ class InternationalTransferService
             'note' => isset($in['note']) ? mb_substr((string) $in['note'], 0, 140) : null,
         ];
 
+        // Fincra : opérateur (mobileMoneyCode) choisi dans l'app
+        if ($q['partner'] === 'fincra_remit' && $method === 'wallet' && empty($remit['account']['provider']) && ! empty($remit['service']['code'])) {
+            $remit['account']['provider'] = $remit['service']['code'];
+        }
         // pawaPay : opérateur choisi dans l'app (sinon détecté depuis le numéro)
         if ($q['partner'] === 'pawapay' && $method === 'wallet' && empty($remit['account']['provider']) && ! empty($remit['service']['code'])) {
             $remit['account']['provider'] = $remit['service']['code'];
@@ -629,6 +668,14 @@ class InternationalTransferService
                 $pred = $this->pawa->predictProvider($remit['account']['msisdn']);
                 if ($pred['country'] && PawapayClient::iso3($remit['country']) && $pred['country'] !== PawapayClient::iso3($remit['country'])) {
                     throw new PeexException('Ce numéro n\'appartient pas à un opérateur de ' . (RemitCountries::get($remit['country'])['name'] ?? $remit['country']) . '.');
+                }
+            } elseif ($remit['partner'] === 'fincra_remit') {
+                // Pays couvert, banque reconnue (le code banque Fincra est exigé pour un virement)
+                if (! in_array($remit['country'], $this->fincra->remitCountries(), true)) {
+                    throw new PeexException('Fincra ne couvre pas ' . (RemitCountries::get($remit['country'])['name'] ?? $remit['country']) . '.');
+                }
+                if ($remit['method'] === 'bank' && empty($remit['account']['bank_id']) && empty($remit['account']['bank_name'])) {
+                    throw new PeexException('Choisissez la banque du bénéficiaire dans la liste.');
                 }
             } elseif ($remit['partner'] === 'terrapay' && config('flashpay.terrapay.verify_account', true)) {
                 $acc = $this->terra->accountStatus(TerrapayConnector::credit($remit), TerrapayConnector::fullName($remit['beneficiary']), TerrapayConnector::fullName($remit['sender']));
@@ -749,6 +796,7 @@ class InternationalTransferService
             'wacepay_remit' => config('flashpay.rails.wacepay_remit.enabled') && $this->wace->enabled(),
             'terrapay' => config('flashpay.rails.terrapay.enabled') && $this->terra->enabled(),
             'pawapay' => config('flashpay.rails.pawapay.enabled') && $this->pawa->enabled(),
+            'fincra_remit' => config('flashpay.rails.fincra_remit.enabled') && $this->fincra->enabled(),
             default => false,
         };
     }

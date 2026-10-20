@@ -69,6 +69,7 @@ class RemitCountries
         'wacepay_remit' => ['name' => 'WacePay', 'methods' => ['wallet', 'bank', 'cash']],
         'terrapay' => ['name' => 'TerraPay', 'methods' => ['wallet', 'bank']],
         'pawapay' => ['name' => 'PawaPay', 'methods' => ['wallet']],
+        'fincra_remit' => ['name' => 'Fincra', 'methods' => ['wallet', 'bank']],
     ];
 
     /**

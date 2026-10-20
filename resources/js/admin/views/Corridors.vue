@@ -58,7 +58,7 @@
             <GwField :value="p.webhook" />
             <div class="pc-actions">
               <button class="btn-normal sm" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
-              <router-link class="btn-normal sm" :to="{ digitwace: '/wacepay', pawapay: '/pawapay', maishapay: '/maishapay' }[p.key] || '/peex'">Ouvrir la passerelle</router-link>
+              <router-link class="btn-normal sm" :to="{ digitwace: '/wacepay', pawapay: '/pawapay', maishapay: '/maishapay', fincra: '/fincra' }[p.key] || '/peex'">Ouvrir la passerelle</router-link>
             </div>
           </div>
         </div>
@@ -69,7 +69,7 @@
       <button class="gw-stat" :class="{ on: tab === 'corridors' && !flt.open }" @click="tab = 'corridors'; flt.open = ''"><span>Pays couverts</span><b>{{ n(kpi.countries) }}</b><small>{{ n(kpi.operators) }} opérateurs</small></button>
       <button class="gw-stat" :class="{ on: tab === 'corridors' && flt.open === 'collect' }" @click="tab = 'corridors'; flt.open = flt.open === 'collect' ? '' : 'collect'"><span>Collecte ouverte</span><b>{{ n(kpi.collect) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
       <button class="gw-stat" :class="{ on: tab === 'corridors' && flt.open === 'payout' }" @click="tab = 'corridors'; flt.open = flt.open === 'payout' ? '' : 'payout'"><span>Versement ouvert</span><b>{{ n(kpi.payout) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
-      <button class="gw-stat" :class="{ on: tab === 'remit' }" @click="tab = 'remit'"><span>International</span><b>{{ n(remit.kpi?.open) }} <small>/ {{ n(remit.kpi?.countries) }}</small></b><small>WacePay · TerraPay · PawaPay</small></button>
+      <button class="gw-stat" :class="{ on: tab === 'remit' }" @click="tab = 'remit'"><span>International</span><b>{{ n(remit.kpi?.open) }} <small>/ {{ n(remit.kpi?.countries) }}</small></b><small>WacePay · TerraPay · PawaPay · Fincra</small></button>
       <button class="gw-stat" :class="{ on: tab === 'rates' }" @click="tab = 'rates'"><span>Taux de change</span><b>{{ n(kpi.rates) }}</b><small :class="{ 't-warn': kpi.stale_rates }">{{ kpi.stale_rates ? kpi.stale_rates + ' à mettre à jour' : 'À jour' }}</small></button>
     </div>
 
@@ -121,6 +121,7 @@
                       <option value="digitwace" :disabled="!waceOk(c, 'payin') && !waceOk(c, 'payout')">WacePay</option>
                       <option value="pawapay" :disabled="!c.pawapay?.collect || !c.pawapay?.payout">PawaPay{{ pawaNote(c) }}</option>
                       <option value="maishapay" :disabled="!c.maishapay">MaishaPay{{ c.maishapay ? '' : ' — non couvert' }}</option>
+                      <option value="fincra" :disabled="!c.fincra">Fincra{{ c.fincra ? '' : ' — non couvert' }}</option>
                       <option value="mixed" disabled>Par flux</option>
                     </select>
                     <button type="button" class="custom-btn" @click="custom[c.country] = !custom[c.country]">{{ custom[c.country] ? 'Masquer' : 'Par flux' }}</button>
@@ -133,6 +134,7 @@
                       <option value="digitwace" :disabled="!waceOk(c, 'payin')">WacePay{{ waceNote(c, 'payin') }}</option>
                       <option value="pawapay" :disabled="!c.pawapay?.collect">PawaPay{{ pawaNote(c, 'collect') }}</option>
                       <option value="maishapay" :disabled="!c.maishapay">MaishaPay{{ c.maishapay ? '' : ' — non couvert' }}</option>
+                      <option value="fincra" :disabled="!c.fincra">Fincra{{ c.fincra ? '' : ' — non couvert' }}</option>
                     </select>
                   </div>
                   <div class="pl" :class="{ dim: !c.payout }">
@@ -142,6 +144,7 @@
                       <option value="digitwace" :disabled="!waceOk(c, 'payout')">WacePay{{ waceNote(c, 'payout') }}</option>
                       <option value="pawapay" :disabled="!c.pawapay?.payout">PawaPay{{ pawaNote(c, 'payout') }}</option>
                       <option value="maishapay" :disabled="!c.maishapay">MaishaPay{{ c.maishapay ? '' : ' — non couvert' }}</option>
+                      <option value="fincra" :disabled="!c.fincra">Fincra{{ c.fincra ? '' : ' — non couvert' }}</option>
                     </select>
                   </div>
                   </template>
@@ -176,6 +179,7 @@
                   <div v-if="c.pawapay && !c.pawapay.unverified" class="wace-avail">PawaPay ici : {{ [c.pawapay.collect && 'collecte', c.pawapay.payout && 'versement'].filter(Boolean).join(' + ') || '—' }}{{ c.pawapay.providers.length ? ' · ' + c.pawapay.providers.join(', ') : '' }}</div>
                   <div v-if="(c.payout_partner === 'pawapay' || c.collect_partner === 'pawapay') && !partnerReady('pawapay')" class="t-warn small">⚠ PawaPay non configuré (PAWAPAY_ENABLED, PAWAPAY_API_TOKEN)</div>
                   <div v-if="(c.payout_partner === 'maishapay' || c.collect_partner === 'maishapay') && !partnerReady('maishapay')" class="t-warn small">⚠ MaishaPay non configuré (MAISHAPAY_ENABLED, MAISHAPAY_PUBLIC_KEY, MAISHAPAY_SECRET_KEY)</div>
+                  <div v-if="(c.payout_partner === 'fincra' || c.collect_partner === 'fincra') && !partnerReady('fincra')" class="t-warn small">⚠ Fincra non configuré (FINCRA_ENABLED, FINCRA_SECRET_KEY, FINCRA_BUSINESS_ID)</div>
                   <div v-if="(c.payout_partner === 'digitwace' && !waceOk(c, 'payout')) || (c.collect_partner === 'digitwace' && !waceOk(c, 'payin'))" class="t-warn small">
                     ⚠ WacePay non confirmé ici ({{ c.wacepay ? 'service absent' : 'couverture non synchronisée' }})
                   </div>
@@ -501,7 +505,7 @@ async function diagnose() {
 const rowErr = reactive({})
 const custom = reactive({})
 // Routage : bascule vers une autre passerelle quand l'API rejette l'opération (rien débité / versé)
-const PARTNERS = ['peex', 'digitwace', 'pawapay', 'maishapay']
+const PARTNERS = ['peex', 'digitwace', 'pawapay', 'maishapay', 'fincra']
 const ROUTING_HELP = {
   auto: 'Si la passerelle rejette l\'opération, toute autre passerelle active qui couvre le pays prend le relais.',
   mixed: 'Si la passerelle rejette l\'opération, les passerelles de secours choisies prennent le relais, dans l\'ordre.',
@@ -512,6 +516,7 @@ const backupOk = (c, p, flow) => ({
   digitwace: waceOk(c, flow === 'collect' ? 'payin' : 'payout'),
   pawapay: !!c.pawapay?.[flow],
   maishapay: !!c.maishapay,
+  fincra: !!c.fincra,
 })[p]
 function setBackup(c, flow, i, value) {
   const list = [...(c[flow + '_backups'] || [])]
@@ -655,6 +660,8 @@ onMounted(load)
 .pbadge.p-terrapay { background: #7c3aed; }
 .pbadge.p-pawapay { background: #0e9f6e; }
 .pbadge.p-maishapay { background: #16a34a; }
+.pbadge.p-fincra, .pbadge.p-fincra_remit { background: #6d28d9; }
+.api.p-fincra, .api.p-fincra_remit { border-color: #6d28d9; color: #5b21b6; font-weight: 700; }
 .api.p-maishapay { border-color: #16a34a; color: #15803d; font-weight: 700; }
 .partner-cell { min-width: 230px; }
 .partner-cell .api { width: 140px; }

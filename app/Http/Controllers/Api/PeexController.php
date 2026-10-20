@@ -32,6 +32,7 @@ class PeexController extends Controller
                 ['key' => 'terrapay', 'name' => 'TerraPay', 'sandbox' => app(\App\Services\Remit\TerrapayClient::class)->sandbox(), 'enabled' => app(\App\Services\Remit\TerrapayClient::class)->enabled()],
                 ['key' => 'pawapay', 'name' => 'PawaPay', 'sandbox' => app(\App\Services\Remit\PawapayClient::class)->sandbox(), 'enabled' => app(\App\Services\Remit\PawapayClient::class)->enabled()],
                 ['key' => 'maishapay', 'name' => 'MaishaPay', 'sandbox' => app(\App\Services\Maishapay\MaishapayClient::class)->sandbox(), 'enabled' => app(\App\Services\Maishapay\MaishapayClient::class)->enabled()],
+                ['key' => 'fincra', 'name' => 'Fincra', 'sandbox' => app(\App\Services\Fincra\FincraClient::class)->sandbox(), 'enabled' => app(\App\Services\Fincra\FincraClient::class)->enabled()],
             ],
             'corridors' => $this->corridors->catalog()]);
     }

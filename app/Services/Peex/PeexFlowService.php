@@ -53,6 +53,9 @@ class PeexFlowService
         if ($partner === 'maishapay') {
             return $this->maishapayRail('Collecte depuis ce pays confiée à MaishaPay');
         }
+        if ($partner === 'fincra') {
+            return $this->fincraRail('Collecte depuis ce pays confiée à Fincra');
+        }
         if ($partner !== 'digitwace') {
             return 'peex';
         }
@@ -81,6 +84,9 @@ class PeexFlowService
         if ($partner === 'maishapay') {
             return $this->maishapayRail('Versements vers ce pays confiés à MaishaPay');
         }
+        if ($partner === 'fincra') {
+            return $this->fincraRail('Versements vers ce pays confiés à Fincra');
+        }
         if ($partner !== 'digitwace') {
             return 'peex';
         }
@@ -90,6 +96,15 @@ class PeexFlowService
         }
 
         return 'digitwace';
+    }
+
+    /** Fincra choisi pour le pays : refusé (jamais routé ailleurs en silence) s'il n'est pas configuré. */
+    protected function fincraRail(string $what): string
+    {
+        if (! config('flashpay.rails.fincra.enabled', false) || ! app(\App\Services\Fincra\FincraClient::class)->enabled()) {
+            throw new PeexException($what . ', mais Fincra n\'est pas encore configuré. Contactez le support FlashPay.');
+        }
+        return 'fincra';
     }
 
     /** MaishaPay choisi pour le pays : refusé (jamais routé ailleurs en silence) s'il n'est pas configuré. */

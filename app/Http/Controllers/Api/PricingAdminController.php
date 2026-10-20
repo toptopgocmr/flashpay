@@ -85,7 +85,8 @@ class PricingAdminController extends Controller
         // pawaPay : couverture lue sur le compte (active-conf) ; sans réponse, pays du réseau pawaPay
         [$pawaCov, $pawaErr] = self::pawapayCoverage($request->boolean('pawapay_refresh'));
         $maishaCountries = app(\App\Services\Maishapay\MaishapayClient::class)->countries();
-        $list = collect($this->corridors->catalog())->map(function ($c) use ($defaults, $overrides, $usage, $coverage, $pawaCov, $maishaCountries) {
+        $fincraCountries = app(\App\Services\Fincra\FincraClient::class)->countries();
+        $list = collect($this->corridors->catalog())->map(function ($c) use ($defaults, $overrides, $usage, $coverage, $pawaCov, $maishaCountries, $fincraCountries) {
             $d = $defaults[$c['country']] ?? [];
             $o = $overrides[$c['country']] ?? null;
             return $c + [
@@ -99,6 +100,8 @@ class PricingAdminController extends Controller
                 'pawapay' => $pawaCov[$c['country']] ?? null,
                 // MaishaPay : pays couverts (MAISHAPAY_COUNTRIES)
                 'maishapay' => in_array($c['country'], $maishaCountries, true) ? ['collect' => true, 'payout' => true] : null,
+                // Fincra : pays couverts (FINCRA_COUNTRIES)
+                'fincra' => in_array($c['country'], $fincraCountries, true) ? ['collect' => true, 'payout' => true] : null,
                 'payout_partner_name' => PeexCorridors::partnerName($c['payout_partner']),
                 'overridden' => (bool) $o,
                 'note' => $o?->note,
@@ -166,6 +169,19 @@ class PricingAdminController extends Controller
                 'coverage_payout' => count($maishaCountries),
                 'coverage_list' => $maishaCountries,
             ],
+            [
+                'key' => 'fincra', 'name' => 'Fincra', 'flows' => ['collect', 'payout'],
+                'ready' => ($fc = app(\App\Services\Fincra\FincraClient::class))->enabled() && (bool) config('flashpay.rails.fincra.enabled'),
+                'mode' => $fc->enabled() ? ($fc->sandbox() ? 'Sandbox' : 'Production') : 'clés API à saisir',
+                'sandbox' => $fc->sandbox(),
+                'collect_countries' => $list->where('collect', true)->where('collect_partner', 'fincra')->count(),
+                'payout_countries' => $list->where('payout', true)->where('payout_partner', 'fincra')->count(),
+                'webhook' => $fc->webhookUrl(),
+                'coverage_countries' => count($fincraCountries),
+                'coverage_payin' => count($fincraCountries),
+                'coverage_payout' => count($fincraCountries),
+                'coverage_list' => $fincraCountries,
+            ],
         ];
 
         return response()->json([
@@ -212,17 +228,17 @@ class PricingAdminController extends Controller
             'payout' => 'sometimes|boolean',
             'payout_api' => 'sometimes|nullable|in:disbursement,remittance',
             // Partenaire qui gère les flux : collecte = PEEX (seul partenaire de collecte), versement = PEEX ou WacePay
-            'collect_partner' => 'sometimes|nullable|in:peex,digitwace,pawapay,maishapay',
-            'payout_partner' => 'sometimes|nullable|in:peex,digitwace,pawapay,maishapay',
+            'collect_partner' => 'sometimes|nullable|in:peex,digitwace,pawapay,maishapay,fincra',
+            'payout_partner' => 'sometimes|nullable|in:peex,digitwace,pawapay,maishapay,fincra',
             // Passerelle unique : collecte ET versement confiés au même partenaire
-            'partner' => 'sometimes|in:peex,digitwace,pawapay,maishapay',
+            'partner' => 'sometimes|in:peex,digitwace,pawapay,maishapay,fincra',
             'note' => 'sometimes|nullable|string|max:190',
             // Routage : Manuel (passerelle unique), Mixte (secours choisis), Automatique (toute passerelle active)
             'routing_mode' => 'sometimes|in:fixed,mixed,auto',
             'collect_backups' => 'sometimes|nullable|array|max:2',
-            'collect_backups.*' => 'in:peex,digitwace,pawapay,maishapay',
+            'collect_backups.*' => 'in:peex,digitwace,pawapay,maishapay,fincra',
             'payout_backups' => 'sometimes|nullable|array|max:2',
-            'payout_backups.*' => 'in:peex,digitwace,pawapay,maishapay',
+            'payout_backups.*' => 'in:peex,digitwace,pawapay,maishapay,fincra',
         ]);
         foreach (['collect_backups', 'payout_backups'] as $f) {
             if (array_key_exists($f, $v)) {
@@ -259,6 +275,12 @@ class PricingAdminController extends Controller
             return response()->json(['message' => "MaishaPay ne couvre pas {$iso} (MAISHAPAY_COUNTRIES)."], 422);
         }
 
+        // Fincra : pays couverts (FINCRA_COUNTRIES)
+        if (in_array('fincra', [$v['collect_partner'] ?? null, $v['payout_partner'] ?? null], true)
+            && ! in_array($iso, app(\App\Services\Fincra\FincraClient::class)->countries(), true)) {
+            return response()->json(['message' => "Fincra ne couvre pas {$iso} (FINCRA_COUNTRIES)."], 422);
+        }
+
         // WacePay n'est proposé que là où la couverture synchronisée l'annonce
         foreach (['collect_partner' => 'payin', 'payout_partner' => 'payout'] as $field => $service) {
             if (($v[$field] ?? null) === 'digitwace') {
@@ -280,8 +302,9 @@ class PricingAdminController extends Controller
         $waceOff = ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled();
         $pawaOff = ! app(\App\Services\Remit\PawapayClient::class)->enabled() || ! config('flashpay.rails.pawapay_momo.enabled');
         $maishaOff = ! app(\App\Services\Maishapay\MaishapayClient::class)->enabled() || ! config('flashpay.rails.maishapay.enabled');
-        $off = fn (?string $p) => ($p === 'digitwace' && $waceOff) || ($p === 'pawapay' && $pawaOff) || ($p === 'maishapay' && $maishaOff);
-        $offName = fn (?string $p) => match ($p) { 'pawapay' => 'PawaPay', 'maishapay' => 'MaishaPay', default => 'WacePay' };
+        $fincraOff = ! app(\App\Services\Fincra\FincraClient::class)->enabled() || ! config('flashpay.rails.fincra.enabled');
+        $off = fn (?string $p) => ($p === 'digitwace' && $waceOff) || ($p === 'pawapay' && $pawaOff) || ($p === 'maishapay' && $maishaOff) || ($p === 'fincra' && $fincraOff);
+        $offName = fn (?string $p) => match ($p) { 'pawapay' => 'PawaPay', 'maishapay' => 'MaishaPay', 'fincra' => 'Fincra', default => 'WacePay' };
         $message = match (true) {
             isset($v['payout_partner'], $v['collect_partner']) && $v['payout_partner'] === $v['collect_partner'] =>
                 'Tous les flux de ' . $iso . ' (collecte, versement, vérifications, soldes) passent désormais par ' . PeexCorridors::partnerName($v['payout_partner']) . '.'

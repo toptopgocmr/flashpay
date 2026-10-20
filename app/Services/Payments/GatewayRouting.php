@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Log;
 class GatewayRouting
 {
     /** Clé « corridor » → rail du Switch */
-    public const RAIL = ['peex' => 'peex', 'digitwace' => 'digitwace', 'pawapay' => 'pawapay_momo', 'maishapay' => 'maishapay'];
+    public const RAIL = ['peex' => 'peex', 'digitwace' => 'digitwace', 'pawapay' => 'pawapay_momo', 'maishapay' => 'maishapay', 'fincra' => 'fincra'];
 
     public const MODES = ['fixed' => 'Manuel', 'mixed' => 'Mixte', 'auto' => 'Automatique'];
 
@@ -108,6 +108,7 @@ class GatewayRouting
                 && ! empty(app(\App\Services\Digitwace\CoverageService::class)->byCountry()[$iso]['payin']),
             'pawapay_momo' => ($p = app(\App\Services\Remit\PawapayClient::class))->enabled() && ! empty($p->coverage()[$iso]['collect']),
             'maishapay' => ($m = app(\App\Services\Maishapay\MaishapayClient::class))->enabled() && in_array($iso, $m->countries(), true),
+            'fincra' => ($f = app(\App\Services\Fincra\FincraClient::class))->enabled() && in_array($iso, $f->countries(), true),
             default => false,
         };
     }

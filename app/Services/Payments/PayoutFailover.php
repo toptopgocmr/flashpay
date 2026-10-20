@@ -23,9 +23,9 @@ use Illuminate\Support\Facades\Log;
  */
 class PayoutFailover
 {
-    public const RAILS = ['peex', 'digitwace', 'pawapay_momo', 'maishapay'];
+    public const RAILS = ['peex', 'digitwace', 'pawapay_momo', 'maishapay', 'fincra'];
 
-    public const NAMES = ['peex' => 'PEEX', 'digitwace' => 'WacePay', 'pawapay_momo' => 'PawaPay', 'maishapay' => 'MaishaPay'];
+    public const NAMES = ['peex' => 'PEEX', 'digitwace' => 'WacePay', 'pawapay_momo' => 'PawaPay', 'maishapay' => 'MaishaPay', 'fincra' => 'Fincra'];
 
     public function __construct(protected PeexCorridors $corridors)
     {
@@ -81,6 +81,7 @@ class PayoutFailover
             'digitwace' => (bool) config('flashpay.digitwace.sandbox', true),
             'pawapay_momo' => app(\App\Services\Remit\PawapayClient::class)->sandbox(),
             'maishapay' => app(\App\Services\Maishapay\MaishapayClient::class)->sandbox(),
+            'fincra' => app(\App\Services\Fincra\FincraClient::class)->sandbox(),
             default => true,
         };
     }
@@ -99,6 +100,8 @@ class PayoutFailover
                 && ! empty($p->coverage()[$iso]['payout'])
                 && $this->enough($p->availableFor($currency, $iso), $amount),
             'maishapay' => ($m = app(\App\Services\Maishapay\MaishapayClient::class))->enabled() && in_array($iso, $m->countries(), true),
+            'fincra' => ($f = app(\App\Services\Fincra\FincraClient::class))->enabled() && in_array($iso, $f->countries(), true)
+                && $this->enough($f->availableFor($currency), $amount),
             default => false,
         };
     }

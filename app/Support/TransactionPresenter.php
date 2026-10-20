@@ -236,7 +236,7 @@ class TransactionPresenter
     /** « PEEX », « WacePay (Digitwace) », « PEEX → WacePay (Digitwace) » ; null si 100 % interne. */
     public static function partner(Transaction $tx): ?string
     {
-        $map = ['peex' => 'peex', 'digitwace' => 'digitwace', 'wacepay_remit' => 'wacepay_remit', 'terrapay' => 'terrapay', 'pawapay' => 'pawapay', 'pawapay_momo' => 'pawapay', 'maishapay' => 'maishapay'];
+        $map = ['peex' => 'peex', 'digitwace' => 'digitwace', 'wacepay_remit' => 'wacepay_remit', 'terrapay' => 'terrapay', 'pawapay' => 'pawapay', 'pawapay_momo' => 'pawapay', 'maishapay' => 'maishapay', 'fincra' => 'fincra', 'fincra_remit' => 'fincra_remit'];
         $in = $map[$tx->source_rail] ?? null;
         $out = $map[$tx->destination_rail] ?? null;
         $names = array_values(array_unique(array_filter([
@@ -268,6 +268,7 @@ class TransactionPresenter
                 case 'wacepay_remit':
                 case 'terrapay':
                 case 'pawapay':
+                case 'fincra_remit':
                     $out['partner'] = \App\Services\Peex\PeexCorridors::partnerName($rail);
                     $m = $tx->meta['remit'] ?? [];
                     $out['country'] = $m['country'] ?? null;
@@ -281,6 +282,7 @@ class TransactionPresenter
                 case 'digitwace':
                 case 'pawapay_momo':
                 case 'maishapay':
+                case 'fincra':
                     $out['partner'] = \App\Services\Peex\PeexCorridors::partnerName($rail === 'pawapay_momo' ? 'pawapay' : $rail);
                     if ($account) {
                         try {
@@ -415,7 +417,7 @@ class TransactionPresenter
             $tx->source_rail === 'crypto' => 'Crypto',
             $tx->source_rail === 'wallet', $tx->source_rail === 'treasury' => 'Wallet',
             $tx->source_rail === 'cash' => 'Cash',
-            in_array($tx->source_rail, ['peex', 'digitwace', 'pawapay_momo', 'maishapay', 'mobile'], true) => 'Mobile',
+            in_array($tx->source_rail, ['peex', 'digitwace', 'pawapay_momo', 'maishapay', 'fincra', 'mobile'], true) => 'Mobile',
             default => ucfirst((string) $tx->source_rail),
         };
         if ($tx->source_rail === 'treasury') {
@@ -426,8 +428,8 @@ class TransactionPresenter
             'cash', 'atm' => 'Cash',
             'bank' => 'Banque',
             'card' => 'Carte bancaire',
-            'peex', 'digitwace', 'pawapay_momo', 'maishapay', 'mobile' => 'Mobile',
-            'wacepay_remit', 'terrapay', 'pawapay' => 'International',
+            'peex', 'digitwace', 'pawapay_momo', 'maishapay', 'fincra', 'mobile' => 'Mobile',
+            'wacepay_remit', 'terrapay', 'pawapay', 'fincra_remit' => 'International',
             default => ucfirst((string) $tx->destination_rail),
         };
         if (in_array($tx->type, self::PAYMENT_TYPES, true) && ! empty($meta['merchant_id'])) {

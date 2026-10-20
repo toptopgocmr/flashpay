@@ -32,6 +32,8 @@ class PeexCorridors
         'terrapay' => ['name' => 'TerraPay', 'flows' => ['payout']],
         'pawapay' => ['name' => 'PawaPay', 'flows' => ['collect', 'payout']],
         'maishapay' => ['name' => 'MaishaPay', 'flows' => ['collect', 'payout']],
+        'fincra' => ['name' => 'Fincra', 'flows' => ['collect', 'payout']],
+        'fincra_remit' => ['name' => 'Fincra (international)', 'flows' => ['payout']],
     ];
 
     public static function partnerName(?string $key): ?string

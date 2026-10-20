@@ -350,7 +350,7 @@ class InternationalTransferTest extends TestCase
         $this->actingAs($admin, 'sanctum');
 
         $o = $this->getJson('/api/admin/remit/overview')->assertOk();
-        $this->assertSame(['wacepay_remit', 'terrapay', 'pawapay'], collect($o->json('partners'))->pluck('key')->all());
+        $this->assertSame(['wacepay_remit', 'terrapay', 'pawapay', 'fincra_remit'], collect($o->json('partners'))->pluck('key')->all());
         $cm = collect($o->json('countries'))->firstWhere('iso', 'CM');
         $this->assertSame('wacepay_remit', $cm['partner']);
         $this->assertContains('pawapay', $cm['available']);

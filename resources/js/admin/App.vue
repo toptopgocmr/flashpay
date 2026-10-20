@@ -234,6 +234,7 @@ const groups = [
     { to: '/wacepay', label: 'Passerelle WacePay', desc: 'API Digitwace : clés, IP, services, tests', icon: 'gateway', logo: 'WacePay' },
     { to: '/pawapay', label: 'Passerelle PawaPay', desc: 'Collecte, versement, couverture, tests', icon: 'gateway', logo: 'PawaPay' },
     { to: '/maishapay', label: 'Passerelle MaishaPay', desc: 'Collecte, versement, carte, crédit / TV / factures', icon: 'gateway', logo: 'MaishaPay' },
+    { to: '/fincra', label: 'Passerelle Fincra', desc: 'Collecte, versement, remittance internationale', icon: 'gateway', logo: 'Fincra' },
     { to: '/ecommerce', label: 'E-commerce & API', desc: 'Clés API, payment intents, webhooks', icon: 'code', badge: 'webhooks' },
     { to: '/mini-programs', label: 'Mini-programmes', desc: 'Services partenaires dans l\'app', icon: 'grid' },
   ] },

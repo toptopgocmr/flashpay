@@ -196,7 +196,7 @@ class PaymentController extends Controller
                 }
             }
             // pawaPay (passerelle nationale) : collecte / versement relus chez pawaPay
-            foreach (\App\Models\RemitRequest::where('transaction_id', $transaction->id)->whereIn('partner', ['pawapay_momo', 'maishapay'])->whereNull('finalized_at')->get() as $req) {
+            foreach (\App\Models\RemitRequest::where('transaction_id', $transaction->id)->whereIn('partner', ['pawapay_momo', 'maishapay', 'fincra', 'fincra_remit'])->whereNull('finalized_at')->get() as $req) {
                 if (\Illuminate\Support\Facades\Cache::add('pawapay:poll:' . $req->id, 1, 4)) {
                     try {
                         app(\App\Services\Remit\RemitStatusHandler::class)->refresh($req);
@@ -308,11 +308,15 @@ class PaymentController extends Controller
             // Débit / crédit / remboursement, quand le crédit a échoué après le débit
             'outcome' => \App\Support\TransactionPresenter::outcome($tx),
             'checkout_url' => $pending && $tx->stage === 'awaiting_card' ? ($meta['checkout_url'] ?? null) : null,
+            // Fincra : code OTP à saisir (POST /pay/transactions/{id}/otp)
+            'otp_required' => $pending && $tx->stage === 'awaiting_source' && ! empty($meta['fincra_otp_required']),
             'message' => match (true) {
                 $pending && $tx->stage === 'awaiting_card' && $tx->source_rail === 'crypto' => 'Finalisez le paiement en crypto-monnaie sur la page sécurisée MaishaPay qui s\'est ouverte.',
                 $pending && $tx->stage === 'awaiting_card' => 'Finalisez le paiement par carte sur la page sécurisée qui s\'est ouverte.',
                 $tx->status === 'successful' => 'Opération réussie.',
                 $pending && $tx->stage === 'awaiting_pickup' => 'Présentez votre code de retrait ' . ($tx->destination_rail === 'atm' ? 'au GAB partenaire.' : 'à un agent FlashPay.'),
+                // Fincra : instructions de l'opérateur (ex. composer un code USSD pour valider)
+                $pending && $tx->stage === 'awaiting_source' && ! empty($meta['payer_instructions']) => (string) $meta['payer_instructions'],
                 $pending && $tx->stage === 'awaiting_source' => 'Validez le paiement sur le téléphone ' . $tx->source_account . ' (code secret mobile money).',
                 $pending && $tx->stage === 'awaiting_refund' => 'Débit effectué, mais le crédit du bénéficiaire a échoué : remboursement en cours sur le ' . $tx->source_account . '.',
                 $pending && ! empty($meta['payout_attempts']) => 'Paiement reçu. Le premier service de versement n\'a pas répondu : versement relancé automatiquement par un autre partenaire.',

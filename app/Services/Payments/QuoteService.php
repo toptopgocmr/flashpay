@@ -233,6 +233,23 @@ class QuoteService
                 $problems[] = "Opérateur du numéro {$e['phone']} non pris en charge par MaishaPay.";
             }
         }
+        // Fincra : configuré, opérateur du numéro reconnu, solde Fincra suffisant pour un versement
+        $fincra = app(\App\Services\Fincra\FincraClient::class);
+        foreach ([[$src, $collectBy, 'source'], [$dst, $payoutBy, 'destination']] as [$e, $by, $side]) {
+            if ($e['type'] !== 'mobile' || $by !== 'fincra') {
+                continue;
+            }
+            $what = $side === 'source' ? "Collecte depuis {$e['country_name']}" : "Versements vers {$e['country_name']}";
+            if (! $fincra->enabled() || ! config('flashpay.rails.fincra.enabled', false)) {
+                $this->codes[] = $side === 'source' ? 'collect_unavailable' : 'payout_unavailable';
+                $problems[] = "{$what} confiés à Fincra, mais Fincra n'est pas configuré.";
+            } elseif (! \App\Services\Fincra\FincraClient::operator($e['operator'] ?? null)) {
+                $problems[] = "Opérateur du numéro {$e['phone']} non pris en charge par Fincra.";
+            } elseif ($side === 'destination' && ($avail = $fincra->availableFor($dst['currency'])) !== null && $avail < $outAmount) {
+                $this->codes[] = 'payout_unavailable';
+                $problems[] = "Les envois vers {$dst['country_name']} sont momentanément suspendus (réapprovisionnement du service de versement en cours). Réessayez plus tard ou envoyez un montant plus petit.";
+            }
+        }
         if ($dst['type'] === 'mobile' && $payoutBy === 'pawapay' && $pawa->enabled() && config('flashpay.pawapay.check_balance', true)) {
             $avail = $pawa->availableFor($dst['currency'], $dst['country']);
             if ($avail !== null && $avail < $outAmount) {
@@ -257,7 +274,7 @@ class QuoteService
         if (! config('flashpay.fees.pass_partner_fees', true)) {
             return $out;
         }
-        $names = ['peex' => 'PEEX', 'digitwace' => 'WacePay', 'pawapay' => 'PawaPay', 'maishapay' => 'MaishaPay', 'card' => 'Carte'];
+        $names = ['peex' => 'PEEX', 'digitwace' => 'WacePay', 'pawapay' => 'PawaPay', 'maishapay' => 'MaishaPay', 'fincra' => 'Fincra', 'card' => 'Carte'];
         $rates = \App\Support\PartnerFees::rates();
 
         // Versement au bénéficiaire (frais en devise du bénéficiaire, ramenés en devise de l'expéditeur)
@@ -295,7 +312,7 @@ class QuoteService
         }
         try {
             $p = $this->corridors->country($iso)[$field] ?? 'peex';
-            return in_array($p, ['digitwace', 'pawapay', 'maishapay'], true) ? $p : 'peex';
+            return in_array($p, ['digitwace', 'pawapay', 'maishapay', 'fincra'], true) ? $p : 'peex';
         } catch (\Throwable) {
             return 'peex';
         }

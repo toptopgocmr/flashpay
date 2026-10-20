@@ -63,6 +63,8 @@ Route::post('/webhooks/digitwace', \App\Http\Controllers\Api\DigitwaceWebhookCon
 // Callbacks pawaPay (dépôts / versements / remittances) — statut toujours relu via l'API pawaPay
 // MaishaPay : notifications POST (mobile money, B2C, services) et GET (carte)
 Route::match(['get', 'post'], '/webhooks/maishapay', \App\Http\Controllers\Api\MaishapayWebhookController::class)->middleware('throttle:240,1,maishapay-callback')->name('webhooks.maishapay');
+// Fincra : charge.successful, payout.successful, payout.failed — signature HMAC-SHA512, statut toujours relu via l'API
+Route::post('/webhooks/fincra', \App\Http\Controllers\Api\FincraWebhookController::class)->middleware('throttle:240,1,fincra-callback')->name('webhooks.fincra');
 Route::post('/webhooks/pawapay', \App\Http\Controllers\Api\PawapayWebhookController::class)->middleware('throttle:240,1,pawapay-callback')->name('webhooks.pawapay');
 
 Route::post('/webhooks/peex/{service?}', [WebhookController::class, 'peex'])
@@ -191,6 +193,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/merchant/{code}', [PaymentController::class, 'merchantInfo'])->where('code', '.*');
         Route::post('/merchant', [PaymentController::class, 'payMerchant'])->middleware(['cap:pay', 'one_op', 'pin', 'idempotent']);
         Route::get('/transactions/{transaction}/status', [PaymentController::class, 'status']);
+        // Fincra : code OTP d'une collecte mobile money (data.auth_model = OTP)
+        Route::post('/transactions/{transaction}/otp', [\App\Http\Controllers\Api\FincraAdminController::class, 'otp'])->middleware('throttle:10,1,fincra-otp');
         // Moyens proposés selon le pays + code QR de paiement + bons de retrait
         Route::get('/methods', [CashController::class, 'methods']);
         Route::post('/code', [CashController::class, 'payCode'])->middleware(['throttle:30,1', 'pin']);
@@ -424,6 +428,12 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/digitwace/discover', [PricingAdminController::class, 'discoverWacepay'])->middleware('throttle:3,1');
         Route::delete('/digitwace/discover', [PricingAdminController::class, 'resetWacepayEndpoint']);
         // Passerelle PawaPay (collecte / versement mobile money, remittance)
+        // Passerelle Fincra (collecte, versement, remittance)
+        Route::get('/fincra/overview', [\App\Http\Controllers\Api\FincraAdminController::class, 'overview']);
+        Route::get('/fincra/balances', [\App\Http\Controllers\Api\FincraAdminController::class, 'balances'])->middleware('throttle:30,1,fincra-balances');
+        Route::get('/fincra/institutions/{iso}', [\App\Http\Controllers\Api\FincraAdminController::class, 'institutions'])->where('iso', '[A-Za-z]{2}')->middleware('throttle:30,1,fincra-banks');
+        Route::post('/fincra/test', [\App\Http\Controllers\Api\FincraAdminController::class, 'test'])->middleware('throttle:20,1,fincra-test');
+        Route::post('/fincra/requests/{remitRequest}/refresh', [\App\Http\Controllers\Api\FincraAdminController::class, 'refresh'])->whereNumber('remitRequest');
         Route::get('/maishapay/overview', [\App\Http\Controllers\Api\MaishapayAdminController::class, 'overview']);
         Route::post('/maishapay/test', [\App\Http\Controllers\Api\MaishapayAdminController::class, 'test'])->middleware('throttle:20,1,maishapay-test');
         Route::post('/maishapay/requests/{remitRequest}/refresh', [\App\Http\Controllers\Api\MaishapayAdminController::class, 'refresh'])->whereNumber('remitRequest');
