@@ -107,6 +107,55 @@ class RemitCountries
         }
     }
 
+    /** Partenaires de secours choisis dans la console : [ISO => [partenaire, …]] (ordre = priorité). */
+    public static function backups(): array
+    {
+        try {
+            return (array) app(\App\Services\Ops\PlatformSettings::class)->get('remit_backups', []);
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * Liste ordonnée des partenaires de remittance du pays : partenaire principal puis secours.
+     * Vide si le pays est fermé (« off ») ou sans partenaire.
+     * @return list<string>
+     */
+    public static function chainFor(string $iso): array
+    {
+        $iso = strtoupper($iso);
+        $primary = self::partnerFor($iso);
+        if (! $primary) {
+            return [];
+        }
+        $list = [$primary];
+        foreach ((array) (self::backups()[$iso] ?? []) as $p) {
+            if (isset(self::PARTNERS[$p]) && ! in_array($p, $list, true) && in_array($p, self::coverage($iso), true)) {
+                $list[] = $p;
+            }
+        }
+        return $list;
+    }
+
+    /** Partenaires capables de payer ce pays (couverture connue). */
+    public static function coverage(string $iso): array
+    {
+        $iso = strtoupper($iso);
+        $out = ['wacepay_remit', 'terrapay'];
+        if (PawapayClient::iso3($iso) && ! in_array($iso, ['FR', 'US', 'BE', 'GB'], true)) {
+            $out[] = 'pawapay';
+        }
+        try {
+            if (in_array($iso, app(\App\Services\Fincra\FincraClient::class)->remitCountries(), true)) {
+                $out[] = 'fincra_remit';
+            }
+        } catch (\Throwable) {
+            // configuration Fincra illisible : pas de Fincra
+        }
+        return $out;
+    }
+
     public static function partnerName(?string $p): string
     {
         return self::PARTNERS[$p]['name'] ?? (string) $p;

@@ -34,6 +34,9 @@ class PayoutFailover
     /** Prochain rail de versement à essayer, ou null. */
     public function next(Transaction $tx): ?string
     {
+        if (isset(\App\Services\Remit\RemitCountries::PARTNERS[$tx->destination_rail])) {
+            return $this->nextRemit($tx);
+        }
         if (! config('flashpay.failover.enabled', true) || ! in_array($tx->destination_rail, self::RAILS, true) || ! $tx->destination_account) {
             return null;
         }
@@ -72,6 +75,51 @@ class PayoutFailover
             }
         }
         return null;
+    }
+
+    /**
+     * Transfert international (remittance) : partenaire de secours suivant de la liste du pays
+     * (Console › Pays & change › Remittance). Seulement pour le mobile money : la banque et le
+     * retrait cash dépendent de listes propres à chaque partenaire (banques, points de retrait).
+     */
+    protected function nextRemit(Transaction $tx): ?string
+    {
+        $meta = $tx->meta ?? [];
+        $remit = (array) ($meta['remit'] ?? []);
+        if (! config('flashpay.failover.enabled', true) || ! config('flashpay.remit.failover', true) || ($remit['method'] ?? 'wallet') !== 'wallet') {
+            return null;
+        }
+        $tried = array_merge([$tx->destination_rail], array_column((array) ($meta['payout_attempts'] ?? []), 'rail'), (array) ($remit['previous_partners'] ?? []));
+        if (count(array_unique(array_filter($tried))) > (int) config('flashpay.failover.max_switches', 2)) {
+            return null;
+        }
+        $iso = strtoupper((string) ($meta['destination_country'] ?? $remit['country'] ?? ''));
+        $svc = app(\App\Services\Remit\InternationalTransferService::class);
+        $sandbox = $this->remitSandbox($tx->destination_rail);
+        foreach ($svc->readyChain($iso) as $p) {
+            if (in_array($p, $tried, true) || ! in_array('wallet', \App\Services\Remit\RemitCountries::methodsOf($p), true)) {
+                continue;
+            }
+            try {
+                if ($this->remitSandbox($p) === $sandbox) {
+                    return $p;
+                }
+            } catch (\Throwable $e) {
+                Log::info("Bascule remittance : {$p} écarté", ['reference' => $tx->reference, 'error' => $e->getMessage()]);
+            }
+        }
+        return null;
+    }
+
+    public function remitSandbox(string $partner): bool
+    {
+        return match ($partner) {
+            'wacepay_remit' => app(\App\Services\Remit\WacepayRemitClient::class)->sandbox(),
+            'terrapay' => app(\App\Services\Remit\TerrapayClient::class)->sandbox(),
+            'pawapay' => app(\App\Services\Remit\PawapayClient::class)->sandbox(),
+            'fincra_remit' => app(\App\Services\Fincra\FincraClient::class)->sandbox(),
+            default => true,
+        };
     }
 
     public function sandbox(string $rail): bool

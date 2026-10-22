@@ -109,11 +109,13 @@ class InternationalTransferService
     {
         $countries = [];
         foreach (RemitCountries::all() as $iso => $c) {
-            $p = RemitCountries::partnerFor($iso);
-            if (! $p || ! $this->partnerReady($p)) {
+            $p = $this->activePartner($iso);
+            if (! $p) {
                 continue;
             }
-            $countries[] = $c + ['partner' => $p, 'partner_name' => $this->partnerName($p), 'methods' => RemitCountries::methodsOf($p),
+            // Moyens de réception : ceux du partenaire principal disponible + ceux des secours disponibles
+            $methods = array_values(array_unique(array_merge(...array_map(fn ($x) => RemitCountries::methodsOf($x), $this->readyChain($iso)))));
+            $countries[] = $c + ['partner' => $p, 'partner_name' => $this->partnerName($p), 'methods' => $methods,
                 'beneficiary_kyc' => self::beneficiaryKycRequired($iso, $p),
                 'postal_code_required' => in_array($iso, (array) config('flashpay.remit.postal_code_countries', []), true)];
         }
@@ -412,7 +414,7 @@ class InternationalTransferService
     {
         $bt = isset(self::BUSINESS_TYPES[$businessType]) ? $businessType : 'p2p';
         $fallback = self::DEFAULT_LISTS[$bt[0] === 'b' ? 'b' : 'p'];
-        if ((! $iso || RemitCountries::partnerFor($iso) === 'wacepay_remit') && $this->wace->enabled()) {
+        if ((! $iso || $this->activePartner($iso) === 'wacepay_remit') && $this->wace->enabled()) {
             try {
                 $l = $this->wace->lists($bt);
                 $fr = fn (array $m) => collect($m)->mapWithKeys(fn ($label, $code) => [$code => self::frLabel((string) $code, (string) $label)])->all();
@@ -436,11 +438,19 @@ class InternationalTransferService
     {
         $problems = [];
         $amount = (int) $in['amount'];
-        $c = $this->country($in['country']);
         $bt = $in['business_type'] ?? 'p2p';
         $method = $in['method'] ?? 'wallet';
         $wallet = $this->walletOf($user);
         $currency = $wallet?->currency ?? config('flashpay.remit.from_currency', 'XAF');
+        // Partenaire : le principal s'il est disponible pour ce moyen de réception et a le solde,
+        // sinon le premier partenaire de secours qui l'est (Console › Pays & change › Remittance)
+        $skip = array_values(array_filter((array) ($in['skip_partners'] ?? []), 'is_string'));
+        $c = $this->country($in['country'], $method, $skip);
+        while ($this->partnerBalanceProblem($c['partner'], $amount, $currency)
+            && ($alt = $this->activePartner($c['iso'], $method, [...$skip, $c['partner']]))) {
+            $skip[] = $c['partner'];
+            $c = ['partner' => $alt] + $c;
+        }
 
         if (! isset(self::BUSINESS_TYPES[$bt])) {
             $problems[] = 'Type de transfert inconnu.';
@@ -598,8 +608,24 @@ class InternationalTransferService
             $remit['account']['provider'] = $remit['service']['code'];
         }
 
-        // Vérifications chez le partenaire AVANT tout débit
-        $this->preflight($remit, $user);
+        // Vérifications chez le partenaire AVANT tout débit. Partenaire qui ne répond pas
+        // (réseau, erreur serveur) : on passe au partenaire de secours suivant, rien n'est débité.
+        $tried = [];
+        while (true) {
+            try {
+                $this->preflight($remit, $user);
+                break;
+            } catch (RemitPartnerDown $e) {
+                $tried[] = $remit['partner'];
+                $next = $method === 'wallet' ? $this->activePartner($country['iso'], $method, $tried) : null;
+                if (! $next) {
+                    throw new PeexException($e->getMessage());
+                }
+                \Illuminate\Support\Facades\Log::warning('Remittance : partenaire indisponible avant débit, passage au secours', ['from' => $remit['partner'], 'to' => $next, 'error' => $e->getMessage()]);
+                $remit = self::switchPartner($remit, $next);
+                $q['partner'] = $next;
+            }
+        }
 
         $wallet = $this->walletOf($user);
         $converted = $q['currency'] !== $q['receive_currency'];
@@ -670,6 +696,8 @@ class InternationalTransferService
                     throw new PeexException('Ce numéro n\'appartient pas à un opérateur de ' . (RemitCountries::get($remit['country'])['name'] ?? $remit['country']) . '.');
                 }
             } elseif ($remit['partner'] === 'fincra_remit') {
+                // Fincra joignable ? (soldes, gardé 30 s) — sinon le secours prend le relais avant tout débit
+                Cache::remember('fincra:alive', 30, fn () => is_array($this->fincra->balances()));
                 // Pays couvert, banque reconnue (le code banque Fincra est exigé pour un virement)
                 if (! in_array($remit['country'], $this->fincra->remitCountries(), true)) {
                     throw new PeexException('Fincra ne couvre pas ' . (RemitCountries::get($remit['country'])['name'] ?? $remit['country']) . '.');
@@ -684,8 +712,41 @@ class InternationalTransferService
                 }
             }
         } catch (RemitException $e) {
-            throw new PeexException($this->friendly($e));
+            // Erreur réseau / serveur du partenaire : il « ne répond pas » → secours possible
+            throw $e->isDefinitive() ? new PeexException($this->friendly($e)) : new RemitPartnerDown($this->friendly($e));
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            throw new RemitPartnerDown($this->partnerName($remit['partner']) . ' ne répond pas.');
         }
+    }
+
+    /**
+     * Détails du transfert adaptés à un autre partenaire : les codes propres au partenaire
+     * précédent (opérateur, service) sont retirés ; le nom du service sert d'indice.
+     */
+    public static function switchPartner(array $remit, string $partner): array
+    {
+        $remit['previous_partners'] = array_values(array_unique([...($remit['previous_partners'] ?? []), $remit['partner'] ?? null]));
+        $remit['partner'] = $partner;
+        unset($remit['account']['provider']);
+        $remit['service'] = ['code' => '', 'name' => (string) ($remit['service']['name'] ?? '')];
+        return $remit;
+    }
+
+    /** Partenaires de la liste (principal + secours) configurés et actifs, dans l'ordre. */
+    public function readyChain(string $iso): array
+    {
+        return array_values(array_filter(RemitCountries::chainFor($iso), fn ($p) => $this->partnerReady($p)));
+    }
+
+    /** Premier partenaire disponible du pays pour ce moyen de réception (null : aucun). */
+    public function activePartner(string $iso, ?string $method = null, array $skip = []): ?string
+    {
+        foreach ($this->readyChain($iso) as $p) {
+            if (! in_array($p, $skip, true) && (! $method || in_array($method, RemitCountries::methodsOf($p), true))) {
+                return $p;
+            }
+        }
+        return null;
     }
 
     // ------------------------------------------------------------ Utilitaires
@@ -777,14 +838,15 @@ class InternationalTransferService
         return array_filter(['city' => $a['city'], 'collection_code' => $a['collection_code'] ?? '', 'question' => $a['question'], 'answer' => $a['answer']]);
     }
 
-    protected function country(string $iso): array
+    protected function country(string $iso, ?string $method = null, array $skip = []): array
     {
         $c = RemitCountries::get($iso);
-        $p = RemitCountries::partnerFor($iso);
-        if (! $c || ! $p) {
+        if (! $c || ! RemitCountries::chainFor($iso)) {
             throw new PeexException('Transfert international non disponible vers ce pays.');
         }
-        if (! $this->partnerReady($p)) {
+        // Principal indisponible (non configuré, désactivé) ou sans ce moyen de réception : secours suivant
+        $p = ($method ? $this->activePartner($iso, $method, $skip) : null) ?? $this->activePartner($iso, null, $skip);
+        if (! $p) {
             throw new PeexException('Transferts vers ' . $c['name'] . ' momentanément indisponibles.');
         }
         return $c + ['partner' => $p];

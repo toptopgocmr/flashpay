@@ -168,7 +168,7 @@
 
     <!-- ================= Transferts internationaux (remittance) ================= -->
     <template v-else-if="tab === 'remit'">
-      <div class="gw-note mb">Transferts internationaux de l'app (P2P, P2B, B2P, B2B depuis le wallet OfficePay). Choisissez le partenaire de remittance qui paie chaque pays de destination (mobile money, banque ou retrait cash). Ce choix est indépendant des partenaires de collecte et de décaissement.</div>
+      <div class="gw-note mb">Transferts internationaux de l'app (P2P, P2B, B2P, B2B depuis le wallet OfficePay). Choisissez le partenaire de remittance qui paie chaque pays de destination (mobile money, banque ou retrait cash). Ajoutez jusqu'à 2 partenaires de secours : ils prennent le relais si le partenaire principal n'est pas configuré, ne répond pas avant l'envoi, ou refuse le transfert (mobile money). Ce choix est indépendant des partenaires de collecte et de décaissement.</div>
       <div class="gw-cols mb">
         <div v-for="p in remit.partners" :key="p.key" class="gw-card pc" :class="'p-' + p.key">
           <div class="gw-card-h">
@@ -212,7 +212,7 @@
         </div>
         <div class="container-body flush" style="overflow-x:auto;">
           <table>
-            <thead><tr><th>Pays</th><th>Devise</th><th>Partenaire de remittance</th><th>Réception</th><th class="num">Activité 30 j</th><th></th></tr></thead>
+            <thead><tr><th>Pays</th><th>Devise</th><th>Partenaire de remittance</th><th>Secours (si le partenaire ne répond pas)</th><th>Réception</th><th class="num">Activité 30 j</th><th></th></tr></thead>
             <tbody>
               <tr v-for="c in remitList" :key="c.iso" :class="{ off: !c.partner }">
                 <td><Flag :iso="c.iso" :size="15" /> <strong>{{ c.name }}</strong> <span class="stat-label">{{ c.iso }}</span>
@@ -225,6 +225,20 @@
                   </select>
                   <div v-if="c.partner && !remitReady(c.partner)" class="t-warn small">⚠ {{ c.partner_name }} non configuré : envois refusés</div>
                   <div v-if="rowErr['R' + c.iso]" class="row-err">{{ rowErr['R' + c.iso] }}</div>
+                </td>
+                <td class="partner-cell">
+                  <template v-if="c.partner && !c.closed">
+                    <div v-for="i in [0, 1]" :key="i" class="pl">
+                      <span class="lbl">{{ i + 1 }}<sup>{{ i === 0 ? 'er' : 'e' }}</sup></span>
+                      <select class="api sm" :class="'p-' + ((c.backups || [])[i] || 'off')" :value="(c.backups || [])[i] || ''" :disabled="i === 1 && !(c.backups || [])[0]" @change="setRemitBackup(c, i, $event.target.value)">
+                        <option value="">— aucun —</option>
+                        <option v-for="p in remit.partners.filter((p) => p.key !== c.partner)" :key="p.key" :value="p.key" :disabled="!c.available.includes(p.key) || ((c.backups || [])[1 - i] === p.key)">{{ p.name }}{{ c.available.includes(p.key) ? (p.ready ? '' : ' — non configuré') : ' — non couvert' }}</option>
+                      </select>
+                    </div>
+                    <div class="route-note">{{ [c.partner, ...(c.backups || [])].map(partnerLabel).join(' → ') }}</div>
+                  </template>
+                  <span v-else>—</span>
+                  <div v-if="rowErr['B' + c.iso]" class="row-err">{{ rowErr['B' + c.iso] }}</div>
                 </td>
                 <td><span v-for="m in c.methods" :key="m" class="gw-pill muted">{{ methodLabel[m] || m }}</span><span v-if="!c.methods.length">—</span></td>
                 <td class="num">{{ c.usage.count ? n(c.usage.count) + ' op. · ' + short(c.usage.volume) : '—' }}</td>
@@ -441,6 +455,12 @@ async function loadRemit() {
 async function setRemitPartner(c, partner) {
   if (partner === 'off' && !(await confirmBox('Les clients ne pourront plus envoyer d\'argent vers ce pays depuis l\'app.', { title: `Fermer les transferts vers ${c.name} ?`, confirmLabel: 'Fermer', danger: true }))) return loadRemit()
   run(() => api.post(`/admin/remit/countries/${c.iso}`, { partner }), 'R' + c.iso)
+}
+// Secours de remittance : si le partenaire principal est indisponible ou refuse le transfert
+function setRemitBackup(c, i, value) {
+  const list = [...(c.backups || [])]
+  list[i] = value
+  run(() => api.post(`/admin/remit/countries/${c.iso}/backups`, { backups: list.filter(Boolean) }), 'B' + c.iso)
 }
 async function load(pawapayRefresh = false) {
   error.value = ''

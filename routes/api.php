@@ -424,6 +424,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/remit/overview', [\App\Http\Controllers\Api\RemitAdminController::class, 'overview']);
         Route::get('/remit/balances', [\App\Http\Controllers\Api\RemitAdminController::class, 'balances'])->middleware('throttle:20,1,remit-balances');
         Route::post('/remit/countries/{iso}', [\App\Http\Controllers\Api\RemitAdminController::class, 'updateCountry'])->where('iso', '[A-Za-z]{2}');
+        Route::post('/remit/countries/{iso}/backups', [\App\Http\Controllers\Api\RemitAdminController::class, 'updateBackups'])->where('iso', '[A-Za-z]{2}');
         Route::get('/digitwace/diagnose', [PricingAdminController::class, 'diagnoseWacepay'])->middleware('throttle:10,1');
         Route::post('/digitwace/discover', [PricingAdminController::class, 'discoverWacepay'])->middleware('throttle:3,1');
         Route::delete('/digitwace/discover', [PricingAdminController::class, 'resetWacepayEndpoint']);

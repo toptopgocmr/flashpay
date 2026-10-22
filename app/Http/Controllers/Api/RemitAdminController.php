@@ -42,6 +42,7 @@ class RemitAdminController extends Controller
                 'closed' => ($overrides[$iso] ?? null) === 'off',
                 'overridden' => array_key_exists($iso, $overrides),
                 'available' => $this->availableFor($iso),
+                'backups' => array_values(array_diff(RemitCountries::chainFor($iso), [$effective])),
                 'methods' => RemitCountries::methodsOf($effective),
                 'usage' => $usage['countries'][$iso] ?? ['count' => 0, 'volume' => 0],
             ];
@@ -117,6 +118,33 @@ class RemitAdminController extends Controller
         }]);
     }
 
+    /** { backups: [partenaire, …] } — partenaires de secours du pays, dans l'ordre (max 3). */
+    public function updateBackups(Request $request, PlatformSettings $settings, string $iso)
+    {
+        $iso = strtoupper($iso);
+        abort_unless(RemitCountries::get($iso), 404, 'Pays inconnu.');
+        $v = $request->validate(['backups' => 'present|array|max:3', 'backups.*' => 'string|in:wacepay_remit,terrapay,pawapay,fincra_remit']);
+        $primary = RemitCountries::partnerFor($iso);
+        $list = array_values(array_unique(array_diff($v['backups'], [$primary])));
+        foreach ($list as $p) {
+            if (! in_array($p, $this->availableFor($iso), true)) {
+                return response()->json(['message' => RemitCountries::partnerName($p) . " ne couvre pas {$iso}."], 422);
+            }
+        }
+        $map = RemitCountries::backups();
+        if ($list) {
+            $map[$iso] = $list;
+        } else {
+            unset($map[$iso]);
+        }
+        $settings->set('remit_backups', $map, $request->user()->id);
+        \App\Support\Audit::log('remit.country_backups', null, ['country' => $iso, 'backups' => $list], $request->user()->id);
+        $name = RemitCountries::get($iso)['name'];
+        return response()->json(['message' => $list
+            ? "Secours pour {$name} : " . implode(' → ', array_map(fn ($p) => RemitCountries::partnerName($p), $list)) . '.'
+            : "Aucun partenaire de secours pour {$name}."]);
+    }
+
     /** Soldes chez les partenaires (WacePay : agence ; PawaPay : par pays). */
     public function balances()
     {
@@ -152,13 +180,6 @@ class RemitAdminController extends Controller
     /** Partenaires capables de payer ce pays. */
     protected function availableFor(string $iso): array
     {
-        $out = ['wacepay_remit', 'terrapay'];
-        if (PawapayClient::iso3($iso) && ! in_array($iso, ['FR', 'US', 'BE', 'GB'], true)) {
-            $out[] = 'pawapay';
-        }
-        if (in_array(strtoupper($iso), app(\App\Services\Fincra\FincraClient::class)->remitCountries(), true)) {
-            $out[] = 'fincra_remit';
-        }
-        return $out;
+        return RemitCountries::coverage($iso);
     }
 }

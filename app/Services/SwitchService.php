@@ -310,8 +310,13 @@ class SwitchService
         $attempts[] = ['rail' => $tx->destination_rail, 'partner' => $this->partnerLabel($tx->destination_rail),
             'error' => mb_substr($reason, 0, 200), 'ref' => $tx->destination_external_ref, 'at' => now()->toIso8601String()];
         Log::warning('Versement : bascule automatique de partenaire', ['reference' => $tx->reference, 'from' => $tx->destination_rail, 'to' => $next, 'error' => $reason]);
+        $patch = ['payout_attempts' => $attempts];
+        if (! empty($meta['remit']) && isset(\App\Services\Remit\RemitCountries::PARTNERS[$next])) {
+            // Remittance : codes propres à l'ancien partenaire retirés (opérateur, service)
+            $patch['remit'] = \App\Services\Remit\InternationalTransferService::switchPartner((array) $meta['remit'], $next);
+        }
         $tx->update(['destination_rail' => $next, 'destination_external_ref' => null, 'stage' => 'awaiting_destination',
-            'meta' => array_merge($meta, ['payout_attempts' => $attempts])]);
+            'meta' => array_merge($meta, $patch)]);
 
         return $this->runDestination($tx->fresh(), retry: true);
     }

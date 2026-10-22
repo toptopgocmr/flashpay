@@ -94,6 +94,8 @@ return [
     | La source est toujours le wallet OfficePay du client (débité montant + frais).
     */
     'remit' => [
+        // Bascule vers les partenaires de secours du pays (Console › Pays & change › Remittance)
+        'failover' => (bool) env('FLASHPAY_REMIT_FAILOVER', true),
         // Partenaire par pays de destination : « FR=terrapay,CI=wacepay_remit,*=wacepay_remit »
         'partners' => collect(explode(',', (string) env('REMIT_PARTNERS', '*=wacepay_remit')))->filter(fn ($p) => str_contains($p, '='))
             ->mapWithKeys(fn ($p) => [strtoupper(trim(explode('=', $p, 2)[0])) => strtolower(trim(explode('=', $p, 2)[1]))])->all(),
