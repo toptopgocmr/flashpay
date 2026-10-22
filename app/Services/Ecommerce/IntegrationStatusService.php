@@ -20,7 +20,7 @@ class IntegrationStatusService
     /** Étapes : clé => [libellé, obligatoire, aide]. */
     public const STEPS = [
         'keys' => ['Clés sandbox générées', true, 'Le marchand génère ses clés de test (app › Paiement en ligne).'],
-        'api_call' => ['Premier appel API reçu', true, 'Le site a appelé FlashPay avec la clé secrète sandbox.'],
+        'api_call' => ['Premier appel API reçu', true, 'Le site a appelé OfficePay avec la clé secrète sandbox.'],
         'intent_created' => ['Paiement créé par le site', true, 'Une commande test a créé un payment intent.'],
         'payment_succeeded' => ['Paiement confirmé', true, 'Un paiement test est allé jusqu\'au statut « confirmé ».'],
         'webhook_delivered' => ['Webhook reçu par le site', true, 'Le serveur du marchand a répondu 2xx à une notification.'],
@@ -128,7 +128,7 @@ class IntegrationStatusService
     {
         $m->forceFill(['integration_validated_at' => now(), 'integration_validated_by' => 'admin'])->save();
         Audit::log('integration.validate', $m, ['note' => $note]);
-        $this->notify->toUser($m->user, 'integration_validated', 'Intégration e-commerce validée par FlashPay', 'Vous pouvez générer vos clés de production.', ['severity' => 'success']);
+        $this->notify->toUser($m->user, 'integration_validated', 'Intégration e-commerce validée par OfficePay', 'Vous pouvez générer vos clés de production.', ['severity' => 'success']);
     }
 
     public function revokeValidation(Merchant $m, ?string $note = null): void

@@ -36,7 +36,7 @@ class MaishapayWebhookController extends Controller
         $req = $ids ? RemitRequest::where('partner', 'maishapay')
             ->where(fn ($q) => $q->whereIn('partner_ref', $ids)->orWhereIn('reference', $ids))->first() : null;
         if (! $req) {
-            Log::info('MaishaPay : notification sans opération FlashPay correspondante', ['ids' => $ids]);
+            Log::info('MaishaPay : notification sans opération OfficePay correspondante', ['ids' => $ids]);
             return response()->json(['ok' => true]);
         }
         if (! $req->finalized_at && Cache::add('maishapay:callback:' . $req->id, 1, 5)) {

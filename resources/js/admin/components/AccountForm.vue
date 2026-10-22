@@ -41,7 +41,7 @@
             <input v-model="f.password" type="text" minlength="4" placeholder="Code secret (4 chiffres min.)" />
             <button type="button" class="btn-normal" title="Générer" @click="gen">↻</button>
           </div>
-          <div class="hint">Code à 4 chiffres pour l'app mobile. Si le numéro a déjà un compte FlashPay, ce code remplace son code secret actuel (laissez vide pour le garder).</div>
+          <div class="hint">Code à 4 chiffres pour l'app mobile. Si le numéro a déjà un compte OfficePay, ce code remplace son code secret actuel (laissez vide pour le garder).</div>
         </div>
       </div>
       <template v-if="kind === 'merchant'">
@@ -59,7 +59,7 @@
             <label class="def"><input type="radio" name="settle-default" :value="t.key" v-model="defaultType" /> Par défaut</label>
           </div>
           <div v-if="t.key === 'mobile_money' || t.key === 'wallet'">
-            <label class="field">{{ t.key === 'wallet' ? 'Numéro du wallet FlashPay' : 'Numéro mobile money (tout opérateur)' }}</label>
+            <label class="field">{{ t.key === 'wallet' ? 'Numéro du wallet OfficePay' : 'Numéro mobile money (tout opérateur)' }}</label>
             <input v-model.trim="acc[t.key].phone" placeholder="Par défaut : le téléphone du marchand" />
           </div>
           <template v-if="t.key === 'bank'">
@@ -72,14 +72,14 @@
               <div><label class="field">SWIFT / BIC (facultatif)</label><input v-model.trim="acc.bank.swift" /></div>
             </div>
           </template>
-          <div v-if="t.key === 'cash_pickup'" class="hint" style="margin:0;">Le marchand reçoit un code de retrait à présenter chez n'importe quel agent FlashPay.</div>
+          <div v-if="t.key === 'cash_pickup'" class="hint" style="margin:0;">Le marchand reçoit un code de retrait à présenter chez n'importe quel agent OfficePay.</div>
         </div>
         <div class="hint" style="margin-top:-6px;">Le marchand pourra ajouter d'autres comptes et régler vers chacun depuis son application (menu Règlements).</div>
       </template>
     </template>
 
     <template v-else>
-      <div class="flash info" style="margin:0;"><div>{{ done.message }} Transmettez ces identifiants à la personne : elle se connecte dans l'application FlashPay en choisissant le profil <strong>{{ done.login.profile }}</strong>.</div></div>
+      <div class="flash info" style="margin:0;"><div>{{ done.message }} Transmettez ces identifiants à la personne : elle se connecte dans l'application OfficePay en choisissant le profil <strong>{{ done.login.profile }}</strong>.</div></div>
       <div class="creds">
         <div><span>Profil</span><strong>{{ done.login.profile }}</strong></div>
         <div v-if="kind === 'merchant'"><span>Modes de retrait</span><strong>{{ SETTLE_TYPES.filter((t) => chosen[t.key]).map((t) => t.label + (t.key === defaultType ? ' (défaut)' : '')).join(', ') }}</strong></div>
@@ -123,7 +123,7 @@ const countries = ref([])
 const SETTLE_TYPES = [
   { key: 'mobile_money', label: 'Mobile money', hint: 'MTN, Airtel, Orange…' },
   { key: 'bank', label: 'Compte bancaire', hint: 'Virement' },
-  { key: 'wallet', label: 'Wallet FlashPay', hint: 'Instantané' },
+  { key: 'wallet', label: 'Wallet OfficePay', hint: 'Instantané' },
   { key: 'cash_pickup', label: 'Cash agent', hint: 'Code de retrait' },
 ]
 const BANKS = ['BGFI Bank Congo', 'LCB Bank', 'Ecobank Congo', 'Société Générale Congo', 'UBA Congo', 'BSCA Bank', 'Crédit du Congo', 'BCH', 'Banque Postale du Congo', 'Afriland First Bank', 'Mucodec']
@@ -181,7 +181,7 @@ async function save() {
 
 async function copy() {
   const l = done.value.login
-  const text = `FlashPay — profil ${l.profile}\nLocalisation : ${f.city} (${f.country})\nTéléphone : +${l.phone}\n` + (sentPassword.value ? `Code secret : ${sentPassword.value}\n` : '') + "Application : ouvrez FlashPay et choisissez « " + l.profile + ' ».'
+  const text = `OfficePay — profil ${l.profile}\nLocalisation : ${f.city} (${f.country})\nTéléphone : +${l.phone}\n` + (sentPassword.value ? `Code secret : ${sentPassword.value}\n` : '') + "Application : ouvrez OfficePay et choisissez « " + l.profile + ' ».'
   try { await navigator.clipboard.writeText(text); copied.value = true } catch (_) {}
 }
 

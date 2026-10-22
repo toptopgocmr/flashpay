@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Reçus FlashPay ({{ count($receipts) }})</title>
+<title>Reçus OfficePay ({{ count($receipts) }})</title>
 @include('partials.receipt-style')
 </head>
 <body>

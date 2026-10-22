@@ -9,7 +9,7 @@ return [
     'sms_http' => [
         'url' => env('FLASHPAY_SMS_URL'),
         'token' => env('FLASHPAY_SMS_TOKEN'),
-        'sender' => env('FLASHPAY_SMS_SENDER', 'FlashPay'),
+        'sender' => env('FLASHPAY_SMS_SENDER', 'OfficePay'),
     ],
     'push_driver' => env('FLASHPAY_PUSH_DRIVER', 'log'), // log | fcm
     'fcm' => [

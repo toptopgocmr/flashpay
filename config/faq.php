@@ -5,7 +5,7 @@ return [
     'channels' => [
         ['type' => 'phone', 'label' => 'Centre d\'appel clients', 'value' => env('FLASHPAY_SUPPORT_PHONE', '+242 06 000 00 00'), 'hours' => '7j/7, 7h–21h'],
         ['type' => 'chat', 'label' => 'Chat in-app (tickets)', 'value' => 'Depuis l\'onglet Profil › Aide'],
-        ['type' => 'agency', 'label' => 'Agence FlashPay', 'value' => env('FLASHPAY_SUPPORT_ADDRESS', 'Brazzaville, centre-ville')],
+        ['type' => 'agency', 'label' => 'Agence OfficePay', 'value' => env('FLASHPAY_SUPPORT_ADDRESS', 'Brazzaville, centre-ville')],
         ['type' => 'pro', 'label' => 'Ligne dédiée agents & marchands', 'value' => env('FLASHPAY_PRO_PHONE', '+242 05 000 00 00'), 'hours' => 'Lun–Sam, 7h–20h'],
     ],
     'fr' => [

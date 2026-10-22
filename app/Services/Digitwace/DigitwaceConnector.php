@@ -47,14 +47,14 @@ class DigitwaceConnector implements PaymentRailConnector
             }
             // WacePay facture sa commission de collecte AU PAYEUR, en plus du montant demandé
             // (feeBearer PAYER : 4 270 demandés → 4 356 débités). Les frais de collecte déjà
-            // inclus dans le devis FlashPay sont donc retirés du montant demandé, sinon
+            // inclus dans le devis OfficePay sont donc retirés du montant demandé, sinon
             // l'expéditeur paierait la collecte deux fois.
             $collectFee = (int) data_get($meta, 'fee_breakdown.collect', 0);
             if ($collectFee > 0 && config('flashpay.digitwace.collect_fee_bearer', 'payer') === 'payer' && $collectFee < $amountMinor) {
                 $amountMinor -= $collectFee;
             }
             $r = $this->client->payin($ref, $payer, $amountMinor, $currency, $route['phone'],
-                $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $tx?->initiator?->full_name ?? 'Client FlashPay', $route['country'],
+                $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $tx?->initiator?->full_name ?? 'Client OfficePay', $route['country'],
                 $meta['source_operator'] ?? null, $tx?->initiator?->email ?? null);
             $req->update(['wace_id' => $r['wace_id'], 'status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'last_response' => $r['raw'], 'last_checked_at' => now()]);
 
@@ -120,15 +120,15 @@ class DigitwaceConnector implements PaymentRailConnector
                 return ['status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'external_ref' => $r['wace_id'] ?: $reference, 'raw' => $r['raw']];
             }
             $sender = $this->client->senderCode($refund ? [
-                'name' => 'FlashPay Remboursement', 'phone' => (string) config('flashpay.peex.sender_phone', ''),
+                'name' => 'OfficePay Remboursement', 'phone' => (string) config('flashpay.peex.sender_phone', ''),
                 'country' => config('flashpay.peex.sender_country', 'CG'),
             ] : [
-                'name' => $meta['sender_name'] ?? $tx?->initiator?->full_name ?? 'Client FlashPay',
+                'name' => $meta['sender_name'] ?? $tx?->initiator?->full_name ?? 'Client OfficePay',
                 'phone' => (string) ($meta['sender_phone'] ?? $tx?->initiator?->phone ?? ''),
                 'country' => $meta['source_country'] ?? config('flashpay.peex.sender_country', 'CG'),
             ]);
             $beneficiary = $this->client->beneficiaryCode([
-                'name' => $name ?: 'Beneficiaire FlashPay',
+                'name' => $name ?: 'Beneficiaire OfficePay',
                 'phone' => $route['phone'],
                 'country' => $route['country'],
             ]);

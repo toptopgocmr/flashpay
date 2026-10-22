@@ -56,7 +56,7 @@ class WalletAdjustmentService
             $label = number_format($amount, 0, ',', ' ') . " {$wallet->currency}";
             Audit::log('wallet.adjust', $wallet, ['direction' => $direction, 'amount' => $amount, 'reason' => $reason, 'transaction' => $tx->reference], $admin->id);
             $this->notify->toAdmins('manual_intervention', 'Intervention manuelle : ' . ($credit ? 'crédit' : 'débit') . " {$label}", "{$wallet->user->full_name} — {$reason} (par {$admin->full_name})", ['severity' => 'warning', 'data' => ['transaction_id' => $tx->id]]);
-            $this->notify->toUser($wallet->user, 'adjustment', ($credit ? 'Crédit' : 'Débit') . " de {$label} par FlashPay", $reason, ['sms' => false]);
+            $this->notify->toUser($wallet->user, 'adjustment', ($credit ? 'Crédit' : 'Débit') . " de {$label} par OfficePay", $reason, ['sms' => false]);
 
             return $tx->fresh();
         });

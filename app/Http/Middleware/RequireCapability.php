@@ -32,7 +32,7 @@ class RequireCapability
         $labels = array_map(fn ($c) => $this->permissions->capabilities()[$c]['label'] ?? $c, $caps);
 
         return response()->json([
-            'message' => 'Action non autorisée pour votre profil : ' . implode(' / ', $labels) . '. Contactez FlashPay si vous pensez qu\'il s\'agit d\'une erreur.',
+            'message' => 'Action non autorisée pour votre profil : ' . implode(' / ', $labels) . '. Contactez OfficePay si vous pensez qu\'il s\'agit d\'une erreur.',
             'error' => 'capability_denied',
             'capabilities' => $caps,
         ], 403);

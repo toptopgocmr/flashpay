@@ -97,7 +97,7 @@
         <div><small>Montant</small><b>{{ money(t.amount, t.currency) }}</b></div>
         <div><small>Frais client</small><b>{{ money((t.fee || 0) + (t.merchant_fee || 0), t.currency) }}</b></div>
         <div v-if="t.costs"><small>Frais partenaires</small><b class="neg">−{{ money(t.costs.partner_total || 0, t.currency) }}</b></div>
-        <div v-if="t.costs"><small>Gain FlashPay</small><b :class="t.costs.margin < 0 ? 'neg' : 'pos'">{{ money(t.costs.margin, t.currency) }}</b></div>
+        <div v-if="t.costs"><small>Gain OfficePay</small><b :class="t.costs.margin < 0 ? 'neg' : 'pos'">{{ money(t.costs.margin, t.currency) }}</b></div>
         <div><small>Net bénéficiaire</small><b class="pos">{{ money(net, t.destination_currency || t.currency) }}</b></div>
       </div>
 
@@ -105,7 +105,7 @@
         <!-- Colonne principale -->
         <div class="td-col">
           <section v-if="t.flow" class="td-box">
-            <header><h3>Parcours des fonds</h3><small>Collecte → compte principal FlashPay → décaissement</small></header>
+            <header><h3>Parcours des fonds</h3><small>Collecte → compte principal OfficePay → décaissement</small></header>
             <ol class="td-flow">
               <li v-for="(s, i) in t.flow" :key="s.step" :class="'st-' + (s.status || 'none')">
                 <span class="dot">
@@ -128,8 +128,8 @@
               <thead><tr><th>Ligne</th><th>Partenaire</th><th>Référence</th><th>Statut</th><th class="num">Montant</th><th class="num">Frais</th></tr></thead>
               <tbody>
                 <tr>
-                  <td><b>Facturé par FlashPay</b><small>frais client{{ t.costs.merchant_fee ? ' + commission marchand' : '' }}</small></td>
-                  <td><ProviderLogo name="FlashPay" :size="16" /> FlashPay</td><td class="mono">{{ t.reference }}</td><td><span class="pill sm" :class="t.status">{{ ST[t.status] || t.status }}</span></td><td></td>
+                  <td><b>Facturé par OfficePay</b><small>frais client{{ t.costs.merchant_fee ? ' + commission marchand' : '' }}</small></td>
+                  <td><ProviderLogo name="OfficePay" :size="16" /> OfficePay</td><td class="mono">{{ t.reference }}</td><td><span class="pill sm" :class="t.status">{{ ST[t.status] || t.status }}</span></td><td></td>
                   <td class="num pos"><b>+{{ n(t.costs.billed) }} {{ t.costs.currency }}</b></td>
                 </tr>
                 <tr v-for="l in t.costs.legs" :key="l.kind + l.reference">
@@ -144,7 +144,7 @@
               </tbody>
               <tfoot>
                 <tr>
-                  <td colspan="5"><b>Gain FlashPay</b> <small>= facturé − frais partenaires</small></td>
+                  <td colspan="5"><b>Gain OfficePay</b> <small>= facturé − frais partenaires</small></td>
                   <td class="num" :class="t.costs.margin < 0 ? 'neg' : 'pos'"><b>{{ n(t.costs.margin) }} {{ t.costs.currency }}</b></td>
                 </tr>
               </tfoot>
@@ -241,7 +241,7 @@ const escalatePartner = ref('peex')
 const escalateMessage = ref('')
 
 const ST = { successful: 'Réussi', pending: 'En cours', failed: 'Échoué', processing: 'En cours', reversed: 'Remboursé', paid: 'Réussi' }
-const RAILS = { wallet: 'Wallet FlashPay', peex: 'Mobile money (PEEX)', digitwace: 'Mobile money (WacePay)', wacepay_remit: 'International (WacePay)', terrapay: 'International (TerraPay)', pawapay: 'International (PawaPay)', pawapay_momo: 'Mobile money (PawaPay)', maishapay: 'Mobile money (MaishaPay)', fincra: 'Mobile money (Fincra)', fincra_remit: 'International (Fincra)', card: 'Carte bancaire', bank: 'Banque', cash: 'Espèces', atm: 'GAB', treasury: 'Trésorerie FlashPay' }
+const RAILS = { wallet: 'Wallet OfficePay', peex: 'Mobile money (PEEX)', digitwace: 'Mobile money (WacePay)', wacepay_remit: 'International (WacePay)', terrapay: 'International (TerraPay)', pawapay: 'International (PawaPay)', pawapay_momo: 'Mobile money (PawaPay)', maishapay: 'Mobile money (MaishaPay)', fincra: 'Mobile money (Fincra)', fincra_remit: 'International (Fincra)', card: 'Carte bancaire', bank: 'Banque', cash: 'Espèces', atm: 'GAB', treasury: 'Trésorerie OfficePay' }
 const nf = new Intl.NumberFormat('fr-FR')
 const n = (v) => nf.format(v || 0)
 const money = (v, c) => nf.format(v || 0) + ' ' + (c || 'XAF')
@@ -347,14 +347,14 @@ async function checkStatus() {
 onMounted(load)
 watch(() => route.params.id, (id) => { if (id) { t.value = null; load() } })
 
-// Expéditeur / bénéficiaire lisibles (compte FlashPay, sinon informations saisies sur l'opération)
+// Expéditeur / bénéficiaire lisibles (compte OfficePay, sinon informations saisies sur l'opération)
 const sender = computed(() => {
   const x = t.value || {}, m = x.meta || {}, u = x.source_wallet?.user, p = x.parties || {}
-  return { userId: u?.id, name: u?.full_name || m.sender_name || m.payer_name || p.sender_name || (x.source_rail === 'treasury' ? 'FlashPay (trésorerie)' : null), account: x.source_account || u?.phone || p.sender_phone }
+  return { userId: u?.id, name: u?.full_name || m.sender_name || m.payer_name || p.sender_name || (x.source_rail === 'treasury' ? 'OfficePay (trésorerie)' : null), account: x.source_account || u?.phone || p.sender_phone }
 })
 const beneficiary = computed(() => {
   const x = t.value || {}, m = x.meta || {}, u = x.destination_wallet?.user, p = x.parties || {}
-  return { userId: u?.id, name: m.merchant_name || u?.full_name || m.beneficiary_name || m.client_name || p.beneficiary_name || (x.destination_rail === 'treasury' ? 'FlashPay (trésorerie)' : null), account: x.destination_account || u?.phone || p.beneficiary_phone || m.bank_name }
+  return { userId: u?.id, name: m.merchant_name || u?.full_name || m.beneficiary_name || m.client_name || p.beneficiary_name || (x.destination_rail === 'treasury' ? 'OfficePay (trésorerie)' : null), account: x.destination_account || u?.phone || p.beneficiary_phone || m.bank_name }
 })
 const net = computed(() => Math.max(0, (t.value?.destination_amount ?? t.value?.amount ?? 0) - (t.value?.merchant_fee || 0)))
 
@@ -368,8 +368,8 @@ function accountLabel(acc) {
     if (id === x.destination_wallet_id) return { name: `Wallet de ${beneficiary.value.name || 'du bénéficiaire'}` }
     return { name: `Wallet n° ${rest}` }
   }
-  const FP = { suspense: "Compte d'attente FlashPay", fees: 'Revenus de frais FlashPay', treasury: 'Trésorerie FlashPay', commissions: 'Commissions agents' }
-  if (kind === 'flashpay') return { name: FP[rest] || 'FlashPay · ' + rest }
+  const FP = { suspense: "Compte d'attente OfficePay", fees: 'Revenus de frais OfficePay', treasury: 'Trésorerie OfficePay', commissions: 'Commissions agents' }
+  if (kind === 'flashpay') return { name: FP[rest] || 'OfficePay · ' + rest }
   if (kind === 'digitwace') return { name: 'WacePay · ' + phone(rest) }
   if (kind === 'wacepay_remit') return { name: 'WacePay international · ' + rest }
   if (kind === 'pawapay' || kind === 'pawapay_momo') return { name: 'PawaPay · ' + phone(rest) }

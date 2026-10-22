@@ -3,7 +3,7 @@
     <div class="wp-head">
       <div>
         <h1>Transactions</h1>
-        <p>{{ subtitle || 'Toutes les opérations FlashPay : collectes, versements, paiements et transferts' }}</p>
+        <p>{{ subtitle || 'Toutes les opérations OfficePay : collectes, versements, paiements et transferts' }}</p>
       </div>
       <div class="wp-hbtn">
         <button class="btn-normal" @click="showRates = true">Tarifs partenaires</button>
@@ -32,7 +32,7 @@
       </div>
       <div class="wp-card">
         <span class="ic fee"><svg viewBox="0 0 24 24"><path d="M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 2.6 4.5 3 4.5 1.3 4.5 3-2 3-4.5 3-4.5-1.3-4.5-3"/></svg></span>
-        <div><small>Frais facturés</small><b>{{ n(S.billed) }} <i>{{ cur }}</i></b><em :title="`Frais partenaires −${n(S.partner_fees)} · Gain FlashPay ${n(S.margin)}`">Partenaires −{{ n(S.partner_fees) }} · Gain <span :class="S.margin < 0 ? 'neg' : 'pos'">{{ n(S.margin) }}</span></em></div>
+        <div><small>Frais facturés</small><b>{{ n(S.billed) }} <i>{{ cur }}</i></b><em :title="`Frais partenaires −${n(S.partner_fees)} · Gain OfficePay ${n(S.margin)}`">Partenaires −{{ n(S.partner_fees) }} · Gain <span :class="S.margin < 0 ? 'neg' : 'pos'">{{ n(S.margin) }}</span></em></div>
       </div>
       <div class="wp-card">
         <span class="ic rate"><svg viewBox="0 0 24 24"><path d="M6 18L18 6"/><circle cx="7.5" cy="7.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></svg></span>
@@ -97,7 +97,7 @@
             <col style="width:7%"><col style="width:10%"><col style="width:9%"><col style="width:6%">
           </colgroup>
           <thead>
-            <tr><th class="c-chk" @click.stop><input type="checkbox" :checked="allChecked" :indeterminate.prop="selected.size > 0 && !allChecked" title="Tout cocher (page)" @change="toggleAll" /></th><th>ID</th><th>Expéditeur</th><th>Bénéficiaire</th><th class="num">Montant</th><th class="num">Frais</th><th class="num" title="Frais prélevés par les partenaires (WacePay / PEEX) ; « ~ » = estimé avec les tarifs partenaires">Frais part.</th><th class="num" title="Gain FlashPay = frais facturés − frais partenaires">Gain FP</th><th>Passerelle</th><th>Opérateurs</th><th>Date</th><th></th></tr>
+            <tr><th class="c-chk" @click.stop><input type="checkbox" :checked="allChecked" :indeterminate.prop="selected.size > 0 && !allChecked" title="Tout cocher (page)" @change="toggleAll" /></th><th>ID</th><th>Expéditeur</th><th>Bénéficiaire</th><th class="num">Montant</th><th class="num">Frais</th><th class="num" title="Frais prélevés par les partenaires (WacePay / PEEX) ; « ~ » = estimé avec les tarifs partenaires">Frais part.</th><th class="num" title="Gain OfficePay = frais facturés − frais partenaires">Gain FP</th><th>Passerelle</th><th>Opérateurs</th><th>Date</th><th></th></tr>
           </thead>
           <tbody>
             <tr v-for="t in transactions" :key="t.id" :class="{ sel: selected.has(t.id) }" @click="detail = t">
@@ -173,14 +173,14 @@
           <div class="wp-sec">
             <h4>Montants</h4>
             <div class="kv"><span>Montant</span><b>{{ money(detail.amount, detail.currency) }}</b></div>
-            <div class="kv"><span>Frais facturés (FlashPay)</span><b>{{ money(detail.costs?.billed ?? detail.fee, detail.currency) }}</b></div>
+            <div class="kv"><span>Frais facturés (OfficePay)</span><b>{{ money(detail.costs?.billed ?? detail.fee, detail.currency) }}</b></div>
             <div class="kv" v-for="l in detail.costs?.legs || []" :key="l.kind + l.reference">
               <span>Frais {{ l.partner }} · {{ l.kind === 'collect' ? 'collecte' : l.kind === 'payout' ? 'versement' : 'remboursement' }}<small v-if="l.country"> ({{ l.country }})</small><small v-if="l.reference" class="mono"> {{ l.reference }}</small></span>
               <b class="neg" v-if="l.fee !== null">−{{ money(l.fee, l.currency) }}<small v-if="l.fee_source === 'estimate'"> (estimé)</small></b>
               <b class="unk" v-else>non communiqués</b>
             </div>
             <div class="kv tot"><span>Total frais partenaires</span><b class="neg">−{{ money(detail.costs?.partner_total ?? 0, detail.currency) }}<small v-if="isEstimate(detail)"> (estimé)</small></b></div>
-            <div class="kv tot"><span>Gain FlashPay</span><b :class="(detail.costs?.margin ?? 0) < 0 ? 'neg' : 'pos'">{{ money(detail.costs?.margin ?? 0, detail.currency) }}</b></div>
+            <div class="kv tot"><span>Gain OfficePay</span><b :class="(detail.costs?.margin ?? 0) < 0 ? 'neg' : 'pos'">{{ money(detail.costs?.margin ?? 0, detail.currency) }}</b></div>
             <div class="kv"><span>Net reçu par le bénéficiaire</span><b class="net">{{ money(netOf(detail), detail.destination_currency || detail.currency) }}</b></div>
           </div>
 
@@ -315,14 +315,14 @@ const svc = (t) => {
   const g = t.gateway
   if (!g) return '—'
   const side = g.out.rail === 'wallet' && g.in.rail !== 'wallet' ? g.in : g.out
-  const op = (side.operator || '—').replace(/ Mobile Money| Money/g, '').replace('Wallet FlashPay', 'Wallet')
+  const op = (side.operator || '—').replace(/ Mobile Money| Money/g, '').replace('Wallet OfficePay', 'Wallet')
   return side.country ? `${op} (${side.country})` : op
 }
 // Passerelles utilisées (collecte et/ou versement) et opérateurs débité → crédité
 const gateways = (t) => [...new Set([t.gateway?.in.partner, t.gateway?.out.partner].filter(Boolean).map((p) => p.replace(/ \(.*\)/, '').replace('Carte (3-D Secure)', '3DS')))]
 const opName = (side, withCountry = true) => {
   if (!side) return '—'
-  const op = (side.operator || '—').replace(/ Mobile Money| Money/g, '').replace('Wallet FlashPay', 'Wallet').replace('Carte Visa / Mastercard', 'Carte')
+  const op = (side.operator || '—').replace(/ Mobile Money| Money/g, '').replace('Wallet OfficePay', 'Wallet').replace('Carte Visa / Mastercard', 'Carte')
   return side.country && withCountry ? `${op} (${side.country})` : op
 }
 // Pays de collecte (expéditeur) et de réception (bénéficiaire), avec drapeau
@@ -520,7 +520,7 @@ const EXP_COLS = [
   { label: 'Moyen crédité', value: (t) => t.destination_rail },
   { label: 'Opérateur crédité', value: (t) => opName(t.gateway?.out) },
   { label: 'Service', value: (t) => svc(t) },
-  { label: 'Passerelle', value: (t) => gateways(t).join(' + ') || 'Interne FlashPay' },
+  { label: 'Passerelle', value: (t) => gateways(t).join(' + ') || 'Interne OfficePay' },
   { label: 'Track ID PEEX', value: (t) => (t.gateway?.track_ids || []).join(' ') },
   { label: 'Réf. externe source', value: (t) => t.source_external_ref },
   { label: 'Réf. externe destination', value: (t) => t.destination_external_ref },
@@ -528,13 +528,13 @@ const EXP_COLS = [
   { label: 'Devise', value: (t) => t.currency },
   { label: 'Frais client', value: (t) => t.fee || 0 },
   { label: 'Commission marchand', value: (t) => t.merchant_fee || 0 },
-  { label: 'Frais facturés FlashPay', value: (t) => t.costs?.billed ?? t.fee },
+  { label: 'Frais facturés OfficePay', value: (t) => t.costs?.billed ?? t.fee },
   { label: 'Frais PEEX', value: (t) => legFee(t, 'PEEX') },
   { label: 'Frais WacePay', value: (t) => legFee(t, 'WacePay') },
   { label: 'Frais partenaires (total)', value: (t) => t.costs?.partner_total ?? 0 },
   { label: 'Origine frais partenaires', value: (t) => (!t.costs?.legs?.length ? 'Aucun (interne)' : isEstimate(t) ? 'Estimé (tarifs partenaires)' : t.costs.complete ? 'Communiqué par le partenaire' : 'Partiel') },
   { label: 'Détail frais partenaires', value: (t) => legsTxt(t, (l) => `${l.partner} ${legKind(l)}${l.country ? ' ' + l.country : ''} : ${l.fee === null ? 'n.c.' : l.fee + ' ' + l.currency}${l.fee_source === 'estimate' ? ' (estimé)' : ''}`) },
-  { label: 'Gain FlashPay', value: (t) => t.costs?.margin ?? '' },
+  { label: 'Gain OfficePay', value: (t) => t.costs?.margin ?? '' },
   { label: 'Montant reçu', value: (t) => t.destination_amount ?? t.amount },
   { label: 'Net bénéficiaire', value: (t) => netOf(t) },
   { label: 'Devise reçue', value: (t) => t.destination_currency || t.currency },

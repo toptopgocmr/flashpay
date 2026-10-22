@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', fn () => response()->json(['app' => 'FlashPay API', 'status' => 'ok']));
+Route::get('/', fn () => response()->json(['app' => 'OfficePay API', 'status' => 'ok']));
 
 /*
 |--------------------------------------------------------------------------

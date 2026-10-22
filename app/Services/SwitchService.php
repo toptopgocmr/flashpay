@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
- * FlashPay Switch — cœur du routage des paiements interopérables.
+ * OfficePay Switch — cœur du routage des paiements interopérables.
  *
  * Orchestration (ex: MTN MoMo -> Airtel Money, tous deux via PEEX) :
  *   1. SOURCE      : débit wallet interne OU collect() sur le rail source
@@ -398,12 +398,12 @@ class SwitchService
             'partner' => $this->partnerLabel($tx->destination_rail), 'account' => $tx->destination_account]]);
         $reason = $this->debitCreditText($tx, $reason);
 
-        // Source wallet FlashPay → retour sur le même wallet
+        // Source wallet OfficePay → retour sur le même wallet
         if ($tx->source_rail === 'wallet' && $tx->source_wallet_id) {
             return DB::transaction(function () use ($tx, $reason) {
                 $wallet = Wallet::find($tx->source_wallet_id);
                 $this->walletService->credit($wallet, $tx->amount + $tx->fee);
-                $refund = $this->recordRefund($tx, 'wallet', null, $wallet, 'FlashPay');
+                $refund = $this->recordRefund($tx, 'wallet', null, $wallet, 'OfficePay');
                 $tx->update(['status' => 'reversed', 'stage' => null, 'failure_reason' => mb_substr($reason . ' · Remboursé sur votre wallet', 0, 250)]);
                 $this->noteOutcome($tx, ['refund' => ['done' => true, 'to' => 'wallet', 'reference' => $refund->reference, 'at' => now()->toIso8601String()]]);
                 return $this->notified($tx->fresh());
@@ -412,13 +412,13 @@ class SwitchService
 
         // Source mobile money : remboursement sur le numéro débité, PAR LE PARTENAIRE QUI A COLLECTÉ
         // (PEEX, WacePay, PawaPay). N'est appelé qu'après un échec de versement CERTAIN.
-        // Si ce partenaire ne peut pas rembourser, repli sur le wallet FlashPay du client.
+        // Si ce partenaire ne peut pas rembourser, repli sur le wallet OfficePay du client.
         if ($this->canRefundToSource($tx)) {
             return $this->startRefund($tx, $reason);
         }
 
         // Carte bancaire / compte bancaire (pas de remboursement par API chez le partenaire),
-        // ou partenaire de collecte indisponible : montant ET frais recrédités sur le wallet FlashPay.
+        // ou partenaire de collecte indisponible : montant ET frais recrédités sur le wallet OfficePay.
         if (in_array($tx->source_rail, ['card', 'bank', 'crypto', 'peex', 'digitwace', 'pawapay_momo', 'maishapay', 'fincra'], true)
             && ($done = $this->refundToWallet($tx, $reason, in_array($tx->source_rail, ['card', 'bank', 'crypto'], true) ? 'Remboursement sur la carte / le compte bancaire / en crypto non disponible chez le partenaire' : null))) {
             return $done;
@@ -428,7 +428,7 @@ class SwitchService
         return $this->fail($tx, $reason . ' · Fonds en attente, remboursement manuel par le support');
     }
 
-    /** Montant + frais recrédités sur le wallet FlashPay du client (aucun frais conservé). Null si pas de wallet. */
+    /** Montant + frais recrédités sur le wallet OfficePay du client (aucun frais conservé). Null si pas de wallet. */
     protected function refundToWallet(Transaction $tx, string $reason, ?string $why = null): ?Transaction
     {
         $wallet = $this->refundWalletOf($tx);
@@ -438,11 +438,11 @@ class SwitchService
         return DB::transaction(function () use ($tx, $wallet, $reason, $why) {
             $from = "{$tx->source_rail}:" . ($tx->source_account ?: 'client');
             $this->walletService->credit($wallet, $tx->amount + $tx->fee);
-            $refund = $this->recordRefund($tx, 'wallet', null, $wallet, 'FlashPay', $why);
+            $refund = $this->recordRefund($tx, 'wallet', null, $wallet, 'OfficePay', $why);
             $meta = array_merge($tx->fresh()->meta ?? [], ['refunded_to' => "wallet:{$wallet->id}", 'refunded_from' => $from]);
             $meta['outcome']['refund'] = ['done' => true, 'to' => 'wallet', 'why' => $why ? mb_substr($why, 0, 200) : null, 'reference' => $refund->reference, 'at' => now()->toIso8601String()];
             $tx->update(['status' => 'reversed', 'stage' => null, 'meta' => $meta,
-                'failure_reason' => mb_substr($reason . ' · Montant et frais remboursés sur votre wallet FlashPay', 0, 250)]);
+                'failure_reason' => mb_substr($reason . ' · Montant et frais remboursés sur votre wallet OfficePay', 0, 250)]);
             return $this->notified($tx->fresh());
         });
     }
@@ -454,7 +454,7 @@ class SwitchService
         $meta = $tx->meta ?? [];
         $meta['outcome'] = array_replace_recursive(['debit' => [
             'done' => true, 'amount' => (int) $tx->amount + (int) $tx->fee, 'currency' => $tx->currency,
-            'account' => $tx->source_rail === 'wallet' ? 'wallet' : $tx->source_account, 'partner' => $tx->source_rail === 'wallet' ? 'FlashPay' : $this->partnerLabel($tx->source_rail),
+            'account' => $tx->source_rail === 'wallet' ? 'wallet' : $tx->source_account, 'partner' => $tx->source_rail === 'wallet' ? 'OfficePay' : $this->partnerLabel($tx->source_rail),
         ]], (array) ($meta['outcome'] ?? []), $data);
         $tx->forceFill(['meta' => $meta])->save();
         return $tx;
@@ -463,7 +463,7 @@ class SwitchService
     /** « Débit effectué : 101 XAF sur +242… · Crédit en échec vers +242… (PEEX : …) » */
     protected function debitCreditText(Transaction $tx, string $reason): string
     {
-        $from = $tx->source_rail === 'wallet' ? 'votre wallet FlashPay' : (string) $tx->source_account;
+        $from = $tx->source_rail === 'wallet' ? 'votre wallet OfficePay' : (string) $tx->source_account;
         $to = $tx->destination_account ?: 'le bénéficiaire';
         $tried = array_column((array) ($tx->meta['payout_attempts'] ?? []), 'partner');
         $via = $tried ? ' (essais : ' . implode(', ', array_merge($tried, [$this->partnerLabel($tx->destination_rail)])) . ')' : '';
@@ -471,7 +471,7 @@ class SwitchService
             . mb_substr($reason, 0, 90);
     }
 
-    /** Wallet FlashPay du client à recréditer (initiateur, ou wallet destinataire d'une recharge). */
+    /** Wallet OfficePay du client à recréditer (initiateur, ou wallet destinataire d'une recharge). */
     protected function refundWalletOf(Transaction $tx): ?Wallet
     {
         if ($tx->destination_rail === 'wallet' && $tx->destination_wallet_id && in_array($tx->type, ['cash_in', 'deposit'], true)) {
@@ -489,8 +489,8 @@ class SwitchService
      */
     public function refundEligibility(Transaction $tx): array
     {
-        $out = ['possible' => false, 'reason' => null, 'partner' => $this->canRefundToSource($tx) ? $this->partnerLabel($tx->source_rail) : 'FlashPay',
-            'to' => $this->canRefundToSource($tx) ? (string) $tx->source_account : 'Wallet FlashPay', 'amount' => (int) $tx->amount + (int) $tx->fee, 'currency' => (string) $tx->currency];
+        $out = ['possible' => false, 'reason' => null, 'partner' => $this->canRefundToSource($tx) ? $this->partnerLabel($tx->source_rail) : 'OfficePay',
+            'to' => $this->canRefundToSource($tx) ? (string) $tx->source_account : 'Wallet OfficePay', 'amount' => (int) $tx->amount + (int) $tx->fee, 'currency' => (string) $tx->currency];
         $outcome = (array) (($tx->meta ?? [])['outcome'] ?? []);
         $no = fn (string $why) => ['reason' => $why] + $out;
 
@@ -571,7 +571,7 @@ class SwitchService
 
     /**
      * Remboursement lancé depuis la console (opération échouée après débit, ou orpheline) :
-     * par le partenaire qui a collecté, vers le compte débité ; repli sur le wallet FlashPay.
+     * par le partenaire qui a collecté, vers le compte débité ; repli sur le wallet OfficePay.
      */
     public function refundDebited(Transaction $tx, string $reason): Transaction
     {
@@ -646,11 +646,11 @@ class SwitchService
             $tx, str_replace(' · Remboursement en cours', '', (string) $tx->failure_reason), $reason));
     }
 
-    /** Remboursement mobile money impossible : recrédit du wallet FlashPay du client, sinon remboursement manuel. */
+    /** Remboursement mobile money impossible : recrédit du wallet OfficePay du client, sinon remboursement manuel. */
     protected function refundFallback(Transaction $tx, string $reason, string $error): Transaction
     {
         if (config('flashpay.failover.refund_to_wallet', true) && ($done = $this->refundToWallet($tx, $reason, 'Remboursement sur ' . $tx->source_account . ' impossible : ' . $error))) {
-            Log::warning('Remboursement mobile money impossible : wallet FlashPay recrédité', ['reference' => $tx->reference, 'error' => $error]);
+            Log::warning('Remboursement mobile money impossible : wallet OfficePay recrédité', ['reference' => $tx->reference, 'error' => $error]);
             return $done;
         }
         Log::critical('Remboursement impossible : remboursement manuel requis', ['reference' => $tx->reference, 'error' => $error]);
@@ -689,7 +689,7 @@ class SwitchService
             'meta' => array_filter([
                 'channel' => 'auto_refund', 'refund_of' => $tx->reference, 'refund_of_id' => $tx->id, 'refunded_via' => $via,
                 'refund_reason' => $why ? mb_substr($why, 0, 200) : null,
-                'sender_name' => 'FlashPay (remboursement)',
+                'sender_name' => 'OfficePay (remboursement)',
                 'beneficiary_name' => $m['payer_verified_name'] ?? $m['payer_name'] ?? $m['sender_name'] ?? $tx->initiator?->full_name,
                 'destination_country' => $m['source_country'] ?? null, 'destination_operator' => $m['source_operator'] ?? null,
                 'refund_breakdown' => ['amount' => (int) $tx->amount, 'fee' => (int) $tx->fee],
@@ -715,11 +715,11 @@ class SwitchService
         ];
     }
 
-    /** Frais client : du payeur vers le compte de produits FlashPay. */
+    /** Frais client : du payeur vers le compte de produits OfficePay. */
     protected function recordFee(Transaction $tx, string $from): void
     {
         if ($tx->fee > 0) {
-            $this->ledgerService->recordDoubleEntry($tx, $from, 'flashpay:fees', $tx->fee, null, 'Frais FlashPay');
+            $this->ledgerService->recordDoubleEntry($tx, $from, 'flashpay:fees', $tx->fee, null, 'Frais OfficePay');
         }
     }
 

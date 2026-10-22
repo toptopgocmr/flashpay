@@ -69,7 +69,7 @@ class PeexController extends Controller
         }
     }
 
-    /** Recharge du wallet FlashPay depuis un numéro MTN / Airtel (collecte PEEX). */
+    /** Recharge du wallet OfficePay depuis un numéro MTN / Airtel (collecte PEEX). */
     public function cashInMobile(Request $request)
     {
         $v = $request->validate([

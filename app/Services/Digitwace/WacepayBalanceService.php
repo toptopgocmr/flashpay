@@ -6,7 +6,7 @@ use App\Models\DigitwaceRequest;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Soldes du compte FlashPay chez WacePay (par devise), montants engagés
+ * Soldes du compte OfficePay chez WacePay (par devise), montants engagés
  * (versements WacePay en cours) et disponible = solde − engagé.
  * Mis en cache 30 s ; ?refresh=1 force l'appel.
  */

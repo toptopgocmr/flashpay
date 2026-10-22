@@ -147,7 +147,7 @@ class AuthController extends Controller
         if (! empty($validated['profile']) && ! $user->hasRole($validated['profile'])) {
             $labels = ['client' => 'client', 'merchant' => 'marchand', 'agent' => 'agent', 'cashier' => 'caissier', 'super_admin' => 'administrateur', 'support' => 'support'];
             $has = $user->getRoleNames()->map(fn ($r) => $labels[$r] ?? $r)->implode(', ');
-            return response()->json(['message' => 'Ce compte n\'a pas l\'accès ' . ($labels[$validated['profile']] ?? $validated['profile']) . ($has ? " (profil : {$has})." : '.') . ' Choisissez le bon espace ou contactez FlashPay.', 'code' => 'wrong_profile'], 403);
+            return response()->json(['message' => 'Ce compte n\'a pas l\'accès ' . ($labels[$validated['profile']] ?? $validated['profile']) . ($has ? " (profil : {$has})." : '.') . ' Choisissez le bon espace ou contactez OfficePay.', 'code' => 'wrong_profile'], 403);
         }
 
         if ($user->status !== 'active') {
@@ -158,7 +158,7 @@ class AuthController extends Controller
         if ($user->lost_reported_at) {
             return response()->json([
                 'message' => 'Compte bloqué suite à la déclaration de perte ou de vol du téléphone le ' . $user->lost_reported_at->format('d/m/Y')
-                    . '. Présentez-vous dans une agence FlashPay avec votre pièce d\'identité, ou contactez le support, pour le débloquer.',
+                    . '. Présentez-vous dans une agence OfficePay avec votre pièce d\'identité, ou contactez le support, pour le débloquer.',
                 'code' => 'account_lost_blocked',
             ], 423);
         }
@@ -199,7 +199,7 @@ class AuthController extends Controller
         $v['phone'] = \App\Support\Phone::normalize($v['phone']);
         $exists = User::whereIn('phone', \App\Support\Phone::candidates($v['phone']))->exists();
         if ($v['purpose'] === 'register' && $exists) {
-            return response()->json(['message' => 'Ce numéro possède déjà un compte FlashPay. Connectez-vous.', 'code' => 'phone_taken'], 422);
+            return response()->json(['message' => 'Ce numéro possède déjà un compte OfficePay. Connectez-vous.', 'code' => 'phone_taken'], 422);
         }
         if ($v['purpose'] !== 'register' && ! $exists) {
             // Réponse neutre : ne pas révéler l'existence d'un compte
@@ -251,7 +251,7 @@ class AuthController extends Controller
         $user = User::whereIn('phone', \App\Support\Phone::candidates($v['phone']))->first();
         $ok = $user && (Hash::check($v['password'], $user->password) || ($user->pin_hash && preg_match('/^\d{4,6}$/', $v['password']) && Hash::check($v['password'], $user->pin_hash)));
         if (! $ok) {
-            return response()->json(['message' => 'Numéro ou code secret incorrect. Code oublié ? Contactez le support FlashPay.'], 401);
+            return response()->json(['message' => 'Numéro ou code secret incorrect. Code oublié ? Contactez le support OfficePay.'], 401);
         }
         if ($user->lost_reported_at) {
             return response()->json(['message' => 'Ce compte est déjà bloqué (perte déclarée le ' . $user->lost_reported_at->format('d/m/Y') . '). Présentez-vous en agence ou contactez le support pour le débloquer.']);

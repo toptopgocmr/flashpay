@@ -145,7 +145,7 @@ class PawapayClient
     {
         $amount = number_format((float) $p['amount'], $p['decimals'] ?? 0, '.', '');
         $recipient = ['type' => 'MMO', 'accountDetails' => ['phoneNumber' => $p['phone'], 'provider' => $p['provider']]];
-        $message = self::customerMessage((string) ($p['message'] ?? 'FlashPay'));
+        $message = self::customerMessage((string) ($p['message'] ?? 'OfficePay'));
 
         if ($this->mode() === 'payout') {
             $body = ['payoutId' => $id, 'recipient' => $recipient, 'amount' => $amount, 'currency' => $p['currency'],
@@ -218,7 +218,7 @@ class PawapayClient
             'amount' => number_format((float) $p['amount'], $p['decimals'] ?? 0, '.', ''),
             'currency' => strtoupper($p['currency']),
             'clientReferenceId' => $p['reference'],
-            'customerMessage' => self::customerMessage((string) ($p['message'] ?? 'FlashPay')),
+            'customerMessage' => self::customerMessage((string) ($p['message'] ?? 'OfficePay')),
         ];
         $json = $this->send('post', 'v2/' . $kind, $body);
         $status = strtoupper((string) data_get($json, 'status', ''));
@@ -278,7 +278,7 @@ class PawapayClient
     {
         $m = trim(preg_replace('/\s+/', ' ', preg_replace('/[^A-Za-z0-9 ]/', ' ', iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $m) ?: $m)));
         $m = mb_substr($m, 0, 22);
-        return strlen($m) >= 4 ? $m : 'FlashPay';
+        return strlen($m) >= 4 ? $m : 'OfficePay';
     }
 
     public function send(string $method, string $path, array $body = []): array

@@ -32,7 +32,7 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes — FlashPay
+| API Routes — OfficePay
 |--------------------------------------------------------------------------
 */
 
@@ -75,7 +75,7 @@ Route::post('/webhooks/peex/{service?}', [WebhookController::class, 'peex'])
 Route::get('/card-checkout/{token}', [\App\Http\Controllers\CardCheckoutController::class, 'show']);
 Route::post('/card-checkout/{token}', [\App\Http\Controllers\CardCheckoutController::class, 'submit'])->middleware('throttle:30,1');
 
-// Banque partenaire : retrait GAB avec code FlashPay (header X-Partner-Key)
+// Banque partenaire : retrait GAB avec code OfficePay (header X-Partner-Key)
 Route::prefix('partners/atm')->middleware('throttle:60,1')->group(function () {
     Route::post('/verify', [CashController::class, 'atmVerify']);
     Route::post('/redeem', [CashController::class, 'atmRedeem']);
@@ -323,7 +323,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/desk/tickets', [SupportCenterController::class, 'adminTickets']);
         Route::post('/desk/tickets/{ticket}/reply', [SupportCenterController::class, 'adminReplyTicket']);
         Route::get('/desk/disputes', [SupportCenterController::class, 'adminDisputes']);
-        // Chat support (texte, photos, notes vocales, appels) — l'agent répond au nom de « Support FlashPay »
+        // Chat support (texte, photos, notes vocales, appels) — l'agent répond au nom de « Support OfficePay »
         Route::get('/chat', [\App\Http\Controllers\Api\SupportChatController::class, 'index']);
         Route::post('/chat/users/{user}', [\App\Http\Controllers\Api\SupportChatController::class, 'openFor'])->whereNumber('user');
         Route::get('/chat/calls/incoming', [\App\Http\Controllers\Api\SupportChatController::class, 'incomingCall']);

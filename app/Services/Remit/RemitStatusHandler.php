@@ -7,7 +7,7 @@ use App\Services\SwitchService;
 
 /**
  * Applique le statut d'un transfert international (ou d'une collecte / d'un versement
- * pawaPay national) à la transaction FlashPay.
+ * pawaPay national) à la transaction OfficePay.
  * On n'agit QUE sur un statut lu auprès de l'API du partenaire : PAID / 3000 → succès,
  * CANCEL / échec → remboursement automatique du wallet (montant + frais).
  */

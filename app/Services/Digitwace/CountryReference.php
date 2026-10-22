@@ -85,7 +85,7 @@ class CountryReference
     ];
 
     /** Code pays WacePay (ISO2, ISO3 ou nom) → ISO2. */
-    /** Noms courants (fr / en) des pays du catalogue FlashPay. */
+    /** Noms courants (fr / en) des pays du catalogue OfficePay. */
     public const NAMES = [
         'CONGO' => 'CG', 'CONGO-BRAZZAVILLE' => 'CG', 'CONGO BRAZZAVILLE' => 'CG', 'REPUBLIC OF CONGO' => 'CG', 'REPUBLIQUE DU CONGO' => 'CG', 'CONGO REPUBLIC' => 'CG',
         'RD CONGO' => 'CD', 'RDC' => 'CD', 'DRC' => 'CD', 'CONGO RDC' => 'CD', 'CONGO-KINSHASA' => 'CD', 'CONGO KINSHASA' => 'CD', 'DEMOCRATIC REPUBLIC OF CONGO' => 'CD', 'DEMOCRATIC REPUBLIC OF THE CONGO' => 'CD', 'REPUBLIQUE DEMOCRATIQUE DU CONGO' => 'CD',

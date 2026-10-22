@@ -8,7 +8,7 @@ use App\Services\SwitchService;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Applique un statut PEEX (callback ou polling) à la transaction FlashPay liée.
+ * Applique un statut PEEX (callback ou polling) à la transaction OfficePay liée.
  *
  * Règles :
  *  - une demande déjà finalisée n'est plus modifiée par un callback tardif

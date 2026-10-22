@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Cagnotte (§3.5.2, ex-« partage de note ») : facture partagée ou cadeau commun.
  *  - le créateur désigne le bénéficiaire (lui-même par défaut) par son numéro ;
- *  - les contributeurs invités sont notifiés (SMS s'ils n'ont pas FlashPay) ;
+ *  - les contributeurs invités sont notifiés (SMS s'ils n'ont pas OfficePay) ;
  *  - parts égales, parts fixées par le créateur ou montant libre (objectif facultatif) ;
  *  - chaque contribution arrive directement dans le wallet du bénéficiaire ;
  *  - le créateur suit qui a contribué, relance, ajoute des personnes, clôture
@@ -330,7 +330,7 @@ class SplitBillService
     public function receiptText(BillSplit $s): string
     {
         $r = $this->receipt($s);
-        $lines = ["🧾 Cagnotte FlashPay « {$s->title} » ({$r['purpose_label']})", 'Bénéficiaire : ' . $r['beneficiary']['name'], ''];
+        $lines = ["🧾 Cagnotte OfficePay « {$s->title} » ({$r['purpose_label']})", 'Bénéficiaire : ' . $r['beneficiary']['name'], ''];
         foreach ($r['rows'] as $row) {
             $lines[] = ($row['status'] === 'paid' ? '✅ ' : '⏳ ') . $row['name'] . ' : ' . ($row['amount'] > 0 ? $this->money($row['amount'], $s->currency) : '—') . ($row['status'] === 'paid' ? '' : ' (' . mb_strtolower($row['status_label']) . ')');
         }
@@ -353,7 +353,7 @@ class SplitBillService
         }
         $u = $this->flows->findUserByPhone($resolved);
         if (! $u || ($u->status ?? 'active') !== 'active') {
-            throw new BusinessException('Le bénéficiaire doit avoir un compte FlashPay actif : invitez-le à installer l\'application.', 'beneficiary_not_found');
+            throw new BusinessException('Le bénéficiaire doit avoir un compte OfficePay actif : invitez-le à installer l\'application.', 'beneficiary_not_found');
         }
         return $u;
     }
@@ -392,7 +392,7 @@ class SplitBillService
         if ($share->user) {
             $this->notify->toUser($share->user, 'split_request', $title, $body, ['data' => ['bill_split_id' => $split->id, 'share_id' => $share->id]]);
         } else {
-            $this->notify->sms($share->phone, "FlashPay: {$creator->full_name} vous invite a contribuer " . ($amount ? "({$amount}) " : '') . "a « {$split->title} »{$for}. Installez FlashPay pour participer.");
+            $this->notify->sms($share->phone, "OfficePay: {$creator->full_name} vous invite a contribuer " . ($amount ? "({$amount}) " : '') . "a « {$split->title} »{$for}. Installez OfficePay pour participer.");
         }
     }
 

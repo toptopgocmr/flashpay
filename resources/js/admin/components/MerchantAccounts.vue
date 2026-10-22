@@ -24,7 +24,7 @@
       </button>
     </div>
     <div v-if="f.type === 'mobile_money' || f.type === 'wallet'">
-      <label class="field">{{ f.type === 'wallet' ? 'Numéro du wallet FlashPay' : 'Numéro mobile money (tout opérateur)' }}</label>
+      <label class="field">{{ f.type === 'wallet' ? 'Numéro du wallet OfficePay' : 'Numéro mobile money (tout opérateur)' }}</label>
       <input v-model.trim="f.phone" :placeholder="'Par défaut : +' + (merchant.phone || '')" />
     </div>
     <template v-if="f.type === 'bank'">
@@ -58,7 +58,7 @@ const emit = defineEmits(['close', 'changed'])
 const TYPES = [
   { key: 'mobile_money', label: 'Mobile money', hint: 'MTN, Airtel, Orange…' },
   { key: 'bank', label: 'Compte bancaire', hint: 'Virement' },
-  { key: 'wallet', label: 'Wallet FlashPay', hint: 'Instantané' },
+  { key: 'wallet', label: 'Wallet OfficePay', hint: 'Instantané' },
   { key: 'cash_pickup', label: 'Cash agent', hint: 'Code de retrait' },
 ]
 const accounts = ref([])

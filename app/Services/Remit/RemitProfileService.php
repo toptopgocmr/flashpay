@@ -42,7 +42,7 @@ class RemitProfileService
         return RemitProfile::where('user_id', $user->id)->first();
     }
 
-    /** Données pré-remplies : profil existant, sinon compte FlashPay. */
+    /** Données pré-remplies : profil existant, sinon compte OfficePay. */
     public function data(User $user): array
     {
         $p = $this->profileOf($user);
@@ -208,8 +208,8 @@ class RemitProfileService
             'expires_at' => now()->addMinutes(15),
         ]);
         try {
-            Mail::raw("Votre code de vérification FlashPay est {$code}. Il est valable 15 minutes. Ne le communiquez à personne.", function ($m) use ($email) {
-                $m->to($email)->subject('FlashPay — vérification de votre e-mail');
+            Mail::raw("Votre code de vérification OfficePay est {$code}. Il est valable 15 minutes. Ne le communiquez à personne.", function ($m) use ($email) {
+                $m->to($email)->subject('OfficePay — vérification de votre e-mail');
             });
         } catch (\Throwable $e) {
             Log::warning('E-mail de vérification non envoyé', ['error' => $e->getMessage()]);

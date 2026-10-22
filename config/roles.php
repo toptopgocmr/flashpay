@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Rôles et habilitations FlashPay (maquettes v2 de l'application mobile).
+ * Rôles et habilitations OfficePay (maquettes v2 de l'application mobile).
  * Source unique affichée dans la console (« Rôles & habilitations »).
  * Toute évolution des droits se fait ici ET dans le middleware des routes
  * (routes/api.php : role:client, role:merchant,cashier, role:agent…).
@@ -60,7 +60,7 @@ return [
         ],
         'agent' => [
             'label' => 'Agent', 'space' => 'app', 'tone' => 'blue',
-            'created_by' => 'FlashPay (Super Admin)',
+            'created_by' => 'OfficePay (Super Admin)',
             'login' => 'Identifiant agent (AG…) ou numéro + code secret',
             'grants' => ['cash_in' => 'yes', 'cash_out' => 'yes', 'scan_client' => 'yes', 'receive' => 'yes', 'float' => 'yes',
                 'send' => ['limited', 'Flux wallet agent ↔ externe (§3.1.5)'], 'topup' => 'yes', 'withdraw' => ['limited', 'Vers ses comptes'],
@@ -68,7 +68,7 @@ return [
         ],
         'sub_agent' => [
             'label' => 'Sous-agent', 'space' => 'app', 'tone' => 'blue',
-            'created_by' => 'FlashPay, rattaché à un super-agent',
+            'created_by' => 'OfficePay, rattaché à un super-agent',
             'login' => 'Identifiant agent ou numéro + code secret',
             'grants' => ['cash_in' => 'yes', 'cash_out' => 'yes', 'scan_client' => 'yes', 'receive' => 'yes',
                 'float' => ['limited', 'Validé par son super-agent'], 'reports' => ['limited', 'Historique et caisse du jour'], 'kyc' => 'yes',
@@ -76,7 +76,7 @@ return [
         ],
         'super_agent' => [
             'label' => 'Super-agent', 'space' => 'app', 'tone' => 'red',
-            'created_by' => 'FlashPay (agent promu super-agent)',
+            'created_by' => 'OfficePay (agent promu super-agent)',
             'login' => 'Identifiant agent ou numéro + code secret',
             'grants' => ['cash_in' => 'yes', 'cash_out' => 'yes', 'scan_client' => 'yes', 'receive' => 'yes', 'float' => 'yes',
                 'sub_agents' => 'yes', 'reports' => 'yes', 'kyc' => 'yes',
@@ -85,13 +85,13 @@ return [
         'support' => [
             'label' => 'Support', 'space' => 'console', 'tone' => 'blue',
             'created_by' => 'Super Admin (équipe interne)',
-            'login' => 'Console FlashPay',
+            'login' => 'Console OfficePay',
             'grants' => ['desk' => 'yes', 'validate' => ['limited', 'Consultation des pièces, sans décision']],
         ],
         'super_admin' => [
             'label' => 'Super Admin', 'space' => 'console', 'tone' => 'red',
             'created_by' => 'Installation puis Super Admin',
-            'login' => 'Console FlashPay',
+            'login' => 'Console OfficePay',
             'grants' => ['desk' => 'yes', 'validate' => 'yes', 'accounts' => 'yes', 'pricing' => 'yes', 'ops' => 'yes'],
         ],
     ],

@@ -325,7 +325,7 @@ class PricingAdminController extends Controller
         return response()->json(['message' => $message, 'corridor' => collect($this->corridors->catalog())->firstWhere('country', $iso)]);
     }
 
-    /** Soldes du compte FlashPay chez WacePay (?refresh=1 force l'appel). */
+    /** Soldes du compte OfficePay chez WacePay (?refresh=1 force l'appel). */
     public function wacepayBalances(Request $request)
     {
         return response()->json(app(\App\Services\Digitwace\WacepayBalanceService::class)->balances($request->boolean('refresh')));

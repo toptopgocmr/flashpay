@@ -173,7 +173,7 @@ class SupportService
         }
         $d->update(['counterparty_response' => $message, 'counterparty_responded_at' => now(), 'status' => 'investigating']);
         $this->notify->toAdmins('dispute_response', "Réponse sur la contestation {$d->reference}", "{$by->full_name} : {$message}", ['severity' => 'info', 'data' => ['dispute_id' => $d->id]]);
-        $this->notify->toUser($d->user, 'dispute_update', "Contestation {$d->reference} en cours d'arbitrage", "{$by->full_name} a répondu ; FlashPay va trancher.", ['sms' => false]);
+        $this->notify->toUser($d->user, 'dispute_update', "Contestation {$d->reference} en cours d'arbitrage", "{$by->full_name} a répondu ; OfficePay va trancher.", ['sms' => false]);
         return $d->fresh();
     }
 
@@ -199,7 +199,7 @@ class SupportService
                 throw new BusinessException('Le remboursement ne peut pas dépasser le montant de l\'opération (frais inclus).', 'amount_too_high');
             }
             if ($source === 'counterparty') {
-                $wallet = $this->counterpartyWallet($d) ?? throw new BusinessException("Pas de wallet FlashPay pour l'autre partie : remboursez depuis FlashPay.", 'no_counterparty');
+                $wallet = $this->counterpartyWallet($d) ?? throw new BusinessException("Pas de wallet OfficePay pour l'autre partie : remboursez depuis OfficePay.", 'no_counterparty');
                 $refundTxId = $this->refundFromWallet($d, $wallet, $amount, $admin, $resolution)->id;
                 $from = 'counterparty';
             } elseif ($source === 'flashpay') {

@@ -50,14 +50,14 @@ class JournalGiftsDigitwaceTest extends TestCase
         $ids = [$wa];
         $p = fn ($t) => TransactionPresenter::present($t->fresh(), $ids, $a->id);
 
-        $this->assertSame('Recharge compte FlashPay', $p($mobileDeposit)['label']);
+        $this->assertSame('Recharge compte OfficePay', $p($mobileDeposit)['label']);
         $this->assertSame('credit', $p($mobileDeposit)['direction']);
         $this->assertSame('Mobile → Wallet', $p($mobileDeposit)['channel']);
         $this->assertSame('ALICE M.', $p($mobileDeposit)['counterparty_name']);
         $this->assertSame('Carte bancaire → Wallet', $p($cardDeposit)['channel']);
         $this->assertSame('Cash → Wallet', $p($agentDeposit)['channel']);
         $this->assertSame('Agent BOB NGOMA', $p($agentDeposit)['counterparty_name']);
-        $this->assertSame('Recharge compte FlashPay', $p($agentDeposit)['label']);
+        $this->assertSame('Recharge compte OfficePay', $p($agentDeposit)['label']);
 
         $this->assertSame('Transfert entrant', $p($p2p)['label']);
         $this->assertSame('in', $p($p2p)['flow']);
@@ -80,7 +80,7 @@ class JournalGiftsDigitwaceTest extends TestCase
         // API : liste paginée enrichie
         $res = $this->actingAs($a, 'sanctum')->getJson('/api/transactions')->assertOk();
         $first = collect($res->json('data'))->firstWhere('id', $mobileDeposit->id);
-        $this->assertSame('Recharge compte FlashPay', $first['label']);
+        $this->assertSame('Recharge compte OfficePay', $first['label']);
         $this->assertSame('↓', $first['arrow']);
         $this->actingAs($a, 'sanctum')->getJson('/api/transactions/' . $withdraw->id)->assertOk()->assertJsonPath('direction', 'debit');
     }

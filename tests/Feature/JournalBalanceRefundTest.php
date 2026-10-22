@@ -59,7 +59,7 @@ class JournalBalanceRefundTest extends TestCase
 
         $line = fn (Transaction $t) => collect(TransactionPresenter::details($t->fresh()))->firstWhere('label', 'Remboursement')['value'] ?? null;
         $this->assertSame('Aucun montant prélevé : rien à rembourser', $line($failed));
-        $this->assertStringStartsWith('Remboursé : 700 XAF (montant + frais) sur votre wallet FlashPay le 13/10/2026', $line($rev));
+        $this->assertStringStartsWith('Remboursé : 700 XAF (montant + frais) sur votre wallet OfficePay le 13/10/2026', $line($rev));
         $this->assertNull($line($send));
     }
 }

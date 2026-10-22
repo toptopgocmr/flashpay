@@ -20,7 +20,7 @@ class DatabaseSeeder extends Seeder
         // Super Admin par défaut — À CHANGER en production
         $admin = User::firstOrCreate(
             ['phone' => '242060000000'],
-            ['full_name' => 'Super Admin FlashPay', 'password' => Hash::make('ChangeMoi123!'), 'status' => 'active']
+            ['full_name' => 'Super Admin OfficePay', 'password' => Hash::make('ChangeMoi123!'), 'status' => 'active']
         );
         if (! $admin->hasRole('super_admin')) {
             $admin->assignRole('super_admin');

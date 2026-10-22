@@ -63,10 +63,10 @@ class AgentController extends Controller
         ]);
 
         $client = User::whereIn('phone', \App\Support\Phone::candidates($validated['client_phone']))->first();
-        abort_unless($client && $client->wallet, 422, 'Aucun compte FlashPay pour ce numéro.');
+        abort_unless($client && $client->wallet, 422, 'Aucun compte OfficePay pour ce numéro.');
         if (empty($validated['otp'])) {
             $sent = $otp->send($client->phone, 'sensitive', ['agent_user_id' => $request->user()->id, 'amount' => $validated['amount']],
-                'FlashPay: retrait de ' . number_format($validated['amount'], 0, ',', ' ') . ' chez l\'agent ' . $request->user()->full_name . '. Code: {code}. Ne le donnez que si vous recevez les especes.');
+                'OfficePay: retrait de ' . number_format($validated['amount'], 0, ',', ' ') . ' chez l\'agent ' . $request->user()->full_name . '. Code: {code}. Ne le donnez que si vous recevez les especes.');
             return response()->json(['confirmation_required' => true, 'message' => 'Demandez au client le code reçu par SMS.'] + $sent, 202);
         }
         $ctx = $otp->verify($client->phone, 'sensitive', $validated['otp']);

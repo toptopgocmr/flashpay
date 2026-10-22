@@ -47,7 +47,7 @@ return new class extends Migration {
             $table->string('base', 3);   // devise source
             $table->string('quote', 3);  // devise cible
             $table->decimal('rate', 18, 8); // 1 base = rate quote
-            $table->decimal('margin_percent', 5, 2)->default(0); // marge FlashPay appliquée au client
+            $table->decimal('margin_percent', 5, 2)->default(0); // marge OfficePay appliquée au client
             $table->boolean('active')->default(true);
             $table->string('source')->nullable(); // manuel, BEAC, BCEAO…
             $table->timestamps();

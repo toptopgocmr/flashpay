@@ -1,4 +1,4 @@
-# FlashPay API + Admin (Laravel 11 + Vue 3 intégrée)
+# OfficePay API + Admin (Laravel 11 + Vue 3 intégrée)
 
 Backend Wallet / Ledger / Switch multi-rails, **et** l'interface Super Admin /
 Support Vue, servie directement par Laravel sous `/admin` (même projet, même
@@ -64,7 +64,7 @@ Identifiants Super Admin par défaut (à changer immédiatement) :
 - `resources/js/admin/` : sources Vue (App.vue, router, vues, store Pinia).
   Le routeur Vue utilise `createWebHistory('/admin')` pour rester cohérent
   avec le préfixe servi par Laravel.
-- `resources/css/admin.css` : styles (palette FlashPay).
+- `resources/css/admin.css` : styles (palette OfficePay).
 - `vite.config.js` + `package.json` (racine du projet) : intégration
   standard `laravel-vite-plugin`. L'API (`/api/*`) n'est jamais interceptée
   par la route catch-all de l'admin.
@@ -82,9 +82,9 @@ Voir `config/flashpay.php` et les variables `.env` correspondantes :
 
 ## Architecture
 
-- `FlashPay Wallet` → `app/Services/WalletService.php` (comptes & soldes, verrouillage DB)
-- `FlashPay Ledger` → `app/Services/LedgerService.php` (double écriture systématique)
-- `FlashPay Switch` → `app/Services/SwitchService.php` (orchestration débit/crédit multi-rails)
+- `OfficePay Wallet` → `app/Services/WalletService.php` (comptes & soldes, verrouillage DB)
+- `OfficePay Ledger` → `app/Services/LedgerService.php` (double écriture systématique)
+- `OfficePay Switch` → `app/Services/SwitchService.php` (orchestration débit/crédit multi-rails)
 - Connecteurs → `app/Services/Connectors/*` (un par rail, interface commune `PaymentRailConnector`)
 
 ## Rôles (Spatie Permission)

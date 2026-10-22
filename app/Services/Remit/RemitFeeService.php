@@ -106,7 +106,7 @@ class RemitFeeService
             'xaf_value' => $vTo,            // 1 unité de la devise reçue = x XAF
             'margin_percent' => 0.0,        // marge incluse dans la valeur publiée
             'from' => $from, 'to' => $to,
-            'source' => 'taux de change FlashPay (à partir du Congo)',
+            'source' => 'taux de change OfficePay (à partir du Congo)',
         ];
     }
 }

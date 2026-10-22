@@ -13,7 +13,7 @@ use App\Support\Audit;
 use Illuminate\Support\Str;
 
 /**
- * Demandes d'argent entre utilisateurs FlashPay (« Scanner un ami pour lui
+ * Demandes d'argent entre utilisateurs OfficePay (« Scanner un ami pour lui
  * demander ») : le demandeur désigne le payeur par son QR, NFC ou numéro ;
  * le payeur est notifié et règle en wallet → wallet (PIN) ou refuse.
  */
@@ -30,7 +30,7 @@ class MoneyRequestService
     ) {
     }
 
-    /** Compte FlashPay du payeur (profil client en priorité). */
+    /** Compte OfficePay du payeur (profil client en priorité). */
     protected function payerFor(string $phone): ?User
     {
         $candidates = \App\Support\Phone::candidates($phone);
@@ -62,7 +62,7 @@ class MoneyRequestService
             'channel' => $d['channel'] ?? 'app',
             'expires_at' => now()->addDays(self::TTL_DAYS),
         ]);
-        // « app » : notification FlashPay (SMS si l'ami n'a pas encore l'app).
+        // « app » : notification OfficePay (SMS si l'ami n'a pas encore l'app).
         // « sms » : SMS en plus de la notification. « whatsapp » / « link » : partagé par
         // le demandeur depuis son téléphone (share_text) — notification in-app quand même.
         $this->ask($req, $requester, false, ($d['channel'] ?? 'app') === 'sms');
@@ -76,11 +76,11 @@ class MoneyRequestService
         $amount = self::money($req->amount, $req->currency);
         if ($req->payer) {
             $this->notify->toUser($req->payer, 'money_request', ($reminder ? 'Rappel : ' : '') . "{$requester->full_name} vous demande {$amount}",
-                ($req->note ? "Motif : {$req->note}. " : '') . 'Ouvrez FlashPay pour payer ou refuser.',
+                ($req->note ? "Motif : {$req->note}. " : '') . 'Ouvrez OfficePay pour payer ou refuser.',
                 ['data' => ['money_request_id' => $req->id]] + ($forceSms ? ['sms' => $this->smsText($req, $requester, $reminder)] : []));
         }
         if (! $req->payer) {
-            $this->notify->sms('+' . $req->payer_phone, 'FlashPay: ' . $this->smsText($req, $requester, $reminder));
+            $this->notify->sms('+' . $req->payer_phone, 'OfficePay: ' . $this->smsText($req, $requester, $reminder));
         }
     }
 
@@ -108,7 +108,7 @@ class MoneyRequestService
         $req->loadMissing('requester:id,full_name', 'payer:id,full_name');
         $hello = $req->payer?->full_name ? 'Bonjour ' . explode(' ', trim($req->payer->full_name))[0] . ',' : 'Bonjour,';
         return $hello . "\n\n"
-            . "Je vous envoie une demande de paiement FlashPay :\n"
+            . "Je vous envoie une demande de paiement OfficePay :\n"
             . '💰 Montant : ' . self::money($req->amount, $req->currency) . "\n"
             . ($req->note ? "📝 Motif : {$req->note}\n" : '')
             . "👤 Demandé par : {$req->requester->full_name}\n"
@@ -124,7 +124,7 @@ class MoneyRequestService
         return $req->toArray() + [
             'amount_label' => self::money($req->amount, $req->currency),
             'status_label' => ['pending' => 'En attente', 'paid' => 'Payée', 'declined' => 'Refusée', 'cancelled' => 'Annulée', 'expired' => 'Expirée'][$req->status] ?? $req->status,
-            'channel_label' => ['app' => 'Notification FlashPay', 'sms' => 'SMS', 'whatsapp' => 'WhatsApp', 'link' => 'Lien partagé'][$req->channel ?? 'app'] ?? 'Notification FlashPay',
+            'channel_label' => ['app' => 'Notification OfficePay', 'sms' => 'SMS', 'whatsapp' => 'WhatsApp', 'link' => 'Lien partagé'][$req->channel ?? 'app'] ?? 'Notification OfficePay',
             'payer_display' => $req->payer?->full_name ?? '+' . ltrim((string) $req->payer_phone, '+'),
             'payer_has_app' => (bool) $req->payer_id,
             'share_link' => $this->link($req),

@@ -143,7 +143,7 @@ class GiftService
                     GiftClaim::create(['gift_envelope_id' => $env->id, 'recipient_id' => $u?->id, 'recipient_phone' => $phone, 'amount' => (int) $d['amount']]);
                     $title = '🧧 ' . $sender->full_name . ' vous envoie un cadeau';
                     $u ? $this->notify->toUser($u, 'gift_received', $title, $env->message ?: 'Ouvrez l\'app pour le récupérer avant expiration.', ['data' => ['gift_code' => $env->code]])
-                       : $this->notify->sms($phone, "FlashPay: {$sender->full_name} vous envoie un cadeau d'argent. Installez FlashPay et utilisez le code {$env->code} avant 24h.");
+                       : $this->notify->sms($phone, "OfficePay: {$sender->full_name} vous envoie un cadeau d'argent. Installez OfficePay et utilisez le code {$env->code} avant 24h.");
                 }
             }
             return $env->load('claims');
@@ -266,7 +266,7 @@ class GiftService
                         'amount' => $e->remaining_amount, 'currency' => $e->currency,
                         'status' => 'successful', 'completed_at' => now(),
                         'initiated_by' => $e->sender_id,
-                        'meta' => ['channel' => 'gift', 'gift_code' => $e->code, 'sender_name' => 'FlashPay', 'note' => $why === 'cancelled' ? 'Cadeau annulé' : 'Cadeau non réclamé'],
+                        'meta' => ['channel' => 'gift', 'gift_code' => $e->code, 'sender_name' => 'OfficePay', 'note' => $why === 'cancelled' ? 'Cadeau annulé' : 'Cadeau non réclamé'],
                     ]);
                     $this->wallets->credit($wallet, $e->remaining_amount);
                     $this->ledger->recordDoubleEntry($tx, self::ACCOUNT, "wallet:{$wallet->id}", $e->remaining_amount, null, $why === 'cancelled' ? 'Cadeau annulé — recrédit' : 'Cadeau non réclamé — recrédit');
@@ -348,8 +348,8 @@ class GiftService
     {
         $occasion = trim(preg_replace('/^\S+\s/u', '', self::OCCASIONS[$e->occasion] ?? '') ?: '');
         $intro = $e->mode === 'random'
-            ? "🧧 {$e->sender->full_name} partage une enveloppe surprise FlashPay" . ($occasion ? " ({$occasion})" : '') . ' : ' . $e->shares . ' parts à gagner !'
-            : "🧧 {$e->sender->full_name} vous offre un cadeau FlashPay" . ($occasion ? " ({$occasion})" : '') . '.';
+            ? "🧧 {$e->sender->full_name} partage une enveloppe surprise OfficePay" . ($occasion ? " ({$occasion})" : '') . ' : ' . $e->shares . ' parts à gagner !'
+            : "🧧 {$e->sender->full_name} vous offre un cadeau OfficePay" . ($occasion ? " ({$occasion})" : '') . '.';
         return $intro
             . ($e->message ? "\n« {$e->message} »" : '')
             . "\n\nOuvrez-le ici : {$link}\nCode : {$e->code} — valable jusqu'au " . $e->expires_at->format('d/m/Y à H:i') . '.';

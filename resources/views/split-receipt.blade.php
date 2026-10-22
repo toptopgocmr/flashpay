@@ -9,7 +9,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Cagnotte FlashPay {{ $r['reference'] }}</title>
+<title>Cagnotte OfficePay {{ $r['reference'] }}</title>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #eef1f6; font: 15px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; }
@@ -47,7 +47,7 @@
 <div class="wrap">
   <div class="card">
     <div class="head">
-      <div class="brand"><img src="{{ asset('images/flashpay-logo.png') }}" alt="" class="logo"> Flash<span>Pay</span></div>
+      <div class="brand"><img src="{{ asset('images/flashpay-logo.png') }}" alt="" class="logo"> Office<span>Pay</span></div>
       <small>Reçu de cagnotte</small>
     </div>
     <div class="hero">
@@ -81,7 +81,7 @@
       <tr class="total"><td colspan="2">Total versé au bénéficiaire</td><td class="r">{{ $fmt($r['paid_amount']) }} {{ $cur }}</td></tr>
     </table>
     <div class="foot">
-      FlashPay · Brazzaville, République du Congo<br>
+      OfficePay · Brazzaville, République du Congo<br>
       Chaque contribution a été versée directement sur le wallet du bénéficiaire.
     </div>
   </div>

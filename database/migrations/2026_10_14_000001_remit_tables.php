@@ -13,7 +13,7 @@ return new class extends Migration {
                 $table->id();
                 $table->foreignId('transaction_id')->nullable()->constrained()->nullOnDelete();
                 $table->string('partner', 20);                        // wacepay_remit | terrapay
-                $table->string('reference', 64)->unique();             // référence FlashPay
+                $table->string('reference', 64)->unique();             // référence OfficePay
                 $table->string('partner_ref', 120)->nullable()->index(); // WPPX… (WacePay) / TPKM… (TerraPay)
                 $table->string('method', 12)->nullable();              // wallet | bank | cash
                 $table->string('business_type', 4)->nullable();        // p2p | p2b | b2p | b2b

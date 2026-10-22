@@ -114,11 +114,11 @@ class CashController extends Controller
         if (empty($v['client_code']) && config('security.cash_in_client_confirmation')) {
             $phone = app(\App\Services\Peex\PeexCorridors::class)->resolve((string) $v['client_phone'])['phone'];
             $client = app(\App\Services\Peex\PeexFlowService::class)->findUserByPhone($phone)
-                ?? throw new \App\Exceptions\CashNetworkException('Aucun compte FlashPay pour ce numéro.');
+                ?? throw new \App\Exceptions\CashNetworkException('Aucun compte OfficePay pour ce numéro.');
             $otp = app(\App\Services\Security\OtpService::class);
             if (empty($v['otp'])) {
                 $sent = $otp->send($client->phone, 'cash_in', ['agent_user_id' => $request->user()->id, 'amount' => $v['amount']],
-                    'FlashPay: l\'agent ' . $request->user()->full_name . ' va crediter ' . number_format($v['amount'], 0, ',', ' ') . ' sur votre wallet. Code de confirmation: {code}');
+                    'OfficePay: l\'agent ' . $request->user()->full_name . ' va crediter ' . number_format($v['amount'], 0, ',', ' ') . ' sur votre wallet. Code de confirmation: {code}');
                 return response()->json(['confirmation_required' => true, 'client_name' => $client->full_name,
                     'message' => 'Demandez au client le code reçu par SMS pour confirmer le dépôt.'] + $sent, 202);
             }

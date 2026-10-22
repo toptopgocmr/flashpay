@@ -21,7 +21,7 @@ class CashierService
     public function create(Merchant $m, array $d): MerchantCashier
     {
         if (User::whereIn('phone', \App\Support\Phone::candidates($d['phone']))->exists()) {
-            throw new BusinessException('Ce numéro possède déjà un compte FlashPay. Utilisez un autre numéro pour le caissier.', 'phone_taken');
+            throw new BusinessException('Ce numéro possède déjà un compte OfficePay. Utilisez un autre numéro pour le caissier.', 'phone_taken');
         }
         if (! empty($d['outlet_id']) && ! $m->outlets()->whereKey($d['outlet_id'])->exists()) {
             throw new BusinessException('Point de vente inconnu.', 'outlet_not_found');

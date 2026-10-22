@@ -47,7 +47,7 @@
             <div class="gw-row"><span class="gw-dot"></span>
               <div class="gw-main"><b>FINCRA_BASE_URL</b><small class="mono">{{ o.base_url }}</small></div></div>
             <div class="gw-row"><span class="gw-dot" :class="{ off: !o.remit_enabled }"></span>
-              <div class="gw-main"><b>Remittance internationale</b><small>solde débité : {{ o.remit_source_currency ? o.remit_source_currency + ' (converti par Fincra, FINCRA_REMIT_SOURCE_CURRENCY)' : 'devise du bénéficiaire, sans conversion' }} · frais de change : {{ o.fee_bearer === 'customer' ? 'déduits du montant reçu' : 'à la charge de FlashPay' }}</small></div></div>
+              <div class="gw-main"><b>Remittance internationale</b><small>solde débité : {{ o.remit_source_currency ? o.remit_source_currency + ' (converti par Fincra, FINCRA_REMIT_SOURCE_CURRENCY)' : 'devise du bénéficiaire, sans conversion' }} · frais de change : {{ o.fee_bearer === 'customer' ? 'déduits du montant reçu' : 'à la charge de OfficePay' }}</small></div></div>
           </div>
           <div class="gw-card-b">
             <button class="btn-normal" :disabled="testing || !o.configured" @click="test">{{ testing ? 'Test…' : 'Tester la connexion' }}</button>

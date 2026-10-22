@@ -16,7 +16,7 @@ use Tests\TestCase;
 /**
  * Collecte PEEX réussie mais versement PEEX refusé (« Invalid destination country code ») :
  *  - bascule automatique vers un autre partenaire du même environnement (PawaPay) ;
- *  - sinon remboursement mobile money, et s'il échoue aussi : wallet FlashPay recrédité ;
+ *  - sinon remboursement mobile money, et s'il échoue aussi : wallet OfficePay recrédité ;
  *  - débit effectué / crédit en échec affichés clairement.
  */
 class PayoutFailoverTest extends TestCase
@@ -98,7 +98,7 @@ class PayoutFailoverTest extends TestCase
 
         $this->assertSame('peex', $tx->destination_rail);
         $this->assertFalse(collect($this->sent)->contains(fn ($s) => $s[1] === '/v2/payouts'));
-        // Versement PEEX refusé, remboursement PEEX refusé aussi → wallet FlashPay recrédité (montant + frais)
+        // Versement PEEX refusé, remboursement PEEX refusé aussi → wallet OfficePay recrédité (montant + frais)
         $this->assertSame('reversed', $tx->status);
         $wallet = Wallet::where('user_id', $tx->initiated_by)->first();
         $this->assertSame((int) ($tx->amount + $tx->fee), (int) $wallet->balance);
@@ -109,10 +109,10 @@ class PayoutFailoverTest extends TestCase
         $this->assertStringContainsString('prélevés sur +242061000551', $o['debit']);
         $this->assertStringContainsString('Invalid destination country code', $o['credit']);
         $this->assertTrue($o['refund_done']);
-        $this->assertStringContainsString('wallet FlashPay', $o['refund']);
+        $this->assertStringContainsString('wallet OfficePay', $o['refund']);
 
         $r = $this->getJson('/api/pay/transactions/' . $tx->id . '/status')->assertOk();
-        $this->assertSame('Débit effectué, mais le crédit du bénéficiaire a échoué : montant et frais remboursés sur votre wallet FlashPay.', $r->json('message'));
+        $this->assertSame('Débit effectué, mais le crédit du bénéficiaire a échoué : montant et frais remboursés sur votre wallet OfficePay.', $r->json('message'));
         $this->assertTrue($r->json('outcome.refund_done'));
     }
 }

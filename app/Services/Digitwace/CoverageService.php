@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 /**
  * Couverture WacePay : récupère la liste des payeurs (getPayerCode) et
  *  1. enregistre chaque payeur avec ses services (collecte / versement) ;
- *  2. crée les pays absents du catalogue FlashPay (corridor_countries) et
+ *  2. crée les pays absents du catalogue OfficePay (corridor_countries) et
  *     les ouvre avec WacePay comme partenaire ;
  *  3. pour les pays déjà couverts par PEEX, ne change rien : la console
  *     indique « WacePay disponible » et l'admin choisit le partenaire.

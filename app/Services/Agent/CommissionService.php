@@ -50,7 +50,7 @@ class CommissionService
 
     /**
      * Crédite la commission sur le wallet de l'agent. Partie financée par les frais
-     * client (flashpay:fees) ou, à défaut, charge de commissions FlashPay.
+     * client (flashpay:fees) ou, à défaut, charge de commissions OfficePay.
      */
     public function pay(Transaction $tx, Wallet $agentWallet, int $commission, string $operation): int
     {

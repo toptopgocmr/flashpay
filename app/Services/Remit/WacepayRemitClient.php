@@ -76,7 +76,7 @@ class WacepayRemitClient
         });
     }
 
-    /** Méthode FlashPay (wallet | bank | cash) d'un service WacePay. */
+    /** Méthode OfficePay (wallet | bank | cash) d'un service WacePay. */
     public static function methodOf(array $service): string
     {
         $n = strtoupper(($service['name'] ?? '') . ' ' . ($service['code'] ?? ''));

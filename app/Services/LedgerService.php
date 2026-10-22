@@ -7,7 +7,7 @@ use App\Models\Transaction;
 use Illuminate\Support\Facades\DB;
 
 /**
- * FlashPay Ledger — grand livre comptable.
+ * OfficePay Ledger — grand livre comptable.
  * Chaque mouvement de fonds génère AU MOINS deux écritures (débit / crédit)
  * afin de garantir l'équilibre comptable et la traçabilité totale,
  * conformément au §6 (Sécurité / audit) du cahier des charges.

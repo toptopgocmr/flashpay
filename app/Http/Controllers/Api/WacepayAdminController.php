@@ -124,7 +124,7 @@ class WacepayAdminController extends Controller
         $ref = 'WTEST-IN-' . strtoupper(Str::random(10));
         $req = DigitwaceRequest::create(['reference' => $ref, 'operation' => 'payin', 'status' => 'new']);
         try {
-            $r = $this->client->payin($ref, $v['service_id'], $v['amount'], $v['currency'], $v['phone'], ($v['name'] ?? null) ?: 'Test FlashPay', $v['country'], $v['operator'] ?? null);
+            $r = $this->client->payin($ref, $v['service_id'], $v['amount'], $v['currency'], $v['phone'], ($v['name'] ?? null) ?: 'Test OfficePay', $v['country'], $v['operator'] ?? null);
             $req->update(['wace_id' => $r['wace_id'], 'status' => $r['status'] === 'successful' ? 'successful' : 'pending', 'last_response' => $r['raw'], 'last_checked_at' => now()]);
         } catch (DigitwaceException $e) {
             $req->update(['status' => 'failed', 'message' => mb_substr($e->getMessage(), 0, 250), 'last_response' => $e->response, 'finalized_at' => now()]);
@@ -174,8 +174,8 @@ class WacepayAdminController extends Controller
         $url = null;
         try {
             $r = $this->client->checkout($v['method'], $ref, $v['amount'], strtoupper($v['currency']), [
-                'name' => ($v['name'] ?? null) ?: 'Test FlashPay', 'email' => $v['email'] ?? null, 'phone' => $v['phone'] ?? null,
-                'country' => strtoupper($v['country']), 'description' => 'Test FlashPay ' . $ref,
+                'name' => ($v['name'] ?? null) ?: 'Test OfficePay', 'email' => $v['email'] ?? null, 'phone' => $v['phone'] ?? null,
+                'country' => strtoupper($v['country']), 'description' => 'Test OfficePay ' . $ref,
             ], url('/admin/wacepay'), ($v['service_id'] ?? null) ?: null);
             $url = $r['url'];
             $req->update(['wace_id' => $r['wace_id'], 'status' => $url ? 'pending' : 'failed', 'message' => $url ? null : 'Aucune page de paiement renvoyée par WacePay',

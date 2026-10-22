@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-/** Appel audio entre deux utilisateurs FlashPay (signalisation WebRTC). */
+/** Appel audio entre deux utilisateurs OfficePay (signalisation WebRTC). */
 class ChatCall extends Model
 {
     /** Au-delà, un appel qui sonne toujours est considéré comme manqué. */

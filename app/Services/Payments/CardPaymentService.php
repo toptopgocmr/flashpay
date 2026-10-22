@@ -11,14 +11,14 @@ use Illuminate\Support\Str;
 
 /**
  * Paiement par carte Visa / Mastercard (prépayée ou bancaire) via une page de
- * paiement hébergée (3-D Secure). FlashPay ne voit jamais le numéro de carte
+ * paiement hébergée (3-D Secure). OfficePay ne voit jamais le numéro de carte
  * complet : la passerelle renvoie seulement le résultat et les 4 derniers chiffres.
  *
  *   startCheckout()  transaction « awaiting_card » + URL de la page de paiement
  *   complete()       résultat de la passerelle -> Switch::onSourceConfirmed() / onSourceFailed()
  *
  * Pilotes (FLASHPAY_CARD_DRIVER) :
- *   sandbox  page simulée servie par FlashPay (aucune carte réelle débitée)
+ *   sandbox  page simulée servie par OfficePay (aucune carte réelle débitée)
  *   none     désactivé (« bientôt disponible »)
  *   wacepay  page de paiement WacePay (carte 3-D Secure, ou compte bancaire si FLASHPAY_BANK_DEBIT_DRIVER=wacepay)
  */
@@ -56,7 +56,7 @@ class CardPaymentService
         ]);
 
         if ($driver === 'wacepay') {
-            // Page de paiement WacePay (carte 3-D Secure ou banque) ; retour sur la page FlashPay
+            // Page de paiement WacePay (carte 3-D Secure ou banque) ; retour sur la page OfficePay
             $reference = $tx->reference . '-K' . (DigitwaceRequest::where('transaction_id', $tx->id)->where('operation', 'checkout')->count() + 1);
             $req = DigitwaceRequest::create(['transaction_id' => $tx->id, 'reference' => $reference, 'operation' => 'checkout', 'status' => 'new']);
             try {
@@ -64,7 +64,7 @@ class CardPaymentService
                 $res = app(DigitwaceClient::class)->checkout($bank ? 'bank' : 'card', $reference, (int) $tx->amount + (int) $tx->fee, $tx->currency, [
                     'name' => $user?->full_name, 'email' => $user?->email, 'phone' => $user?->phone,
                     'country' => $tx->meta['source_country'] ?? $tx->sourceWallet?->country ?? 'CG',
-                    'description' => ($bank ? 'Recharge FlashPay par compte bancaire ' : 'Paiement FlashPay par carte ') . $tx->reference,
+                    'description' => ($bank ? 'Recharge OfficePay par compte bancaire ' : 'Paiement OfficePay par carte ') . $tx->reference,
                 ], $ourUrl);
             } catch (\Throwable $e) {
                 $req->update(['status' => 'failed', 'message' => mb_substr($e->getMessage(), 0, 250), 'finalized_at' => now()]);
@@ -81,20 +81,20 @@ class CardPaymentService
         }
 
         if ($driver === 'maishapay') {
-            // Page de paiement MaishaPay (carte 3-D Secure ou crypto) ; retour et notification sur la page FlashPay
+            // Page de paiement MaishaPay (carte 3-D Secure ou crypto) ; retour et notification sur la page OfficePay
             $reference = $tx->reference . '-K' . (\App\Models\RemitRequest::where('transaction_id', $tx->id)->where('method', 'checkout')->count() + 1);
             $req = \App\Models\RemitRequest::create(['transaction_id' => $tx->id, 'partner' => 'maishapay', 'reference' => $reference, 'method' => 'checkout', 'status' => 'new']);
             try {
                 $user = $tx->initiator;
-                $names = preg_split('/\s+/', trim((string) ($user?->full_name ?: 'Client FlashPay'))) ?: ['Client'];
+                $names = preg_split('/\s+/', trim((string) ($user?->full_name ?: 'Client OfficePay'))) ?: ['Client'];
                 $client = app(\App\Services\Maishapay\MaishapayClient::class);
                 $res = $crypto ? $client->collectCrypto($reference, [
                     'amount' => (int) $tx->amount + (int) $tx->fee, 'currency' => $tx->currency, 'asset' => $tx->meta['crypto_asset'] ?? null,
-                    'first_name' => array_shift($names), 'last_name' => implode(' ', $names) ?: 'FlashPay',
+                    'first_name' => array_shift($names), 'last_name' => implode(' ', $names) ?: 'OfficePay',
                     'phone' => $user?->phone, 'email' => $user?->email, 'return_url' => $ourUrl,
                 ]) : $client->collectCard($reference, [
                     'amount' => (int) $tx->amount + (int) $tx->fee, 'currency' => $tx->currency, 'brand' => $tx->meta['card_brand'] ?? null,
-                    'first_name' => array_shift($names), 'last_name' => implode(' ', $names) ?: 'FlashPay',
+                    'first_name' => array_shift($names), 'last_name' => implode(' ', $names) ?: 'OfficePay',
                     'phone' => $user?->phone, 'email' => $user?->email, 'address' => $user ? ($user->getAttributes()['address'] ?? null) : null, 'city' => $user ? ($user->getAttributes()['city'] ?? null) : null,
                     'return_url' => $ourUrl,
                 ]);

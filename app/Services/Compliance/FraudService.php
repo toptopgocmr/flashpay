@@ -100,7 +100,7 @@ class FraudService
     public function assertNotBlocked(User $user): void
     {
         if ($user->blocked_until && $user->blocked_until->isFuture()) {
-            throw new BusinessException('Compte temporairement bloqué par la sécurité FlashPay jusqu\'à ' . $user->blocked_until->format('d/m H:i') . '. Contactez le support.', 'account_temporarily_blocked', 423);
+            throw new BusinessException('Compte temporairement bloqué par la sécurité OfficePay jusqu\'à ' . $user->blocked_until->format('d/m H:i') . '. Contactez le support.', 'account_temporarily_blocked', 423);
         }
     }
 
@@ -246,6 +246,6 @@ class FraudService
         $this->alert($user, $rule, $score, $details + ['blocked_until' => $until->toIso8601String()], 'critical');
         Audit::log('fraud.temporary_block', $user, ['rule' => $rule] + $details, null);
         $this->notify->toUser($user, 'account_blocked', 'Compte temporairement bloqué', 'Activité inhabituelle détectée. Contactez le support si besoin.', ['severity' => 'critical']);
-        throw new BusinessException('Activité inhabituelle détectée : votre compte est temporairement bloqué. Contactez le support FlashPay.', 'account_temporarily_blocked', 423);
+        throw new BusinessException('Activité inhabituelle détectée : votre compte est temporairement bloqué. Contactez le support OfficePay.', 'account_temporarily_blocked', 423);
     }
 }

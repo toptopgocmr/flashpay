@@ -2,14 +2,14 @@
   <div class="auth-page">
     <header class="auth-top">
       <img src="/images/flashpay-logo.svg" alt="" class="auth-logo" />
-      <span>FlashPay</span>
+      <span>OfficePay</span>
     </header>
 
     <main class="auth-main">
       <!-- ---------- Formulaire ---------- -->
       <section class="auth-card">
         <h1>Connexion</h1>
-        <p class="lead">Accédez à la console d'administration FlashPay.</p>
+        <p class="lead">Accédez à la console d'administration OfficePay.</p>
 
         <form @submit.prevent="submit" novalidate>
           <fieldset class="roles">
@@ -60,7 +60,7 @@
 
         <div class="sep"><span>Besoin d'aide ?</span></div>
         <p class="help">
-          Mot de passe oublié ou compte bloqué : contactez un Super Admin FlashPay.
+          Mot de passe oublié ou compte bloqué : contactez un Super Admin OfficePay.
           Les accès sont personnels et journalisés.
         </p>
       </section>
@@ -68,7 +68,7 @@
       <!-- ---------- Panneau d'information ---------- -->
       <aside class="auth-promo">
         <div class="promo-inner">
-          <p class="kicker">FlashPay Switch</p>
+          <p class="kicker">OfficePay Switch</p>
           <h2>Une seule console pour tous vos rails de paiement</h2>
           <ul>
             <li><b>Interopérabilité</b> MTN Mobile Money, Airtel Money et PEEX</li>
@@ -82,7 +82,7 @@
     </main>
 
     <footer class="auth-foot">
-      <span>© {{ year }} FlashPay Group — Brazzaville, République du Congo</span>
+      <span>© {{ year }} OfficePay Group — Brazzaville, République du Congo</span>
       <span class="links"><a href="#" @click.prevent>Conditions d'utilisation</a> · <a href="#" @click.prevent>Confidentialité</a> · Français</span>
     </footer>
   </div>

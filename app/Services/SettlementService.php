@@ -16,9 +16,9 @@ use Illuminate\Support\Str;
 /**
  * Règlement des marchands vers leurs comptes :
  *   mobile_money  versement PEEX vers n'importe quel opérateur couvert (MTN, Airtel, Orange…)
- *   wallet        transfert instantané vers un wallet FlashPay (ex. compte personnel)
- *   cash_pickup   bon de retrait : espèces chez un agent FlashPay
- *   bank          virement bancaire : wallet débité, virement exécuté par l'équipe FlashPay
+ *   wallet        transfert instantané vers un wallet OfficePay (ex. compte personnel)
+ *   cash_pickup   bon de retrait : espèces chez un agent OfficePay
+ *   bank          virement bancaire : wallet débité, virement exécuté par l'équipe OfficePay
  *                 (file « Règlements » de la console), remboursé en cas de rejet
  */
 class SettlementService
@@ -64,9 +64,9 @@ class SettlementService
                     throw new CashNetworkException("Les versements vers {$r['country_name']} ne sont pas encore ouverts.");
                 }
                 if ($type === 'wallet' && ! $this->flows->findUserByPhone($r['phone'])) {
-                    throw new CashNetworkException('Aucun compte FlashPay avec ce numéro.');
+                    throw new CashNetworkException('Aucun compte OfficePay avec ce numéro.');
                 }
-                $data = array_merge($data, ['phone' => ltrim($r['phone'], '+'), 'operator' => $type === 'wallet' ? 'FlashPay' : ($r['operator'] ?? null), 'country' => $r['country']]);
+                $data = array_merge($data, ['phone' => ltrim($r['phone'], '+'), 'operator' => $type === 'wallet' ? 'OfficePay' : ($r['operator'] ?? null), 'country' => $r['country']]);
                 break;
             case 'bank':
                 foreach (['bank_name' => 'Nom de la banque', 'account_holder' => 'Titulaire', 'account_number' => 'Numéro de compte / IBAN'] as $k => $label) {
@@ -175,7 +175,7 @@ class SettlementService
         });
     }
 
-    /** L'équipe FlashPay a exécuté le virement (référence bancaire). */
+    /** L'équipe OfficePay a exécuté le virement (référence bancaire). */
     public function completeBank(Transaction $tx, string $bankRef): Transaction
     {
         return DB::transaction(function () use ($tx, $bankRef) {
@@ -261,7 +261,7 @@ class SettlementService
                 'id' => $t->id,
                 'reference' => $t->reference,
                 'method' => match ($t->type) { 'withdrawal' => 'mobile_money', 'p2p' => 'wallet', 'cash_pickup' => 'cash_pickup', default => 'bank' },
-                'label' => match ($t->type) { 'withdrawal' => 'Mobile money', 'p2p' => 'Wallet FlashPay', 'cash_pickup' => 'Retrait cash', default => 'Virement bancaire' },
+                'label' => match ($t->type) { 'withdrawal' => 'Mobile money', 'p2p' => 'Wallet OfficePay', 'cash_pickup' => 'Retrait cash', default => 'Virement bancaire' },
                 'to' => $t->destination_account ?: ($t->meta['beneficiary_name'] ?? null),
                 'amount' => $t->amount,
                 'fee' => $t->fee,

@@ -2,19 +2,19 @@
 
 /*
 |--------------------------------------------------------------------------
-| Corridors FlashPay (pays / opérateurs) — CEMAC, UEMOA, RDC, Guinée
+| Corridors OfficePay (pays / opérateurs) — CEMAC, UEMOA, RDC, Guinée
 |--------------------------------------------------------------------------
 | - zone        : CEMAC | UEMOA | RDC | GUINEE (national / régional / international)
 | - dial        : indicatif international
 | - local_length: nombre de chiffres du numéro national envoyé après l'indicatif
 |                 (Congo, Gabon, Côte d'Ivoire, Bénin gardent le 0 initial)
 | - currency    : devise de réception
-| - collect / payout : activation côté FlashPay (surchargeable par .env :
+| - collect / payout : activation côté OfficePay (surchargeable par .env :
 |   PEEX_<ISO>_COLLECT / PEEX_<ISO>_PAYOUT). L'activation effective dépend
 |   aussi de votre compte PEEX (support@peexit.com).
 | - payout_api  : disbursement | remittance
 | - operators   : préfixes du numéro national -> corridor PEEX (rail toujours « peex »).
-|   ⚠ Préfixes indicatifs : si aucun ne correspond, FlashPay interroge PEEX
+|   ⚠ Préfixes indicatifs : si aucun ne correspond, OfficePay interroge PEEX
 |   (clients/verify_phoneNumber) pour connaître l'opérateur.
 */
 

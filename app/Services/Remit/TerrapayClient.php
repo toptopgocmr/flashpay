@@ -88,7 +88,7 @@ class TerrapayClient
             'amount' => number_format((float) $p['amount'], 2, '.', ''),
             'currency' => strtoupper($p['currency']),
             'type' => $p['type'] ?? 'inttransfer',
-            'descriptionText' => mb_substr((string) ($p['description'] ?? 'FlashPay'), 0, 100),
+            'descriptionText' => mb_substr((string) ($p['description'] ?? 'OfficePay'), 0, 100),
             'requestDate' => now()->format('Y-m-d H:i:s'),
             'requestingOrganisationTransactionReference' => $p['reference'],
             'provider' => ($p['credit']['method'] ?? 'wallet') === 'wallet' ? ($p['credit']['provider'] ?? null) : null,

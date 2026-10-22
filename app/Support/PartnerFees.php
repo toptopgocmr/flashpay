@@ -10,16 +10,16 @@ use App\Services\Ops\PlatformSettings;
 use App\Services\Peex\PeexCorridors;
 
 /**
- * Coûts partenaires (PEEX, WacePay/Digitwace…) et revenu FlashPay par transaction.
+ * Coûts partenaires (PEEX, WacePay/Digitwace…) et revenu OfficePay par transaction.
  *
  * Un envoi mobile → mobile / carte / banque = 2 opérations partenaire :
- *   1. collecte  : débit du compte de l'expéditeur → compte principal FlashPay (suspense)
- *   2. versement : compte principal FlashPay → crédit du compte du bénéficiaire
+ *   1. collecte  : débit du compte de l'expéditeur → compte principal OfficePay (suspense)
+ *   2. versement : compte principal OfficePay → crédit du compte du bénéficiaire
  * Chaque opération peut coûter des frais au partenaire. On prend les frais
  * renvoyés par le partenaire (réponse / webhook) ; à défaut, on les estime avec
  * les tarifs saisis dans la console (PlatformSettings « partner_fees »).
  *
- * Marge FlashPay = frais facturés au client (+ commission marchand) − frais partenaires.
+ * Marge OfficePay = frais facturés au client (+ commission marchand) − frais partenaires.
  */
 class PartnerFees
 {
@@ -94,7 +94,7 @@ class PartnerFees
 
     /**
      * Frais partenaire ESTIMÉS avant l'opération (devis), arrondis au supérieur pour que
-     * FlashPay ne soit jamais perdant. $gross = true : le frais s'applique au montant collecté
+     * OfficePay ne soit jamais perdant. $gross = true : le frais s'applique au montant collecté
      * qui l'inclut lui-même (collecte de montant + frais), on résout donc x = (base + x) × p.
      */
     public static function quoteFee(?string $rateKey, int $amount, ?string $country = null, ?array $rates = null, bool $gross = false): int
@@ -349,18 +349,18 @@ class PartnerFees
         return null;
     }
 
-    /** Parcours des fonds : expéditeur → compte principal FlashPay → bénéficiaire. */
+    /** Parcours des fonds : expéditeur → compte principal OfficePay → bénéficiaire. */
     protected static function flow(Transaction $tx, array $legs): array
     {
         $g = TransactionPresenter::gateway($tx);
         $st = fn ($k) => collect($legs)->firstWhere('kind', $k)['status'] ?? null;
         $steps = [];
         $steps[] = ['step' => 'debit', 'label' => 'Débit du compte de l\'expéditeur', 'account' => $g['in']['operator'] . ($g['in']['account'] ? ' · ' . $g['in']['account'] : ''),
-            'partner' => $g['in']['partner'] ?? 'FlashPay', 'status' => $tx->source_rail === 'wallet' ? ($tx->status === 'failed' && ! $tx->ledgerEntries()->exists() ? 'failed' : 'successful') : $st('collect')];
-        $steps[] = ['step' => 'main', 'label' => 'Compte principal FlashPay', 'account' => 'Trésorerie FlashPay (flashpay:suspense)', 'partner' => 'FlashPay',
+            'partner' => $g['in']['partner'] ?? 'OfficePay', 'status' => $tx->source_rail === 'wallet' ? ($tx->status === 'failed' && ! $tx->ledgerEntries()->exists() ? 'failed' : 'successful') : $st('collect')];
+        $steps[] = ['step' => 'main', 'label' => 'Compte principal OfficePay', 'account' => 'Trésorerie OfficePay (flashpay:suspense)', 'partner' => 'OfficePay',
             'status' => in_array($tx->stage, ['awaiting_source', 'awaiting_card'], true) ? 'pending' : ($tx->ledgerEntries()->where('account', 'flashpay:suspense')->where('type', 'credit')->exists() ? 'successful' : ($tx->status === 'failed' ? 'failed' : 'pending'))];
         $steps[] = ['step' => 'credit', 'label' => 'Crédit du compte du bénéficiaire', 'account' => $g['out']['operator'] . ($g['out']['account'] ? ' · ' . $g['out']['account'] : ''),
-            'partner' => $g['out']['partner'] ?? 'FlashPay', 'status' => $tx->destination_rail === 'wallet' ? ($tx->status === 'successful' ? 'successful' : ($tx->status === 'failed' || $tx->status === 'reversed' ? 'failed' : 'pending')) : $st('payout')];
+            'partner' => $g['out']['partner'] ?? 'OfficePay', 'status' => $tx->destination_rail === 'wallet' ? ($tx->status === 'successful' ? 'successful' : ($tx->status === 'failed' || $tx->status === 'reversed' ? 'failed' : 'pending')) : $st('payout')];
         return $steps;
     }
 }

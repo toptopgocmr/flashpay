@@ -71,10 +71,10 @@ class PeexClient
             // n'est pas autorisée (elle change à chaque redéploiement Railway sans IP statique).
             if ($response->status() === 403 && isset($body['raw']) && stripos((string) $body['raw'], '<html') !== false) {
                 Log::critical('PEEX 403 : IP du serveur refusée par le pare-feu PEEX', ['path' => $path, 'ip_hint' => 'Faire autoriser l\'IP sortante Railway par PEEX']);
-                throw new PeexException('PEEX 403 : accès refusé par le pare-feu PEEX (adresse IP du serveur FlashPay non autorisée).', 403, $body);
+                throw new PeexException('PEEX 403 : accès refusé par le pare-feu PEEX (adresse IP du serveur OfficePay non autorisée).', 403, $body);
             }
             // 5xx sans message JSON (page HTML / réponse vide) : panne ou maintenance côté PEEX
-            // (serveur, passerelle ou opérateur MTN/Airtel derrière PEEX), pas une erreur FlashPay.
+            // (serveur, passerelle ou opérateur MTN/Airtel derrière PEEX), pas une erreur OfficePay.
             if ($response->status() >= 500 && ! isset($body['message']) && ! isset($body['error']) && ! isset($body['errors'])) {
                 $hint = self::snippet($body['raw'] ?? '');
                 throw new PeexException("PEEX {$response->status()} : serveur PEEX indisponible (" . ($response->reason() ?: 'erreur serveur') . ')'

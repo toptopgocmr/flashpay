@@ -18,7 +18,7 @@ use Illuminate\Support\Str;
  * Remboursement total ou partiel d'un paiement marchand, tous canaux (§13.2, §4.7.2) :
  * initié par le marchand (délai max configurable), l'administrateur (arbitrage
  * de litige) ou l'API e-commerce. Débite le wallet marchand, crédite le payeur.
- * Paiement d'origine par mobile money : crédit sur le wallet FlashPay du payeur s'il existe.
+ * Paiement d'origine par mobile money : crédit sur le wallet OfficePay du payeur s'il existe.
  */
 class RefundService
 {
@@ -44,11 +44,11 @@ class RefundService
             $merchantWallet = Wallet::findOrFail($tx->destination_wallet_id);
             $payerWallet = $tx->source_wallet_id ? Wallet::find($tx->source_wallet_id) : $this->walletByPhone($tx->source_account);
             if (! $payerWallet) {
-                throw new BusinessException('Le payeur n\'a pas de wallet FlashPay : remboursement à traiter par le support.', 'no_payer_wallet');
+                throw new BusinessException('Le payeur n\'a pas de wallet OfficePay : remboursement à traiter par le support.', 'no_payer_wallet');
             }
             $merchantId = $tx->meta['merchant_id'] ?? null;
 
-            // Le marchand rembourse la part nette reçue au prorata ; la commission correspondante est rendue par FlashPay.
+            // Le marchand rembourse la part nette reçue au prorata ; la commission correspondante est rendue par OfficePay.
             $feeBack = $tx->merchant_fee > 0 ? (int) floor($tx->merchant_fee * $amount / $tx->amount) : 0;
             $fromMerchant = $amount - $feeBack;
 

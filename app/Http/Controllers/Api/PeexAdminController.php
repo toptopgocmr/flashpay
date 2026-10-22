@@ -95,10 +95,10 @@ class PeexAdminController extends Controller
 
         $tracks = $failed5xx->take(10)->map(fn ($r) => "- {$r->track_id} · {$r->service} · {$r->phone} · {$r->amount} {$r->currency} · " . $r->created_at?->timezone('Africa/Brazzaville')->format('d/m/Y H:i'))->implode("\n");
         $probeLines = collect($probes)->map(fn ($p, $k) => "- {$k} ({$p['path']}) : HTTP {$p['http']}" . ($p['message'] ? " — {$p['message']}" : ''))->implode("\n");
-        $support = "Bonjour l'équipe PEEX,\n\nNous (FlashPay, compte " . ($client->isSandbox() ? 'sandbox' : 'production') . ") recevons des erreurs HTTP 503 « Service Unavailable » sur l'API " . $client->baseUrl()
+        $support = "Bonjour l'équipe PEEX,\n\nNous (OfficePay, compte " . ($client->isSandbox() ? 'sandbox' : 'production') . ") recevons des erreurs HTTP 503 « Service Unavailable » sur l'API " . $client->baseUrl()
             . ".\n\nAppels de contrôle depuis notre serveur (" . now()->timezone('Africa/Brazzaville')->format('d/m/Y H:i') . ", heure de Brazzaville) :\n{$probeLines}\n\n"
             . ($tracks ? "Demandes concernées (collection/request_payment) :\n{$tracks}\n\n" : '')
-            . 'Adresse IP sortante de notre serveur : ' . ($ip ?: 'inconnue') . "\n\nPouvez-vous nous confirmer l'état de vos services (collecte MTN / Airtel Congo) et si une action est nécessaire de notre côté (activation, IP à autoriser) ?\n\nCordialement,\nFlashPay — Brazzaville";
+            . 'Adresse IP sortante de notre serveur : ' . ($ip ?: 'inconnue') . "\n\nPouvez-vous nous confirmer l'état de vos services (collecte MTN / Airtel Congo) et si une action est nécessaire de notre côté (activation, IP à autoriser) ?\n\nCordialement,\nOfficePay — Brazzaville";
 
         return response()->json([
             'base_url' => $client->baseUrl(),
@@ -186,7 +186,7 @@ class PeexAdminController extends Controller
 
     /**
      * Formulaire « Remboursement PEEX » : retrouve les opérations à rembourser par
-     * référence FlashPay (FP-…), track_id PEEX ou numéro de téléphone du client.
+     * référence OfficePay (FP-…), track_id PEEX ou numéro de téléphone du client.
      */
     public function refundSearch(Request $request)
     {
@@ -246,7 +246,7 @@ class PeexAdminController extends Controller
             'source_country' => $v['source_country'] ?? null,
             'destination_country' => $v['destination_country'] ?? null,
             'beneficiary_name' => $v['beneficiary_name'] ?? null,
-            'description' => 'Test sandbox FlashPay',
+            'description' => 'Test sandbox OfficePay',
             'test' => true,
         ]);
 

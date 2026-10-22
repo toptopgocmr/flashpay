@@ -30,7 +30,7 @@ use Illuminate\Support\Facades\Log;
  */
 class FincraClient
 {
-    /** Mots-clés d'opérateur FlashPay → code opérateur Fincra (collecte : « operator », versement : « mobileMoneyCode »). */
+    /** Mots-clés d'opérateur OfficePay → code opérateur Fincra (collecte : « operator », versement : « mobileMoneyCode »). */
     public const OPERATORS = [
         'M-PESA' => 'SAFARICOM', 'MPESA' => 'SAFARICOM', 'SAFARICOM' => 'SAFARICOM', 'VODAFONE' => 'VODAFONE', 'AIRTELTIGO' => 'AIRTELTIGO',
         'AIRTEL' => 'AIRTEL', 'ORANGE' => 'ORANGE', 'MTN' => 'MTN', 'MOOV' => 'MOOV', 'FREE' => 'FREE', 'WAVE' => 'WAVE', 'AFRICELL' => 'AFRICELL',
@@ -72,7 +72,7 @@ class FincraClient
         return url('/api/webhooks/fincra');
     }
 
-    /** Code opérateur Fincra d'un nom d'opérateur FlashPay (« MTN Mobile Money », « Airtel Money », « Vodacom M-Pesa »…). */
+    /** Code opérateur Fincra d'un nom d'opérateur OfficePay (« MTN Mobile Money », « Airtel Money », « Vodacom M-Pesa »…). */
     public static function operator(?string $name): ?string
     {
         $op = strtoupper((string) $name);
@@ -121,7 +121,7 @@ class FincraClient
             'phone' => '+' . preg_replace('/\D/', '', $p['phone']),
             'operator' => $p['operator'],
             'customer' => array_filter([
-                'name' => mb_substr(trim((string) ($p['name'] ?? '')) ?: 'Client FlashPay', 0, 100),
+                'name' => mb_substr(trim((string) ($p['name'] ?? '')) ?: 'Client OfficePay', 0, 100),
                 'email' => $p['email'] ?: (string) $this->cfg('default_email'),
                 'phoneNumber' => '+' . preg_replace('/\D/', '', $p['phone']),
             ]),
@@ -168,7 +168,7 @@ class FincraClient
             'sourceCurrency' => strtoupper($p['source_currency']),
             'destinationCurrency' => strtoupper($p['destination_currency']),
             'amount' => self::amount($p['amount']),
-            'description' => mb_substr((string) ($p['description'] ?? 'FlashPay'), 0, 100),
+            'description' => mb_substr((string) ($p['description'] ?? 'OfficePay'), 0, 100),
             'customerReference' => $customerReference,
             'paymentDestination' => $p['destination'],
             'quoteReference' => $p['quote_reference'] ?? null,

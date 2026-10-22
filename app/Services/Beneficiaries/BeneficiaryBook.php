@@ -9,7 +9,7 @@ use App\Models\Wallet;
 use App\Services\Peex\PeexCorridors;
 
 /**
- * Carnet de bénéficiaires : chaque envoi (wallet FlashPay ou mobile money, tout
+ * Carnet de bénéficiaires : chaque envoi (wallet OfficePay ou mobile money, tout
  * pays) enregistre ou met à jour le bénéficiaire, pour le resélectionner ensuite
  * dans « Envoyer de l'argent » (nom, numéro, pays, opérateur, compte).
  */
@@ -37,7 +37,7 @@ class BeneficiaryBook
             $name = $wallet->user->full_name;
             $deliver = 'wallet';
             $country ??= $wallet->country;
-            $operator = 'Wallet FlashPay';
+            $operator = 'Wallet OfficePay';
         } elseif ($tx->destination_account && in_array($tx->destination_rail, ['peex', 'digitwace', 'pawapay_momo', 'maishapay', 'fincra', 'mobile'], true)) {
             $phone = (string) $tx->destination_account;
             $name = $m['beneficiary_name'] ?? $m['beneficiary_verified_name'] ?? null;

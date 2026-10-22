@@ -121,7 +121,7 @@ class RolesAdminController extends Controller
     {
         $v = $request->validate(['action' => 'required|in:revoke,reactivate', 'reason' => 'nullable|string|max:150']);
         $c = $v['action'] === 'revoke'
-            ? $service->revoke($cashier, $v['reason'] ?? 'Révoqué par FlashPay')
+            ? $service->revoke($cashier, $v['reason'] ?? 'Révoqué par OfficePay')
             : $service->reactivate($cashier);
         Audit::log('admin.cashier.' . $v['action'], $cashier, ['reason' => $v['reason'] ?? null]);
 

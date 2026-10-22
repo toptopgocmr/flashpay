@@ -7,7 +7,7 @@ use App\Services\SwitchService;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Applique le statut WacePay à la transaction FlashPay.
+ * Applique le statut WacePay à la transaction OfficePay.
  * Règle de sécurité : on n'agit QUE sur un statut confirmé par l'API (le
  * webhook sert de déclencheur ; il n'est jamais cru sur parole pour rembourser).
  */
@@ -81,7 +81,7 @@ class DigitwaceStatusHandler
         $req = $ids ? DigitwaceRequest::whereIn('reference', $ids)->orWhereIn('wace_id', $ids)->first() : null;
         if (! $req) {
             // Ex. bouton « TEST » du tableau de bord WacePay : journalisé pour connaître le format exact
-            Log::info('Webhook WacePay : aucune transaction FlashPay correspondante', ['event' => data_get($payload, 'event') ?? data_get($payload, 'type'), 'ids' => $ids, 'payload' => $payload]);
+            Log::info('Webhook WacePay : aucune transaction OfficePay correspondante', ['event' => data_get($payload, 'event') ?? data_get($payload, 'type'), 'ids' => $ids, 'payload' => $payload]);
             return null;
         }
         $req->update(['last_callback' => $payload]);

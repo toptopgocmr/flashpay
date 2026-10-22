@@ -96,7 +96,7 @@ class CardCheckoutController extends Controller
             $retry = $e($tx->meta['checkout_url'] ?? '');
             $body = '<div class="icon wait">…</div><h1>Paiement en cours de vérification</h1>'
                 . '<p>' . $e($amount) . ' · Réf. ' . $e($tx->reference) . '</p>'
-                . '<p class="muted">Le résultat est confirmé par WacePay en quelques instants. Vous pouvez revenir dans l\'application FlashPay : vous serez notifié.</p>'
+                . '<p class="muted">Le résultat est confirmé par WacePay en quelques instants. Vous pouvez revenir dans l\'application OfficePay : vous serez notifié.</p>'
                 . '<form method="get"><button>Actualiser</button></form>'
                 . ($retry ? '<p><a href="' . $retry . '">Retourner sur la page de paiement</a></p>' : '');
         } elseif ($tx->status !== 'processing' || $tx->stage !== 'awaiting_card') {
@@ -104,7 +104,7 @@ class CardCheckoutController extends Controller
             $body = '<div class="icon ' . ($ok ? 'ok' : 'ko') . '">' . ($ok ? '✓' : '✕') . '</div>'
                 . '<h1>' . ($ok ? 'Paiement accepté' : 'Paiement non abouti') . '</h1>'
                 . '<p>' . $e($ok ? "{$amount} débités de " . ($tx->source_rail === 'bank' ? 'votre compte bancaire' : 'votre carte') . " {$tx->source_account}." : ($tx->failure_reason ?: 'Paiement refusé.')) . '</p>'
-                . '<p class="muted">Vous pouvez fermer cette page et revenir dans l\'application FlashPay.</p>';
+                . '<p class="muted">Vous pouvez fermer cette page et revenir dans l\'application OfficePay.</p>';
         } else {
             $body = '<p class="muted">Montant à payer</p><div class="amount">' . $e($amount) . '</div>'
                 . '<p class="muted">Réf. ' . $e($tx->reference) . ' · frais carte inclus</p>'
@@ -122,7 +122,7 @@ class CardCheckoutController extends Controller
 
         return <<<HTML
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FlashPay · Paiement par carte</title>
+<title>OfficePay · Paiement par carte</title>
 <style>
 body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f5f7;color:#1b1240}
 .bar{background:#1b1240;color:#fff;padding:14px 20px;font-weight:800;display:flex;justify-content:space-between;align-items:center}
@@ -140,7 +140,7 @@ details{margin-top:16px;font-size:12px;color:#6b7280}
 .icon.ok{background:#16a34a}.icon.ko{background:#dc2626}.icon.wait{background:#f59e0b}h1{text-align:center;font-size:22px}
 .card>p{text-align:center}
 </style></head><body>
-<div class="bar">FlashPay · Paiement sécurisé {$badge}</div>
+<div class="bar">OfficePay · Paiement sécurisé {$badge}</div>
 <div class="card">{$body}</div>
 </body></html>
 HTML;

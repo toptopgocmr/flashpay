@@ -45,11 +45,11 @@ const HELP = {
   unbalanced_transactions: 'Chaque opération doit avoir autant de débits que de crédits au grand livre. Une ligne ici = écriture manquante ou en double : à corriger avant tout.',
   wallet_mismatches: 'Le solde affiché du wallet doit égaler la somme de ses mouvements au grand livre. Un écart = argent ajouté ou retiré sans écriture (saisie directe en base, solde d’ouverture non déclaré…).',
   stuck_transactions: 'Opérations encore « en cours » depuis plus de 15 min (partenaire sans réponse) : marquées « en cours de vérification ». Ouvrez-les et cliquez « Vérifier le statut ».',
-  peex_orphans: 'Le statut PEEX contredit celui de FlashPay : client débité mais opération en échec non remboursée, bénéficiaire payé ET client remboursé, ou remboursement payé non enregistré.',
+  peex_orphans: 'Le statut PEEX contredit celui de OfficePay : client débité mais opération en échec non remboursée, bénéficiaire payé ET client remboursé, ou remboursement payé non enregistré.',
   partner_orphans: 'Mêmes contrôles pour WacePay et PawaPay (collecte, versement, remboursement).',
   to_refund: 'Clients débités dont le bénéficiaire n’a pas été crédité et qui n’ont pas été remboursés. Ouvrez la transaction et cliquez « Rembourser via … » : le partenaire qui a collecté rend l’argent sur le compte débité.',
 }
-const COL = { partner: 'Partenaire', operation: 'Opération', partner_status: 'Statut partenaire', transaction: 'Transaction', transaction_status: 'Statut FlashPay', issue: 'Problème', refund_via: 'Rembourser via', refund_to: 'Vers', gap: 'Écart', user_id: 'Utilisateur', currency: 'Devise', since: 'Depuis', stage: 'Étape', reference: 'Référence', transaction_id: 'Transaction', wallet_id: 'Wallet', user: 'Titulaire', balance: 'Solde wallet', ledger: 'Solde ledger', ledger_balance: 'Solde ledger', diff: 'Écart', difference: 'Écart', track_id: 'Track ID', status: 'Statut', amount: 'Montant' }
+const COL = { partner: 'Partenaire', operation: 'Opération', partner_status: 'Statut partenaire', transaction: 'Transaction', transaction_status: 'Statut OfficePay', issue: 'Problème', refund_via: 'Rembourser via', refund_to: 'Vers', gap: 'Écart', user_id: 'Utilisateur', currency: 'Devise', since: 'Depuis', stage: 'Étape', reference: 'Référence', transaction_id: 'Transaction', wallet_id: 'Wallet', user: 'Titulaire', balance: 'Solde wallet', ledger: 'Solde ledger', ledger_balance: 'Solde ledger', diff: 'Écart', difference: 'Écart', track_id: 'Track ID', status: 'Statut', amount: 'Montant' }
 const route = useRoute()
 const detailTop = ref(null)
 // Affiche le rapport choisi et remonte en haut de page pour voir son détail

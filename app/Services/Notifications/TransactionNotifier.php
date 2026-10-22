@@ -62,7 +62,7 @@ class TransactionNotifier
                 $tx->type === 'p2p' ? $this->notify->toUser($src ?? User::find($tx->initiated_by), 'money_sent', "Envoi effectué : {$amount}", $who, ['severity' => 'success', 'data' => $data]) : null,
             ],
             'cash_in' => [
-                $this->notify->toUser($dst, 'cash_in', "Recharge compte FlashPay : {$received} créditée", $who . ' · ' . \App\Support\TransactionPresenter::channel($tx), ['sound' => true, 'severity' => 'success', 'data' => $data]),
+                $this->notify->toUser($dst, 'cash_in', "Recharge compte OfficePay : {$received} créditée", $who . ' · ' . \App\Support\TransactionPresenter::channel($tx), ['sound' => true, 'severity' => 'success', 'data' => $data]),
                 ($meta['channel'] ?? null) === 'agent' ? $this->notify->toUser($src, 'agent_cash_in', "Dépôt client confirmé : {$amount}", $who . ' — reçu numérique disponible', ['severity' => 'success', 'data' => $data, 'sms' => false]) : null,
             ],
             'cash_pickup' => [

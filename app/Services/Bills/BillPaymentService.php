@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
- * Services payés depuis le wallet FlashPay, exécutés par MaishaPay :
+ * Services payés depuis le wallet OfficePay, exécutés par MaishaPay :
  *   airtime  crédit téléphonique (Vodacom, Airtel, Orange, MTN, Africell)
  *   paytv    abonnement TV (Canal+, DStv, StarTimes)
  *   utility  factures (eau REGIDESO, électricité SNEL, internet)
@@ -126,7 +126,7 @@ class BillPaymentService
             $this->wallets->debit($wallet, $amount + $q['fee']);
             $this->ledger->recordDoubleEntry($tx, "wallet:{$wallet->id}", 'flashpay:suspense', $amount);
             if ($q['fee'] > 0) {
-                $this->ledger->recordDoubleEntry($tx, "wallet:{$wallet->id}", 'flashpay:fees', $q['fee'], null, 'Frais FlashPay');
+                $this->ledger->recordDoubleEntry($tx, "wallet:{$wallet->id}", 'flashpay:fees', $q['fee'], null, 'Frais OfficePay');
             }
             return $tx;
         });
@@ -188,8 +188,8 @@ class BillPaymentService
                 'source_rail' => 'treasury', 'destination_rail' => 'wallet', 'destination_wallet_id' => $wallet->id,
                 'amount' => (int) $tx->amount + (int) $tx->fee, 'fee' => 0, 'currency' => $tx->currency,
                 'status' => 'successful', 'completed_at' => now(), 'initiated_by' => $tx->initiated_by,
-                'meta' => ['channel' => 'auto_refund', 'refund_of' => $tx->reference, 'refund_of_id' => $tx->id, 'refunded_via' => 'FlashPay',
-                    'sender_name' => 'FlashPay (remboursement)', 'refund_breakdown' => ['amount' => (int) $tx->amount, 'fee' => (int) $tx->fee]],
+                'meta' => ['channel' => 'auto_refund', 'refund_of' => $tx->reference, 'refund_of_id' => $tx->id, 'refunded_via' => 'OfficePay',
+                    'sender_name' => 'OfficePay (remboursement)', 'refund_breakdown' => ['amount' => (int) $tx->amount, 'fee' => (int) $tx->fee]],
             ]);
             $this->ledger->recordDoubleEntry($refund, 'flashpay:suspense', "wallet:{$wallet->id}", (int) $tx->amount, null, "Remboursement {$tx->reference}");
             if ($tx->fee > 0) {
@@ -200,13 +200,13 @@ class BillPaymentService
             $meta['outcome'] = ['debit' => ['done' => true], 'credit' => ['done' => false, 'error' => mb_substr((string) $reason, 0, 200), 'partner' => 'MaishaPay'],
                 'refund' => ['done' => true, 'to' => 'wallet', 'reference' => $refund->reference, 'at' => now()->toIso8601String()]];
             $tx->update(['status' => 'reversed', 'stage' => null, 'meta' => $meta,
-                'failure_reason' => mb_substr(($reason ?: 'Service refusé par MaishaPay') . ' · Montant et frais remboursés sur votre wallet FlashPay', 0, 250)]);
+                'failure_reason' => mb_substr(($reason ?: 'Service refusé par MaishaPay') . ' · Montant et frais remboursés sur votre wallet OfficePay', 0, 250)]);
             return $tx->fresh();
         });
     }
 
     protected function walletOf(User $user): Wallet
     {
-        return Wallet::where('user_id', $user->id)->orderBy('id')->first() ?? throw new BusinessException('Wallet FlashPay introuvable.');
+        return Wallet::where('user_id', $user->id)->orderBy('id')->first() ?? throw new BusinessException('Wallet OfficePay introuvable.');
     }
 }

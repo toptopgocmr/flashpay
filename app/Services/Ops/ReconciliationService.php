@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
  *  1. équilibre du ledger (débits = crédits par transaction et devise) ;
  *  2. cohérence solde wallet ↔ ledger ;
  *  3. opérations bloquées (timeout opérateur) → « en cours de vérification » ;
- *  4. écritures orphelines PEEX (succès opérateur / échec FlashPay et inversement) ;
+ *  4. écritures orphelines PEEX (succès opérateur / échec OfficePay et inversement) ;
  *  5. orphelines WacePay et PawaPay (mêmes règles : collecte, versement, remboursement) ;
  *  6. clients débités ni crédités ni remboursés (opération en échec après débit) : à rembourser.
  * Toute anomalie alerte l'administrateur (§11.4).
@@ -126,7 +126,7 @@ class ReconciliationService
 
     /**
      * WacePay (digitwace_requests) et PawaPay (remit_requests) : statut du partenaire incohérent
-     * avec celui de la transaction FlashPay.
+     * avec celui de la transaction OfficePay.
      */
     protected function partnerOrphans(): array
     {

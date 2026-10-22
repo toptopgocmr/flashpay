@@ -17,7 +17,7 @@ class EnsureActiveAccount
 
         if ($user && $user->status !== 'active') {
             return response()->json([
-                'message' => 'Compte désactivé. Contactez le support FlashPay.',
+                'message' => 'Compte désactivé. Contactez le support OfficePay.',
                 'code' => 'account_disabled',
             ], 403);
         }

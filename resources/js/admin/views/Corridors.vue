@@ -197,7 +197,7 @@
 
     <!-- ================= Transferts internationaux (remittance) ================= -->
     <template v-else-if="tab === 'remit'">
-      <div class="gw-note mb">Transferts internationaux de l'app (P2P, P2B, B2P, B2B depuis le wallet FlashPay). Choisissez le partenaire qui paie chaque pays de destination. Les flux mobile money nationaux et régionaux restent réglés dans l'onglet « Pays ».</div>
+      <div class="gw-note mb">Transferts internationaux de l'app (P2P, P2B, B2P, B2B depuis le wallet OfficePay). Choisissez le partenaire qui paie chaque pays de destination. Les flux mobile money nationaux et régionaux restent réglés dans l'onglet « Pays ».</div>
       <div class="gw-cols mb">
         <div v-for="p in remit.partners" :key="p.key" class="gw-card pc" :class="'p-' + p.key">
           <div class="gw-card-h">

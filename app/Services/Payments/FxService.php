@@ -7,7 +7,7 @@ use App\Models\ExchangeRate;
 /**
  * Conversion de devises (XAF, XOF, CDF, GNF, USD…).
  *  - XAF ↔ XOF : parité fixe 1:1 (même ancrage à l'euro), sans marge.
- *  - autres    : table exchange_rates (1 base = rate quote), marge FlashPay déduite.
+ *  - autres    : table exchange_rates (1 base = rate quote), marge OfficePay déduite.
  */
 class FxService
 {

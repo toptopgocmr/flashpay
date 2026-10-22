@@ -34,7 +34,7 @@
     <Modal v-if="act" :title="act.decision === 'approve' ? 'Valider l\'approvisionnement' : 'Rejeter la demande'" :subtitle="act.r.agent?.user?.full_name" @close="act = null">
       <div v-if="error" class="flash err" style="margin:0"><div>{{ error }}</div></div>
       <div v-if="act.decision === 'approve'"><label class="field">Montant crédité (après contrôle des fonds reçus)</label><input v-model.number="act.amount" type="number" /></div>
-      <div v-else><label class="field">Motif</label><input v-model.trim="act.reason" placeholder="Ex. dépôt non reçu sur le compte FlashPay" /></div>
+      <div v-else><label class="field">Motif</label><input v-model.trim="act.reason" placeholder="Ex. dépôt non reçu sur le compte OfficePay" /></div>
       <template #foot><button class="btn-normal" @click="act = null">Annuler</button><button class="btn" :disabled="busy" @click="submit">Confirmer</button></template>
     </Modal>
   </div>

@@ -35,7 +35,7 @@ class FincraWebhookController extends Controller
         $req = $ids ? RemitRequest::whereIn('partner', ['fincra', 'fincra_remit'])
             ->where(fn ($q) => $q->whereIn('reference', $ids)->orWhereIn('partner_ref', $ids))->first() : null;
         if (! $req) {
-            Log::info('Fincra : notification sans opération FlashPay correspondante', ['event' => $request->input('event'), 'ids' => $ids]);
+            Log::info('Fincra : notification sans opération OfficePay correspondante', ['event' => $request->input('event'), 'ids' => $ids]);
             return response()->json(['ok' => true]);
         }
         if (! $req->finalized_at && Cache::add('fincra:callback:' . $req->id, 1, 5)) {

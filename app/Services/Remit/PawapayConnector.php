@@ -8,14 +8,14 @@ use App\Models\Transaction;
 /**
  * Rail « pawapay » : transfert international vers un wallet mobile money via pawaPay
  * (API Remittances, ou Payouts si PAWAPAY_MODE=payout). Le bénéficiaire reçoit le
- * montant en devise locale, prélevé sur le wallet FlashPay chez pawaPay.
+ * montant en devise locale, prélevé sur le wallet OfficePay chez pawaPay.
  */
 class PawapayConnector extends RemitConnector
 {
-    /** Types de pièce FlashPay → pawaPay. */
+    /** Types de pièce OfficePay → pawaPay. */
     protected const ID_TYPES = ['CNI' => 'NATIONAL_ID', 'PP' => 'PASSPORT', 'PC' => 'DRIVERS_LICENSE', 'CS' => 'RESIDENCE_PERMIT', 'RCCM' => 'BUSINESS_REGISTRATION'];
 
-    /** Motifs / origines (WacePay ou FlashPay) → valeurs pawaPay. */
+    /** Motifs / origines (WacePay ou OfficePay) → valeurs pawaPay. */
     protected const PURPOSES = [
         'family' => 'FAMILY_SUPPORT', 'medical' => 'MEDICAL_EXPENSES', 'education' => 'EDUCATION_SUPPORT', 'tuition' => 'TUITION_FEES',
         'gift' => 'GIFT_AND_OTHER_DONATIONS', 'donation' => 'GIFT_AND_OTHER_DONATIONS', 'rent' => 'REAL_ESTATE', 'property' => 'REAL_ESTATE',
@@ -55,7 +55,7 @@ class PawapayConnector extends RemitConnector
             'phone' => $phone,
             'provider' => $provider,
             'reference' => $tx->reference,
-            'message' => $remit['note'] ?? 'FlashPay',
+            'message' => $remit['note'] ?? 'OfficePay',
             'recipient_first_name' => $business ? (string) $b['business_name'] : (string) $b['first_name'],
             'recipient_last_name' => $business ? (string) ($b['business_type'] ?? 'SARL') : (string) $b['last_name'],
             'original_amount' => (int) $tx->amount,

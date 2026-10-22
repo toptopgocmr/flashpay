@@ -3,7 +3,7 @@
     <div class="sc-ico">📞</div>
     <div class="sc-txt">
       <strong>{{ call.name }}</strong>
-      <span v-if="call.phase === 'incoming'">Appel entrant · Support FlashPay</span>
+      <span v-if="call.phase === 'incoming'">Appel entrant · Support OfficePay</span>
       <span v-else-if="call.phase === 'calling'">Appel en cours… ça sonne</span>
       <span v-else-if="call.phase === 'connecting'">Connexion…</span>
       <span v-else-if="call.phase === 'connected'">{{ mmss }}</span>

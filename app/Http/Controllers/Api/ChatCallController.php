@@ -74,7 +74,7 @@ class ChatCallController extends Controller
         }
 
         // Notification « appel entrant » : utile si l'app du contact est en arrière-plan.
-        app(NotificationService::class)->toUser($callee, 'chat_call', '📞 Appel de ' . $me->full_name, 'Ouvrez FlashPay pour répondre.', [
+        app(NotificationService::class)->toUser($callee, 'chat_call', '📞 Appel de ' . $me->full_name, 'Ouvrez OfficePay pour répondre.', [
             'data' => ['conversation_id' => $conversation->id, 'call_id' => $call->id],
             'sms' => false,
         ]);

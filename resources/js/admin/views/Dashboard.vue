@@ -454,9 +454,9 @@ const W = {
   health: { title: 'État des services', about: 'Disponibilité de l’API, de PEEX et des canaux.', size: 1, foot: { to: '/peex', l: 'Ouvrir la console PEEX' } },
   todo: { title: 'À traiter', about: 'Validations, échecs et alertes nécessitant une action.', size: 1, foot: { to: '/notifications', l: 'Voir les notifications' } },
   quick: { title: 'Récemment visités', about: 'Vos derniers écrans et les accès rapides.', size: 1 },
-  peex: { title: 'Soldes PEEX', desc: 'Disponible = solde − montants engagés', about: 'Soldes des comptes FlashPay chez PEEX.', size: 2, foot: { to: '/peex', l: 'Passerelle PEEX' } },
-  wacepay: { title: 'Soldes WacePay', desc: 'Disponible = solde − versements en cours', about: 'Soldes du compte FlashPay chez WacePay (Digitwace), par devise.', size: 2, foot: { to: '/corridors', l: 'Pays & partenaires' } },
-  pawapay: { title: 'Soldes PawaPay', desc: 'Solde du compte FlashPay chez PawaPay, par pays', about: 'Soldes PawaPay (collecte, versement, remittance mobile money).', size: 2, foot: { to: '/pawapay', l: 'Passerelle PawaPay' } },
+  peex: { title: 'Soldes PEEX', desc: 'Disponible = solde − montants engagés', about: 'Soldes des comptes OfficePay chez PEEX.', size: 2, foot: { to: '/peex', l: 'Passerelle PEEX' } },
+  wacepay: { title: 'Soldes WacePay', desc: 'Disponible = solde − versements en cours', about: 'Soldes du compte OfficePay chez WacePay (Digitwace), par devise.', size: 2, foot: { to: '/corridors', l: 'Pays & partenaires' } },
+  pawapay: { title: 'Soldes PawaPay', desc: 'Solde du compte OfficePay chez PawaPay, par pays', about: 'Soldes PawaPay (collecte, versement, remittance mobile money).', size: 2, foot: { to: '/pawapay', l: 'Passerelle PawaPay' } },
   activity: { title: 'Activité', desc: 'Volume réussi et nombre de transactions par jour', about: 'Graphique quotidien du volume et du nombre.', size: 2 },
   network: { title: 'Réseau par rôle', about: 'Comptes des six profils de l’application mobile.', size: 2, foot: { to: '/roles', l: 'Rôles & habilitations' } },
   compare: { title: 'Période vs précédente', about: 'Comparaison des indicateurs avec la période précédente.', size: 2, flush: true },
@@ -681,7 +681,7 @@ const chartOptions = computed(() => ({
 const services = computed(() => {
   const px = d.value?.peex
   return [
-    { label: 'API FlashPay', kind: error.value ? 'err' : 'ok', state: error.value ? 'Indisponible' : 'Opérationnelle' },
+    { label: 'API OfficePay', kind: error.value ? 'err' : 'ok', state: error.value ? 'Indisponible' : 'Opérationnelle' },
     { label: `PEEX (${px?.sandbox ? 'sandbox' : 'production'})`, kind: px?.last_error ? 'warn' : 'ok', state: px?.last_error ? 'Erreurs récentes' : 'Normal' },
     { label: 'Mobile money (MTN, Airtel…)', kind: 'ok', state: 'Via PEEX' },
     { label: 'Réseau d’agents', kind: 'ok', state: 'Actif' },

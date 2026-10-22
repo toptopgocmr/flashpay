@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Messagerie entre utilisateurs FlashPay (texte, photos, captures, vidéos courtes).
+ * Messagerie entre utilisateurs OfficePay (texte, photos, captures, vidéos courtes).
  * Les fichiers sont stockés en base (base64) : le disque Railway est effacé à
  * chaque redéploiement. Tailles limitées dans ChatController.
  */

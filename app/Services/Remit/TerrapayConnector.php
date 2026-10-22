@@ -12,7 +12,7 @@ use App\Models\Transaction;
  */
 class TerrapayConnector extends RemitConnector
 {
-    /** Types de pièce FlashPay → TerraPay. */
+    /** Types de pièce OfficePay → TerraPay. */
     protected const ID_TYPES = ['CNI' => 'nationalidcard', 'PP' => 'passport', 'PC' => 'drivinglicense', 'CS' => 'residentpermit', 'RCCM' => 'businessregistration'];
 
     public function __construct(protected TerrapayClient $client)
@@ -48,7 +48,7 @@ class TerrapayConnector extends RemitConnector
             'amount' => $amountOut,
             'currency' => $currencyOut,
             'type' => $types[$remit['business_type'] ?? 'p2p'] ?? 'inttransfer',
-            'description' => $remit['note'] ?? ('FlashPay ' . strtoupper((string) ($remit['business_type'] ?? 'p2p'))),
+            'description' => $remit['note'] ?? ('OfficePay ' . strtoupper((string) ($remit['business_type'] ?? 'p2p'))),
             'sender_msisdn' => $senderMsisdn,
             'credit' => $credit,
             'sender_kyc' => self::kyc($remit['sender'], true),

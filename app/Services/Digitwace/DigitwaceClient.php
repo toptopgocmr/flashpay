@@ -513,7 +513,7 @@ class DigitwaceClient
                 'amount' => $amount,
                 'referenceId' => $reference,
                 'customer_msisdn' => '+' . $digits,
-                'customer_name' => mb_substr(trim($name) ?: 'Client FlashPay', 0, 100),
+                'customer_name' => mb_substr(trim($name) ?: 'Client OfficePay', 0, 100),
                 'customer_email' => $email ?: $this->cfg('default_email'),
                 'currency' => strtoupper($currency),
                 'countryCode' => $country ? strtoupper($country) : null,
@@ -559,7 +559,7 @@ class DigitwaceClient
      * Collecte par carte Visa / Mastercard ou par compte bancaire : WacePay crée une
      * page de paiement sécurisée (3-D Secure / banque) et renvoie son URL. Le client
      * y saisit sa carte ou valide le prélèvement ; le résultat arrive par webhook
-     * (revérifié via status()). FlashPay ne voit jamais le numéro de carte.
+     * (revérifié via status()). OfficePay ne voit jamais le numéro de carte.
      *
      * @param  'card'|'bank'  $method
      * @return array{url:?string, wace_id:string, status:string, raw:array}
@@ -570,13 +570,13 @@ class DigitwaceClient
             return $this->partnerCheckout($method, $reference, $amount, $currency, $customer, $returnUrl, $serviceId);
         }
         $f = $this->cfg('fields.transaction');
-        [$first, $last] = $this->splitName($customer['name'] ?? 'Client FlashPay');
+        [$first, $last] = $this->splitName($customer['name'] ?? 'Client OfficePay');
         $json = $this->call('post', $method === 'bank' ? 'payin_bank' : 'payin_card', array_filter([
             $f['reference'] => $reference,
             $f['amount'] => $amount,
             $f['currency'] => $currency,
             'paymentMethod' => $method === 'bank' ? 'BANK' : 'CARD',
-            'description' => $customer['description'] ?? "FlashPay {$reference}",
+            'description' => $customer['description'] ?? "OfficePay {$reference}",
             'firstName' => $first,
             'lastName' => $last,
             'customerName' => $customer['name'] ?? null,
@@ -619,12 +619,12 @@ class DigitwaceClient
             'amount' => $amount,
             'referenceId' => $reference,
             'currency' => strtoupper($currency),
-            'customer_name' => mb_substr(trim((string) ($customer['name'] ?? '')) ?: 'Client FlashPay', 0, 100),
+            'customer_name' => mb_substr(trim((string) ($customer['name'] ?? '')) ?: 'Client OfficePay', 0, 100),
             'customer_email' => ($customer['email'] ?? null) ?: $this->cfg('default_email'),
             'customer_msisdn' => $phone ? '+' . preg_replace('/\D/', '', (string) $phone) : null,
             'countryCode' => isset($customer['country']) ? strtoupper($customer['country']) : null,
             'payment_method' => $method === 'bank' ? 'BANK' : 'CARD',
-            'description' => $customer['description'] ?? "FlashPay {$reference}",
+            'description' => $customer['description'] ?? "OfficePay {$reference}",
             'callback_url' => $this->callbackUrl(),
             'return_url' => $returnUrl,
             'success_url' => $returnUrl,

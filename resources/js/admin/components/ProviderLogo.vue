@@ -11,7 +11,7 @@ import { computed, ref, watch } from 'vue'
 
 /**
  * Logo d'un opérateur (MTN, Airtel, Orange…) ou d'une passerelle (PawaPay, WacePay, PEEX…).
- * Fichiers : public/images/logos/<clé>.png (ou .svg pour FlashPay). Logo absent ou
+ * Fichiers : public/images/logos/<clé>.png (ou .svg pour OfficePay). Logo absent ou
  * illisible → pastille aux initiales, à la couleur de la marque.
  * Pour ajouter un logo partenaire : déposez le fichier officiel (PNG carré, fond clair)
  * sous public/images/logos/pawapay.png, wacepay.png, peex.png, notchpay.png, terrapay.png.

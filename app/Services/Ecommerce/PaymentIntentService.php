@@ -134,7 +134,7 @@ class PaymentIntentService
     }
 
     /**
-     * Déclenche la confirmation côté client : notification dans l'app FlashPay du
+     * Déclenche la confirmation côté client : notification dans l'app OfficePay du
      * numéro fourni + lien de paiement web. Sandbox : test_outcome=succeeded|failed.
      */
     public function confirm(PaymentIntent $pi, array $d): array
@@ -161,7 +161,7 @@ class PaymentIntentService
         ];
     }
 
-    /** Paiement par le client connecté (app FlashPay ou page de checkout), PIN déjà vérifié. */
+    /** Paiement par le client connecté (app OfficePay ou page de checkout), PIN déjà vérifié. */
     public function payByUser(User $payer, PaymentIntent $pi): PaymentIntent
     {
         return DB::transaction(function () use ($payer, $pi) {

@@ -155,7 +155,7 @@ class FincraTest extends TestCase
         $tx = app(\App\Services\Peex\PeexFlowService::class)->mobileTransfer($u, '+242061112255', '+242051112255', 2000, ['beneficiary_name' => 'BENEF TEST']);
 
         // Fincra refuse le versement (422) : échec certain ; le remboursement Fincra vers le numéro
-        // débité est refusé lui aussi → montant + frais recrédités sur le wallet FlashPay
+        // débité est refusé lui aussi → montant + frais recrédités sur le wallet OfficePay
         $this->reject = ['/disbursements/payouts'];
         $this->charge[$tx->reference . '-C'] = 'successful';
         Artisan::call('remit:sync');

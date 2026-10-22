@@ -7,7 +7,7 @@ use App\Services\Peex\PeexCorridors;
 /**
  * Moyens de recharge / retrait / paiement proposés selon le pays choisi.
  * Mobile money : opérateurs du pays (config/corridors.php) opérés via PEEX.
- * Agents / GAB : réseau FlashPay et banques partenaires (config/payment_methods.php).
+ * Agents / GAB : réseau OfficePay et banques partenaires (config/payment_methods.php).
  */
 class PaymentMethodsService
 {
@@ -93,7 +93,7 @@ class PaymentMethodsService
         return match ($needs) {
             'collect' => [(bool) ($c['collect'] ?? false), 'Recharge mobile money pas encore ouverte dans ce pays'],
             'payout' => [(bool) ($c['payout'] ?? false), 'Retrait mobile money pas encore ouvert dans ce pays'],
-            'agents' => [in_array($iso, config('payment_methods.agent_countries', []), true), 'Réseau d\'agents FlashPay bientôt disponible dans ce pays'],
+            'agents' => [in_array($iso, config('payment_methods.agent_countries', []), true), 'Réseau d\'agents OfficePay bientôt disponible dans ce pays'],
             'atm' => [in_array($iso, config('payment_methods.atm_countries', []), true), 'Bientôt disponible (banque partenaire en cours)'],
             'card' => [self::cardEnabled($iso), 'Paiement par carte bientôt disponible (passerelle carte en cours)'],
             'bank_debit' => [self::bankDebitEnabled($iso), 'Recharge depuis un compte bancaire bientôt disponible'],

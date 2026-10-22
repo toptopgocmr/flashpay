@@ -142,7 +142,7 @@ class MaishapayTest extends TestCase
         $this->assertSame(['CARD', 'MASTERCARD'], [$card['paymentChannel']['channel'], $card['paymentChannel']['provider']]);
         $this->assertStringContainsString('/api/card-checkout/', $card['paymentChannel']['callbackUrl']);
 
-        // Retour du client sur la page FlashPay : statut relu → wallet crédité
+        // Retour du client sur la page OfficePay : statut relu → wallet crédité
         $req = RemitRequest::where('method', 'checkout')->firstOrFail();
         $this->status[$req->partner_ref] = 'APPROVED';
         $this->get('/api/card-checkout/' . $tx->source_external_ref)->assertOk();

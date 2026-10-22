@@ -51,7 +51,7 @@ class MaishapayConnector implements PaymentRailConnector
     {
         $m = $tx->meta ?? [];
         return $this->start('refund', $tx->reference . '-R', $tx, (string) $tx->source_account, $m['source_country'] ?? null, $m['source_operator'] ?? null,
-            (int) $tx->amount + (int) $tx->fee, (string) $tx->currency, $m['payer_verified_name'] ?? $m['payer_name'] ?? $tx->initiator?->full_name, 'Remboursement FlashPay');
+            (int) $tx->amount + (int) $tx->fee, (string) $tx->currency, $m['payer_verified_name'] ?? $m['payer_name'] ?? $tx->initiator?->full_name, 'Remboursement OfficePay');
     }
 
     protected function start(string $method, string $ref, ?Transaction $tx, string $msisdn, ?string $country, ?string $operator, int $amount, string $currency, ?string $name, ?string $motif = null): array
@@ -71,7 +71,7 @@ class MaishapayConnector implements PaymentRailConnector
                 throw new RemitException('MaishaPay : opérateur mobile money non reconnu pour ' . $route['phone'] . '.', 'PROVIDER', null, [], true);
             }
             $p = ['phone' => $route['phone'], 'provider' => $provider, 'amount' => $amount, 'currency' => $currency, 'name' => $name,
-                'email' => $tx?->initiator?->email, 'motif' => $motif ?: 'FlashPay ' . ($tx?->reference ?? $ref)];
+                'email' => $tx?->initiator?->email, 'motif' => $motif ?: 'OfficePay ' . ($tx?->reference ?? $ref)];
             $r = $method === 'deposit' ? $this->client->collectMobile($ref, $p) : $this->client->payoutMobile($ref, $p);
 
             $req->update(['partner_ref' => $r['id'] ?: $ref, 'status' => $r['status'] === 'successful' ? 'successful' : 'pending',

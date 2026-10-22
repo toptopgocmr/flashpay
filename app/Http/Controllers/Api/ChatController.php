@@ -16,10 +16,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 
 /**
- * Messagerie entre utilisateurs FlashPay (style WhatsApp) : texte, photos /
+ * Messagerie entre utilisateurs OfficePay (style WhatsApp) : texte, photos /
  * captures d'écran, vidéos courtes, notes vocales ; modification et transfert
  * de messages ; photos de profil. Les appels audio sont dans ChatCallController.
- * (Le support FlashPay reste dans /support/tickets.)
+ * (Le support OfficePay reste dans /support/tickets.)
  */
 class ChatController extends Controller
 {
@@ -72,7 +72,7 @@ class ChatController extends Controller
         ]);
     }
 
-    /** Ouvre (ou retrouve) une discussion avec un numéro inscrit sur FlashPay. */
+    /** Ouvre (ou retrouve) une discussion avec un numéro inscrit sur OfficePay. */
     public function open(Request $request)
     {
         $v = $request->validate(['phone' => 'required|string|max:25']);
@@ -81,7 +81,7 @@ class ChatController extends Controller
         $other = $this->flows->findUserByPhone($route['phone']);
 
         if (! $other || ($other->status ?? 'active') !== 'active') {
-            return response()->json(['message' => "Ce numéro n'a pas de compte FlashPay. Invitez-le à installer l'application pour discuter."], 404);
+            return response()->json(['message' => "Ce numéro n'a pas de compte OfficePay. Invitez-le à installer l'application pour discuter."], 404);
         }
         if ($other->id === $me->id) {
             return response()->json(['message' => 'Vous ne pouvez pas discuter avec vous-même.'], 422);
@@ -92,7 +92,7 @@ class ChatController extends Controller
         return response()->json(['id' => $c->id, 'user' => $this->person($other)]);
     }
 
-    /** Discussion avec le support FlashPay (créée au besoin) : messages, photos, notes vocales, appels. */
+    /** Discussion avec le support OfficePay (créée au besoin) : messages, photos, notes vocales, appels. */
     public function support(Request $request)
     {
         $me = $request->user();
@@ -473,7 +473,7 @@ class ChatController extends Controller
             'editable' => $mine && in_array($m->type, ['text', 'image', 'video'], true) && ! $m->forwarded
                 && $m->created_at && $m->created_at->gte(now()->subMinutes(ChatMessage::EDIT_MINUTES)),
             'mine' => $mine,
-            // Réponse du support : prénom de l'agent (« Grâce · Support FlashPay »)
+            // Réponse du support : prénom de l'agent (« Grâce · Support OfficePay »)
             'agent' => $m->agent_id ? strtok((string) optional($m->agent)->full_name, ' ') ?: null : null,
             'read' => $m->read_at !== null,
             'at' => $m->created_at?->toIso8601String(),

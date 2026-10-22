@@ -10,18 +10,18 @@ namespace App\Services\Connectors\Contracts;
 interface PaymentRailConnector
 {
     /**
-     * Débite un compte externe (ex: wallet MTN MoMo d'un client) au profit de FlashPay.
+     * Débite un compte externe (ex: wallet MTN MoMo d'un client) au profit de OfficePay.
      *
      * @param string $msisdnOrAccount Numéro / identifiant du compte à débiter
      * @param int $amountMinor Montant en unité mineure (XAF entier ici, pas de centimes)
      * @param string $currency
-     * @param string $reference Référence interne FlashPay (idempotency key)
+     * @param string $reference Référence interne OfficePay (idempotency key)
      * @return array{status:string, external_ref:string, raw:array}
      */
     public function collect(string $msisdnOrAccount, int $amountMinor, string $currency, string $reference): array;
 
     /**
-     * Crédite un compte externe (ex: wallet Airtel Money d'un marchand) depuis FlashPay.
+     * Crédite un compte externe (ex: wallet Airtel Money d'un marchand) depuis OfficePay.
      *
      * @return array{status:string, external_ref:string, raw:array}
      */

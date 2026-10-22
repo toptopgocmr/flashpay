@@ -132,7 +132,7 @@ class MerchantController extends Controller
         });
     }
 
-    /** Contenu du QR marchand (lu par l'app FlashPay). */
+    /** Contenu du QR marchand (lu par l'app OfficePay). */
     public function qr(Request $request)
     {
         $merchant = $request->user()->merchant;

@@ -63,8 +63,8 @@
         <label class="field">Débiter</label>
         <select v-model="resolving.source">
           <option v-if="resolving.x.counterparty" value="counterparty">Le wallet de {{ resolving.x.counterparty.name }} ({{ ROLE[resolving.x.counterparty.role] || resolving.x.counterparty.role }} · solde {{ money(resolving.x.counterparty.balance, resolving.x.counterparty.currency) }})</option>
-          <option value="flashpay">FlashPay (correction exceptionnelle tracée)</option>
-          <option value="auto">Automatique (marchand si paiement marchand, sinon FlashPay)</option>
+          <option value="flashpay">OfficePay (correction exceptionnelle tracée)</option>
+          <option value="auto">Automatique (marchand si paiement marchand, sinon OfficePay)</option>
         </select>
         <div class="hint">Le montant est crédité sur le wallet de {{ resolving.x.user?.full_name }} (auteur de la contestation).</div>
       </div>

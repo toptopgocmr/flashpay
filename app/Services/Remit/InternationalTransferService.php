@@ -12,7 +12,7 @@ use App\Services\SwitchService;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Transfert international depuis le wallet FlashPay (app mobile client).
+ * Transfert international depuis le wallet OfficePay (app mobile client).
  *
  *   P2P  particulier → particulier      B2P  entreprise → particulier (salaires, prestataires)
  *   P2B  particulier → entreprise       B2B  entreprise → entreprise (fournisseurs, factures)
@@ -183,7 +183,7 @@ class InternationalTransferService
     public function sourceFor(User $user, array $in, string $currency): array
     {
         $type = in_array($in['type'] ?? 'wallet', ['wallet', 'mobile', 'card'], true) ? ($in['type'] ?? 'wallet') : 'wallet';
-        $out = ['type' => $type, 'rail' => 'wallet', 'phone' => null, 'country' => null, 'currency' => $currency, 'label' => 'Wallet FlashPay', 'linked_id' => null, 'collect_partner' => null, 'problems' => []];
+        $out = ['type' => $type, 'rail' => 'wallet', 'phone' => null, 'country' => null, 'currency' => $currency, 'label' => 'Wallet OfficePay', 'linked_id' => null, 'collect_partner' => null, 'problems' => []];
         $flow = app(\App\Services\Peex\PeexFlowService::class);
         if ($type === 'mobile') {
             if (! config('flashpay.remit.allow_mobile_source', true)) {
@@ -482,7 +482,7 @@ class InternationalTransferService
             $fx = ['amount' => 0, 'rate' => 0, 'margin_percent' => 0, 'from' => $currency, 'to' => $c['currency'], 'source' => 'indisponible'];
             $problems[] = "Taux de change {$currency} → {$c['currency']} non disponible pour le moment.";
         }
-        // L'expéditeur paie les trois : frais de service FlashPay + versement (partenaire du pays
+        // L'expéditeur paie les trois : frais de service OfficePay + versement (partenaire du pays
         // destinataire) + collecte (partenaire qui débite son compte), calculée sur le total.
         $payoutFee = $this->payoutFee($c['partner'] ?? null, $c['iso'], $fx, $currency, $c['currency']);
         $collectFee = $this->collectFee($source, $amount + $priced['fee'] + $payoutFee);

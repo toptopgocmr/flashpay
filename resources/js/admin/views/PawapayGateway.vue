@@ -90,7 +90,7 @@
         <div v-else-if="!coverage.length" class="gw-empty">Aucun pays ouvert sur ce compte.</div>
         <div v-else class="gw-scroll">
           <table class="gw-table">
-            <thead><tr><th>Pays</th><th>Opérateurs</th><th>Collecte</th><th>Versement</th><th>Solde</th><th>Dans FlashPay</th><th class="r">Actions</th></tr></thead>
+            <thead><tr><th>Pays</th><th>Opérateurs</th><th>Collecte</th><th>Versement</th><th>Solde</th><th>Dans OfficePay</th><th class="r">Actions</th></tr></thead>
             <tbody>
               <tr v-for="c in coverage" :key="c.iso">
                 <td class="nowrap"><Flag :iso="c.iso" :size="16" /> <b>{{ countryName(c.iso) }}</b> <span class="small muted">{{ c.iso }}</span></td>

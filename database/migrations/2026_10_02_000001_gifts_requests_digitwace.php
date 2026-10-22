@@ -29,7 +29,7 @@ return new class extends Migration {
             Schema::create('digitwace_requests', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('transaction_id')->nullable()->constrained()->nullOnDelete();
-                $table->string('reference', 64)->unique();         // référence FlashPay envoyée à WacePay
+                $table->string('reference', 64)->unique();         // référence OfficePay envoyée à WacePay
                 $table->string('wace_id', 100)->nullable()->index(); // identifiant / code transaction WacePay
                 $table->string('operation', 20)->default('payout'); // payout | payin
                 $table->string('status', 20)->default('new');       // new | pending | successful | failed

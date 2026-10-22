@@ -132,11 +132,11 @@ class AdminDashboardController extends Controller
         $src = $t->sourceWallet?->user;
         $dst = $t->destinationWallet?->user;
         $t->sender = [
-            'name' => $src?->full_name ?? $m['sender_name'] ?? $m['payer_name'] ?? ($t->source_rail === 'treasury' ? 'FlashPay (trésorerie)' : null),
+            'name' => $src?->full_name ?? $m['sender_name'] ?? $m['payer_name'] ?? ($t->source_rail === 'treasury' ? 'OfficePay (trésorerie)' : null),
             'account' => \App\Support\Phone::display($t->source_account ?? $src?->phone) ?? ($t->source_rail === 'wallet' ? null : strtoupper((string) $t->source_rail)),
         ];
         $t->beneficiary = [
-            'name' => $m['merchant_name'] ?? $dst?->full_name ?? $m['beneficiary_name'] ?? $m['client_name'] ?? ($t->destination_rail === 'treasury' ? 'FlashPay (trésorerie)' : null),
+            'name' => $m['merchant_name'] ?? $dst?->full_name ?? $m['beneficiary_name'] ?? $m['client_name'] ?? ($t->destination_rail === 'treasury' ? 'OfficePay (trésorerie)' : null),
             'account' => ($t->destination_rail === 'bank' ? $t->destination_account : \App\Support\Phone::display($t->destination_account ?? $dst?->phone)) ?? ($m['bank_name'] ?? null),
         ];
         $t->unsetRelations();
@@ -214,10 +214,10 @@ class AdminDashboardController extends Controller
         }
         $rates = \App\Support\PartnerFees::rates();
         $page->getCollection()->transform(function ($t) use ($rates) {
-            // Frais facturés par FlashPay vs frais PEEX / WacePay → marge
+            // Frais facturés par OfficePay vs frais PEEX / WacePay → marge
             $t->costs = \App\Support\PartnerFees::of($t, $rates);
             $t->channel_label = TransactionChannels::LABELS[$t->channel] ?? $t->channel;
-            // Journal : libellé (Recharge compte FlashPay, Transfert entrant/sortant…), sens crédit/débit, canal
+            // Journal : libellé (Recharge compte OfficePay, Transfert entrant/sortant…), sens crédit/débit, canal
             $t->journal = \App\Support\TransactionPresenter::present($t);
             $t->gateway = \App\Support\TransactionPresenter::gateway($t);
             $t->outcome = \App\Support\TransactionPresenter::outcome($t);

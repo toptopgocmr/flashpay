@@ -28,7 +28,7 @@ class WebhookController extends Controller
         if (! hash_equals($user, (string) $request->getUser()) || ! hash_equals($pass, (string) $request->getPassword())) {
             Log::warning('Callback PEEX refusé : Basic Auth invalide', ['ip' => $request->ip(), 'service' => $service]);
             return response()->json(['message' => 'Unauthorized'], 401)
-                ->header('WWW-Authenticate', 'Basic realm="FlashPay PEEX"');
+                ->header('WWW-Authenticate', 'Basic realm="OfficePay PEEX"');
         }
 
         $payload = $request->json()->all();

@@ -20,7 +20,7 @@ return [
     |--------------------------------------------------------------------------
     | Rails de paiement actifs
     |--------------------------------------------------------------------------
-    | Le FlashPay Switch route chaque transaction vers le bon connecteur
+    | Le OfficePay Switch route chaque transaction vers le bon connecteur
     | en fonction du rail source / rail destination.
     */
     'rails' => [
@@ -38,7 +38,7 @@ return [
             'enabled' => (bool) env('DIGITWACE_ENABLED', false),
         ],
         // Transferts internationaux (remittance) : WacePay API v2 (wallet, banque, retrait cash)
-        // et TerraPay (wallet, banque). Versement uniquement : la source est le wallet FlashPay.
+        // et TerraPay (wallet, banque). Versement uniquement : la source est le wallet OfficePay.
         'wacepay_remit' => [
             'driver' => \App\Services\Remit\WacepayRemitConnector::class,
             'enabled' => (bool) env('WACEPAY_REMIT_ENABLED', false),
@@ -91,7 +91,7 @@ return [
     | Types : P2P (particulier → particulier), P2B (particulier → entreprise),
     | B2P (entreprise → particulier), B2B (entreprise → entreprise).
     | Moyens de réception : wallet mobile, compte bancaire, retrait cash (WacePay).
-    | La source est toujours le wallet FlashPay du client (débité montant + frais).
+    | La source est toujours le wallet OfficePay du client (débité montant + frais).
     */
     'remit' => [
         // Partenaire par pays de destination : « FR=terrapay,CI=wacepay_remit,*=wacepay_remit »
@@ -111,7 +111,7 @@ return [
         'beneficiary_kyc_countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('REMIT_BENEFICIARY_KYC_COUNTRIES', 'IN,PK,BD,PH,NP,LK,CN'))))),
         'min_amount' => (int) env('REMIT_MIN_AMOUNT', 1000),
         'max_amount' => (int) env('REMIT_MAX_AMOUNT', 5000000),
-        // Pays / devise d'envoi (FlashPay)
+        // Pays / devise d'envoi (OfficePay)
         'from_country' => strtoupper((string) env('REMIT_FROM_COUNTRY', 'CG')),
         'from_currency' => strtoupper((string) env('REMIT_FROM_CURRENCY', 'XAF')),
     ],
@@ -135,12 +135,12 @@ return [
 
     /*
     | Bascule automatique du versement mobile money : si le partenaire du pays refuse
-    | (échec certain, rien versé), FlashPay réessaie chez un autre partenaire du même
+    | (échec certain, rien versé), OfficePay réessaie chez un autre partenaire du même
     | environnement (production ↔ production) qui couvre le pays.
     */
     /*
     | Frais partenaires (collecte + versement) ajoutés au total payé par le client, d'après les
-    | tarifs de la console (Tarifs › frais partenaires). false = FlashPay les absorbe.
+    | tarifs de la console (Tarifs › frais partenaires). false = OfficePay les absorbe.
     */
     'fees' => [
         'pass_partner_fees' => (bool) env('FLASHPAY_PASS_PARTNER_FEES', true),
@@ -154,7 +154,7 @@ return [
         'default_mode' => env('FLASHPAY_ROUTING_DEFAULT', 'auto'),
         // Bascule aussi de la COLLECTE quand l'API rejette la demande (rien n'est débité)
         'collect' => (bool) env('FLASHPAY_FAILOVER_COLLECT', true),
-        // Remboursement mobile money impossible → montant + frais recrédités sur le wallet FlashPay du client
+        // Remboursement mobile money impossible → montant + frais recrédités sur le wallet OfficePay du client
         'refund_to_wallet' => (bool) env('FLASHPAY_REFUND_TO_WALLET', true),
         // Remboursement sur le compte débité par le partenaire qui a collecté (WacePay, PawaPay ; PEEX toujours)
         'refund_to_source' => (bool) env('FLASHPAY_REFUND_TO_SOURCE', true),
@@ -241,9 +241,9 @@ return [
         'remit_countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('FINCRA_REMIT_COUNTRIES',
             'CM,GA,TD,CF,GQ,SN,CI,BJ,BF,TG,ML,NE,GW,GH,NG,KE,UG,TZ,ZM,RW,MW,ZA,FR,BE,DE,ES,IT,PT,NL,LU,GB,US,CA,CN'))))),
         // Remittance : devise du solde Fincra débité (vide = même devise que le bénéficiaire, sans conversion).
-        // Ex. USD : FlashPay garde un solde USD chez Fincra, Fincra convertit (devis /quotes/generate valable 30 s).
+        // Ex. USD : OfficePay garde un solde USD chez Fincra, Fincra convertit (devis /quotes/generate valable 30 s).
         'remit_source_currency' => strtoupper((string) env('FINCRA_REMIT_SOURCE_CURRENCY', '')),
-        // Qui supporte les frais Fincra d'une conversion : business (FlashPay) | customer (déduits du montant reçu)
+        // Qui supporte les frais Fincra d'une conversion : business (OfficePay) | customer (déduits du montant reçu)
         'fee_bearer' => env('FINCRA_FEE_BEARER', 'business'),
         // Numéro mobile money envoyé avec « + » (doc v3 : indicatif + numéro, sans « + »)
         'msisdn_plus' => (bool) env('FINCRA_MSISDN_PLUS', false),
@@ -258,7 +258,7 @@ return [
     // Services payés depuis le wallet (crédit, TV, factures) — exécutés par MaishaPay
     'bills' => [
         'enabled' => (bool) env('FLASHPAY_BILLS_ENABLED', true),
-        // Moyen de paiement déclaré à MaishaPay pour un abonnement TV payé par FlashPay (à confirmer avec MaishaPay)
+        // Moyen de paiement déclaré à MaishaPay pour un abonnement TV payé par OfficePay (à confirmer avec MaishaPay)
         'payment_method' => env('MAISHAPAY_SERVICES_PAYMENT_METHOD', 'balance'),
     ],
 
@@ -292,7 +292,7 @@ return [
         // Versement déclaré introuvable par WacePay au-delà de ce délai → échec + remboursement
         'payout_not_found_seconds' => (int) env('DIGITWACE_PAYOUT_NOT_FOUND_SECONDS', 120),
         // Qui paie la commission de collecte WacePay : « payer » = WacePay l'ajoute au débit du client
-        // (constaté en sandbox : feeBearer PAYER) ; « merchant » = déduite de ce que FlashPay reçoit.
+        // (constaté en sandbox : feeBearer PAYER) ; « merchant » = déduite de ce que OfficePay reçoit.
         'collect_fee_bearer' => env('DIGITWACE_COLLECT_FEE_BEARER', 'payer'),
         // Doc : https://docs.digitwace.com — API PayIn : https://payinws.wacepay.com/api/v1
         // API Partenaire : sandbox https://sandbox-payinws.wacepay.io/api/v1/ (tableau de bord sandbox-payin.wacepay.io)
@@ -442,18 +442,18 @@ return [
     |--------------------------------------------------------------------------
     | - dial : indicatif ; local_length : longueur du numéro national
     |   (Congo et Gabon gardent le 0 initial en format international).
-    | - operators : préfixes nationaux -> corridor PEEX + rail FlashPay.
+    | - operators : préfixes nationaux -> corridor PEEX + rail OfficePay.
     | - payout_api : API PEEX utilisée pour créditer un numéro de ce pays :
     |     "disbursement" (disbursement/request_payment, champ country)
     |     "remittance"   (clients/request_payment, transfert international)
-    | - collect / payout : activation côté FlashPay. L'activation effective
+    | - collect / payout : activation côté OfficePay. L'activation effective
     |   dépend aussi de votre compte PEEX (à confirmer avec support@peexit.com :
     |   la doc publique ne mentionne que le Cameroun comme actif).
     */
     // Pays / opérateurs couverts : voir config/corridors.php
     'corridors' => require __DIR__ . '/corridors.php',
 
-    // Devise des wallets FlashPay créés sans pays identifiable
+    // Devise des wallets OfficePay créés sans pays identifiable
     'base_currency' => env('FLASHPAY_BASE_CURRENCY', 'XAF'),
     // Affichage dans la monnaie du pays du client (EUR, USD…) : solde tenu en devise du wallet, montants convertis
     'display_currency' => ['enabled' => (bool) env('FLASHPAY_DISPLAY_CURRENCY', true)],

@@ -93,7 +93,7 @@ class ClientAdminController extends Controller
 
         [$phone, $country, $currency] = $this->normalizePhone($v['phone'], $v['country'] ?? null);
         if (User::whereIn('phone', [$phone, '+' . $phone, $v['phone']])->exists()) {
-            return response()->json(['message' => 'Ce numéro a déjà un compte FlashPay.', 'errors' => ['phone' => ['Numéro déjà utilisé.']]], 422);
+            return response()->json(['message' => 'Ce numéro a déjà un compte OfficePay.', 'errors' => ['phone' => ['Numéro déjà utilisé.']]], 422);
         }
 
         $user = User::create(['full_name' => $v['full_name'], 'phone' => $phone, 'email' => $v['email'] ?? null, 'password' => Hash::make($v['password'])]);

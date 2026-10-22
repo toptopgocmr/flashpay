@@ -102,7 +102,7 @@ class PeexManualRefundTest extends TestCase
         $this->assertSame('BASILE', $info['peex']['first_name']);
         $this->assertSame(1010, $info['peex']['amount']);
 
-        $base = ['amount' => 400, 'reason' => 'Versement échoué', 'sender_first_name' => 'FlashPay', 'sender_last_name' => 'Remboursement',
+        $base = ['amount' => 400, 'reason' => 'Versement échoué', 'sender_first_name' => 'OfficePay', 'sender_last_name' => 'Remboursement',
             'sender_mobile_phone' => '+242060000000', 'first_name' => 'Basile', 'last_name' => 'Ngassaki', 'purpose' => 'REFUND', 'fund_origin' => 'SALARY'];
 
         // Remittance : aml_cft obligatoire

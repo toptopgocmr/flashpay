@@ -14,7 +14,7 @@ use Illuminate\Http\Request;
  * API de paiement interopérable (app mobile, style Wave).
  *
  *   GET  /api/pay/corridors                   pays, zones, opérateurs couverts
- *   POST /api/pay/lookup                      numéro -> pays, opérateur, utilisateur FlashPay ?
+ *   POST /api/pay/lookup                      numéro -> pays, opérateur, utilisateur OfficePay ?
  *   POST /api/pay/quote                       devis (frais, change, montant reçu)
  *   POST /api/pay/transfer                    envoyer (wallet ou mobile -> wallet ou mobile)
  *   POST /api/pay/deposit                     recharger le wallet depuis MTN / Airtel / Orange…
@@ -226,7 +226,7 @@ class PaymentController extends Controller
             'destination_phone' => 'required_if:operation,transfer|nullable|string|max:25',
             'destination_country' => 'nullable|string|size:2',
             'merchant_code' => 'required_if:operation,merchant|nullable|string',
-            'deliver_to' => 'nullable|in:auto,wallet,mobile', // wallet = compte FlashPay uniquement ; mobile = compte mobile money
+            'deliver_to' => 'nullable|in:auto,wallet,mobile', // wallet = compte OfficePay uniquement ; mobile = compte mobile money
             'beneficiary_name' => 'nullable|string|max:100',
             'purpose' => 'nullable|string|max:50',
             'note' => 'nullable|string|max:140',
@@ -314,7 +314,7 @@ class PaymentController extends Controller
                 $pending && $tx->stage === 'awaiting_card' && $tx->source_rail === 'crypto' => 'Finalisez le paiement en crypto-monnaie sur la page sécurisée MaishaPay qui s\'est ouverte.',
                 $pending && $tx->stage === 'awaiting_card' => 'Finalisez le paiement par carte sur la page sécurisée qui s\'est ouverte.',
                 $tx->status === 'successful' => 'Opération réussie.',
-                $pending && $tx->stage === 'awaiting_pickup' => 'Présentez votre code de retrait ' . ($tx->destination_rail === 'atm' ? 'au GAB partenaire.' : 'à un agent FlashPay.'),
+                $pending && $tx->stage === 'awaiting_pickup' => 'Présentez votre code de retrait ' . ($tx->destination_rail === 'atm' ? 'au GAB partenaire.' : 'à un agent OfficePay.'),
                 // Fincra : instructions de l'opérateur (ex. composer un code USSD pour valider)
                 $pending && $tx->stage === 'awaiting_source' && ! empty($meta['payer_instructions']) => (string) $meta['payer_instructions'],
                 $pending && $tx->stage === 'awaiting_source' => 'Validez le paiement sur le téléphone ' . $tx->source_account . ' (code secret mobile money).',
@@ -322,11 +322,11 @@ class PaymentController extends Controller
                 $pending && ! empty($meta['payout_attempts']) => 'Paiement reçu. Le premier service de versement n\'a pas répondu : versement relancé automatiquement par un autre partenaire.',
                 $pending => 'Paiement reçu, versement en cours chez l\'opérateur du bénéficiaire.',
                 $tx->status === 'reversed' && str_starts_with((string) ($meta['refunded_to'] ?? ''), 'wallet:') && $tx->source_rail !== 'wallet' =>
-                    'Débit effectué, mais le crédit du bénéficiaire a échoué : montant et frais remboursés sur votre wallet FlashPay.',
+                    'Débit effectué, mais le crédit du bénéficiaire a échoué : montant et frais remboursés sur votre wallet OfficePay.',
                 $tx->status === 'reversed' && $tx->source_rail !== 'wallet' => 'Débit effectué, mais le crédit du bénéficiaire a échoué : vous avez été remboursé sur le ' . $tx->source_account . '.',
                 $tx->status === 'reversed' => 'Débit effectué, mais le crédit du bénéficiaire a échoué : votre wallet a été remboursé.',
                 $tx->status === 'failed' && ! empty($meta['outcome']['debit']) && ($meta['outcome']['refund']['to'] ?? null) === 'manual' =>
-                    'Débit effectué, mais le crédit du bénéficiaire a échoué. Le support FlashPay vous rembourse, aucune action n\'est nécessaire.',
+                    'Débit effectué, mais le crédit du bénéficiaire a échoué. Le support OfficePay vous rembourse, aucune action n\'est nécessaire.',
                 ! empty($meta['validation_timeout']) && $tx->status === 'failed' => 'Délai dépassé : le paiement n\'a pas été validé sur le téléphone. Aucun montant n\'a été débité. Vous pouvez recommencer.',
                 default => $tx->failure_reason ?: 'Opération échouée.',
             },

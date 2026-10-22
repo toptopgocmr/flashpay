@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
- * Compte technique « Support FlashPay » : côté client, le support est un
+ * Compte technique « Support OfficePay » : côté client, le support est un
  * contact du chat comme un autre (messages, photos, notes vocales, appels).
  * Les agents de la console agissent « au nom » de ce compte ; chaque message
  * envoyé et chaque appel décroché garde l'identité de l'agent (agent_id).
@@ -17,7 +17,7 @@ use Illuminate\Support\Str;
 class SupportChat
 {
     public const PHONE = 'support';
-    public const NAME = 'Support FlashPay';
+    public const NAME = 'Support OfficePay';
 
     protected static ?User $user = null;
 

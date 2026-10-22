@@ -11,11 +11,11 @@ use App\Services\Peex\PeexGuard;
 
 /**
  * Devis d'une opération interopérable : route (pays / opérateurs), zone,
- * frais FlashPay, change, montant reçu, disponibilité du corridor.
+ * frais OfficePay, change, montant reçu, disponibilité du corridor.
  *
  * Opérations :
- *   transfer          wallet|mobile  ->  wallet (utilisateur FlashPay) | mobile (tout opérateur couvert)
- *   merchant_payment  wallet|mobile  ->  wallet d'un marchand FlashPay (QR ou USSD)
+ *   transfer          wallet|mobile  ->  wallet (utilisateur OfficePay) | mobile (tout opérateur couvert)
+ *   merchant_payment  wallet|mobile  ->  wallet d'un marchand OfficePay (QR ou USSD)
  *   cash_in           mobile         ->  wallet (recharge)
  *   withdrawal        wallet         ->  mobile (retrait vers son numéro mobile money)
  *
@@ -91,7 +91,7 @@ class QuoteService
             : 0;
 
         // Frais des partenaires (collecte + versement) ajoutés au total payé par le client,
-        // calculés et affichés AVANT l'opération : FlashPay ne paie jamais ces frais à perte.
+        // calculés et affichés AVANT l'opération : OfficePay ne paie jamais ces frais à perte.
         $flashpayFee = $fee;
         $partner = $this->partnerFees($src, $dst, $amount, $fee, $fx);
         $fee += $partner['collect'] + $partner['payout'];
@@ -119,7 +119,7 @@ class QuoteService
             'currency' => $src['currency'],
             'fee' => $fee,
             'total' => $amount + $fee,
-            // Détail des frais : FlashPay + partenaires (collecte, versement)
+            // Détail des frais : OfficePay + partenaires (collecte, versement)
             'fee_flashpay' => $flashpayFee,
             'partner_fees' => $partner,
             'fx' => $fx,
@@ -258,7 +258,7 @@ class QuoteService
             }
         }
         // Remboursement automatique d'une collecte PEEX = versement PEEX vers le payeur.
-        // (Collecte WacePay : remboursement sur le wallet FlashPay du client.)
+        // (Collecte WacePay : remboursement sur le wallet OfficePay du client.)
         if ($src['type'] === 'mobile' && $dst['type'] === 'mobile' && $collectBy === 'peex' && ! $src['payout']) {
             $problems[] = "Remboursement automatique impossible vers {$src['country_name']} en cas d'échec : opération non disponible.";
         }
@@ -295,7 +295,7 @@ class QuoteService
         };
         if ($collectKey) {
             // WacePay (payeur) : commission = % du montant demandé, ajoutée par WacePay au débit ;
-            // autres partenaires : déduite de ce que FlashPay reçoit → calcul « brut » (gross-up).
+            // autres partenaires : déduite de ce que OfficePay reçoit → calcul « brut » (gross-up).
             $payerBorne = $collectKey === 'digitwace_collect' && config('flashpay.digitwace.collect_fee_bearer', 'payer') === 'payer';
             $out['collect'] = \App\Support\PartnerFees::quoteFee($collectKey, $amount + $flashpayFee + $out['payout'], $src['country'] ?? null, $rates, gross: ! $payerBorne);
             $p = explode('_', $collectKey)[0];
@@ -344,7 +344,7 @@ class QuoteService
                 'zone' => $c['zone'],
                 'currency' => $wallet->currency ?: $c['currency'],
                 'balance' => $side === 'source' ? (int) $wallet->balance : null,
-                'operator' => 'FlashPay',
+                'operator' => 'OfficePay',
                 'rail' => 'wallet',
             ];
         }

@@ -14,7 +14,7 @@
     <header class="topnav" @click.stop>
       <router-link to="/" class="brand">
         <span class="brand-chip"><img src="/images/flashpay-logo.svg" alt="" class="brand-logo" /></span>
-        FlashPay <small>Console</small>
+        OfficePay <small>Console</small>
       </router-link>
 
       <button class="nav-btn" :class="{ open: servicesOpen }" @click="toggle('services')">
@@ -107,7 +107,7 @@
           </div>
         </div>
       </nav>
-      <div class="foot">FlashPay Group · Brazzaville<br /><span style="font-size:11px;">Console v2 · {{ envs.map((e) => e.name + ' ' + (e.sandbox ? 'sandbox' : 'production')).join(' · ') }}</span></div>
+      <div class="foot">OfficePay Group · Brazzaville<br /><span style="font-size:11px;">Console v2 · {{ envs.map((e) => e.name + ' ' + (e.sandbox ? 'sandbox' : 'production')).join(' · ') }}</span></div>
     </aside>
 
     <div v-if="!collapsed && narrow" class="side-backdrop" @click.stop="collapsed = true"></div>
@@ -147,7 +147,7 @@
     <!-- ============ Contenu ============ -->
     <main class="main">
       <div class="breadcrumbs">
-        <router-link to="/">FlashPay</router-link>
+        <router-link to="/">OfficePay</router-link>
         <span class="sep">›</span>
         <span>{{ currentLabel }}</span>
       </div>
@@ -289,7 +289,7 @@ function announce(n) {
   // Alerte Windows / système (avec son du système), toujours émise si autorisée
   if ('Notification' in window && Notification.permission === 'granted') {
     try {
-      const sys = new Notification('FlashPay · ' + n.title, { body: n.body || '', tag: 'fp-' + n.id, silent: false, icon: '/images/flashpay-logo.svg' })
+      const sys = new Notification('OfficePay · ' + n.title, { body: n.body || '', tag: 'fp-' + n.id, silent: false, icon: '/images/flashpay-logo.svg' })
       sys.onclick = () => { window.focus(); router.push('/notifications'); sys.close() }
     } catch (_) {}
   }

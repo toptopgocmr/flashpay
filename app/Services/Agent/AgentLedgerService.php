@@ -129,7 +129,7 @@ class AgentLedgerService
             'float_topup' => 'Approvisionnement',
             'p2p' => 'Transfert wallet',
             'withdrawal' => 'Vers compte externe',
-            'adjustment' => 'Ajustement FlashPay',
+            'adjustment' => 'Ajustement OfficePay',
             default => (string) ($tx?->type ?? 'Opération'),
         };
     }

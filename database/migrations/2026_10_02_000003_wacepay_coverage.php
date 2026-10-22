@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Couverture WacePay (synchronisée depuis l'API getPayerCode) et pays ajoutés
- * dynamiquement au catalogue FlashPay (en plus de config/corridors.php).
+ * dynamiquement au catalogue OfficePay (en plus de config/corridors.php).
  */
 return new class extends Migration {
     public function up(): void

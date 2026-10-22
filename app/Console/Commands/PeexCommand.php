@@ -190,7 +190,7 @@ class PeexCommand extends Command
 
     protected function meta(?string $country, string $side): array
     {
-        return array_filter([$side . '_country' => $country ? strtoupper($country) : null, 'test' => true, 'description' => 'Test CLI FlashPay']);
+        return array_filter([$side . '_country' => $country ? strtoupper($country) : null, 'test' => true, 'description' => 'Test CLI OfficePay']);
     }
 
     protected function admin(): User

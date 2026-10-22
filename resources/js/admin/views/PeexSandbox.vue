@@ -36,7 +36,7 @@
       <section class="gw-section" v-if="overview">
         <GwHead icon="shield" title="IP & callbacks" />
         <div class="gw-card">
-          <div class="gw-card-h"><div class="t"><h3>IP du serveur FlashPay</h3><p>À faire autoriser par PEEX</p></div></div>
+          <div class="gw-card-h"><div class="t"><h3>IP du serveur OfficePay</h3><p>À faire autoriser par PEEX</p></div></div>
           <div class="gw-card-b"><GwField :value="overview.server_ip" placeholder="Inconnue" /></div>
         </div>
         <div class="gw-card">

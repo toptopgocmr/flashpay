@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Reçu FlashPay {{ $r['reference'] }}</title>
+<title>Reçu OfficePay {{ $r['reference'] }}</title>
 @include('partials.receipt-style')
 </head>
 <body>

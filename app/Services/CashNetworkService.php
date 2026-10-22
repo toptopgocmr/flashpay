@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Réseau cash & QR FlashPay (sans passerelle externe) :
+ * Réseau cash & QR OfficePay (sans passerelle externe) :
  *
  *  CODE DE PAIEMENT (style Alipay / WeChat Pay)
  *    issuePayCode()   le client affiche un QR / code à 18 chiffres, valable 2 min, usage unique
@@ -118,7 +118,7 @@ class CashNetworkService
             [$pc, $client] = $this->consumePayCode($clientCode, $agentUser);
         } else {
             $client = $this->flows->findUserByPhone($this->corridors->resolve((string) $clientPhone)['phone'])
-                ?? throw new CashNetworkException('Aucun compte FlashPay pour ce numéro.');
+                ?? throw new CashNetworkException('Aucun compte OfficePay pour ce numéro.');
         }
 
         $agentWallet = $agentUser->wallet ?? throw new CashNetworkException('Wallet agent introuvable.');
@@ -238,7 +238,7 @@ class CashNetworkService
                 'expires_at' => now()->addHours(config('payment_methods.voucher_ttl_hours', 72)),
             ]);
 
-            app(\App\Services\Notifications\NotificationService::class)->toUser($user, 'voucher_created', 'Code de retrait généré', 'Montant ' . number_format($amount, 0, ',', ' ') . " {$wallet->currency}. Présentez le code à " . ($channel === 'atm' ? 'un GAB partenaire' : 'un agent FlashPay') . ' avant le ' . $voucher->expires_at->format('d/m H:i') . '.', ['data' => ['voucher_id' => $voucher->id], 'sms' => 'Code de retrait FlashPay genere: ' . number_format($amount, 0, ',', ' ') . " {$wallet->currency}. Ne communiquez le code qu'a l'agent."]);
+            app(\App\Services\Notifications\NotificationService::class)->toUser($user, 'voucher_created', 'Code de retrait généré', 'Montant ' . number_format($amount, 0, ',', ' ') . " {$wallet->currency}. Présentez le code à " . ($channel === 'atm' ? 'un GAB partenaire' : 'un agent OfficePay') . ' avant le ' . $voucher->expires_at->format('d/m H:i') . '.', ['data' => ['voucher_id' => $voucher->id], 'sms' => 'Code de retrait OfficePay genere: ' . number_format($amount, 0, ',', ' ') . " {$wallet->currency}. Ne communiquez le code qu'a l'agent."]);
 
             return ['voucher' => $voucher, 'code' => $code, 'transaction' => $tx->fresh()];
         });

@@ -40,7 +40,7 @@ class PeexRequest extends Model
         return in_array($this->status, [...self::SUCCESS_STATUSES, ...self::FAILED_STATUSES], true);
     }
 
-    /** Statut normalisé FlashPay : successful | pending | failed */
+    /** Statut normalisé OfficePay : successful | pending | failed */
     public static function normalize(?string $peexStatus): string
     {
         $s = strtolower((string) $peexStatus);

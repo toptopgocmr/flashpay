@@ -11,10 +11,10 @@ use App\Support\SupportChat;
 use Illuminate\Http\Request;
 
 /**
- * Console : discussions « Support FlashPay » avec les clients (texte, photos,
+ * Console : discussions « Support OfficePay » avec les clients (texte, photos,
  * notes vocales, appels audio). Chaque requête de l'agent est rejouée au nom
  * du compte support via ChatController / ChatCallController : le client voit
- * « Support FlashPay », la console garde le nom de l'agent (agent_id).
+ * « Support OfficePay », la console garde le nom de l'agent (agent_id).
  */
 class SupportChatController extends Controller
 {

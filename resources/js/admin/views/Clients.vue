@@ -82,7 +82,7 @@
         </table>
         <div v-if="!loading && !rows.length" class="empty">
           <strong>Aucun client</strong>
-          {{ hasFilter ? 'Aucun client ne correspond à ces filtres.' : 'Les clients s\'inscrivent eux-mêmes depuis l\'application FlashPay.' }}
+          {{ hasFilter ? 'Aucun client ne correspond à ces filtres.' : 'Les clients s\'inscrivent eux-mêmes depuis l\'application OfficePay.' }}
         </div>
       </div>
       <div class="container-foot pager" v-if="meta && meta.last_page > 1">

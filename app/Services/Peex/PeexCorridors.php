@@ -209,7 +209,7 @@ class PeexCorridors
         $iso = strtoupper($iso);
         $c = $this->all()[$iso] ?? null;
         if (! $c) {
-            throw new PeexException("Pays non couvert par FlashPay : {$iso}");
+            throw new PeexException("Pays non couvert par OfficePay : {$iso}");
         }
         return $c + ['iso' => $iso];
     }
@@ -261,7 +261,7 @@ class PeexCorridors
         }
 
         if (! $iso && $international) {
-            throw new PeexException("Indicatif international non couvert par FlashPay : {$phone}");
+            throw new PeexException("Indicatif international non couvert par OfficePay : {$phone}");
         }
 
         // 2. Sinon pays indiqué / pays par défaut

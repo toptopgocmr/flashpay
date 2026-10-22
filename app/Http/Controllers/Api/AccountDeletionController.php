@@ -31,7 +31,7 @@ class AccountDeletionController extends Controller
         }
 
         $balance = (int) ($user->wallet?->balance ?? 0);
-        $body = "Le client demande la suppression de son compte FlashPay.\n"
+        $body = "Le client demande la suppression de son compte OfficePay.\n"
             . 'Solde du wallet au moment de la demande : ' . number_format($balance, 0, ',', ' ') . ' ' . ($user->wallet?->currency ?? 'XAF') . "\n"
             . 'Motif : ' . (trim((string) ($data['reason'] ?? '')) ?: 'non précisé');
 

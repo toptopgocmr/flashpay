@@ -57,9 +57,9 @@ class PeexConnector implements PaymentRailConnector
             'phone' => $route['phone'],
             'amount' => $amountMinor,
             'currency' => $currency ?: $route['currency'],
-            'customer_name' => $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $tx?->initiator?->full_name ?? 'Client FlashPay',
+            'customer_name' => $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $tx?->initiator?->full_name ?? 'Client OfficePay',
             'country' => $route['country'],
-            'description' => $meta['description'] ?? "FlashPay {$reference}",
+            'description' => $meta['description'] ?? "OfficePay {$reference}",
         ];
 
         return $this->send('collect', $payload, $route, $tx, fn () => $this->client->collect($payload));
@@ -72,8 +72,8 @@ class PeexConnector implements PaymentRailConnector
 
         return $this->payout($tx, $reference, 'D', $msisdnOrAccount, $amountMinor, $currency, [
             'country_hint' => $meta['destination_country'] ?? null,
-            'beneficiary' => $meta['beneficiary_verified_name'] ?? $meta['beneficiary_name'] ?? 'Beneficiaire FlashPay',
-            'sender' => $meta['sender_name'] ?? $tx?->initiator?->full_name ?? 'FlashPay Congo',
+            'beneficiary' => $meta['beneficiary_verified_name'] ?? $meta['beneficiary_name'] ?? 'Beneficiaire OfficePay',
+            'sender' => $meta['sender_name'] ?? $tx?->initiator?->full_name ?? 'OfficePay Congo',
             'sender_phone' => $meta['sender_phone'] ?? $tx?->initiator?->phone ?? '242060000000',
             'sender_country' => $meta['source_country'] ?? null,
             'purpose' => $meta['purpose'] ?? null,
@@ -88,12 +88,12 @@ class PeexConnector implements PaymentRailConnector
     public function refund(Transaction $tx): array
     {
         $meta = $tx->meta ?? [];
-        $payer = $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $meta['sender_name'] ?? $tx->initiator?->full_name ?? 'Client FlashPay';
+        $payer = $meta['payer_verified_name'] ?? $meta['payer_name'] ?? $meta['sender_name'] ?? $tx->initiator?->full_name ?? 'Client OfficePay';
 
         return $this->payout($tx, $tx->reference, 'R', (string) $tx->source_account, (int) $tx->amount + (int) $tx->fee, $tx->currency, [
             'country_hint' => $meta['source_country'] ?? null,
             'beneficiary' => $payer,
-            'sender' => 'FlashPay Remboursement',
+            'sender' => 'OfficePay Remboursement',
             'sender_phone' => $tx->source_account,
             'sender_country' => $meta['source_country'] ?? null,
             'purpose' => $meta['purpose'] ?? null,
@@ -110,7 +110,7 @@ class PeexConnector implements PaymentRailConnector
     /** Remboursement manuel (console) par virement bancaire PEEX : track_id …-M1. */
     public function manualBankRefund(Transaction $tx, array $b, int $amount, string $currency): array
     {
-        [$senderFirst, $senderLast] = $this->splitName($b['sender_name'] ?? 'FlashPay Remboursement');
+        [$senderFirst, $senderLast] = $this->splitName($b['sender_name'] ?? 'OfficePay Remboursement');
         $payload = array_filter([
             'track_id' => $this->trackId($tx->reference, 'M'),
             'amount' => $amount,
@@ -274,7 +274,7 @@ class PeexConnector implements PaymentRailConnector
         ];
 
         if (($country['payout_api'] ?? 'disbursement') === 'remittance') {
-            // Le change est calculé par FlashPay (FxService) : on transmet le montant
+            // Le change est calculé par OfficePay (FxService) : on transmet le montant
             // déjà converti dans la devise du bénéficiaire, avec fxrate = 1 comme
             // l'exige la doc PEEX. ⚠ À confirmer avec PEEX pour CDF / GNF.
             $payload = $common + [
@@ -381,7 +381,7 @@ class PeexConnector implements PaymentRailConnector
     {
         $parts = preg_split('/\s+/', trim($full)) ?: [];
         $first = array_shift($parts) ?: 'Client';
-        $last = implode(' ', $parts) ?: 'FlashPay';
+        $last = implode(' ', $parts) ?: 'OfficePay';
         return [$first, $last];
     }
 

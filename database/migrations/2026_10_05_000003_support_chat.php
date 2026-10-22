@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Support par chat (texte, photos, notes vocales, appels) : la discussion
- * client <-> « Support FlashPay » est une conversation de type support ;
+ * client <-> « Support OfficePay » est une conversation de type support ;
  * l'agent de la console qui répond ou décroche est tracé (agent_id).
  */
 return new class extends Migration {

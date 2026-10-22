@@ -262,7 +262,7 @@ class InternationalTransferTest extends TestCase
         // Entreprise : RCCM obligatoire
         $this->postJson('/api/pay/international/send', [
             'amount' => 200000, 'country' => 'CI', 'method' => 'bank', 'business_type' => 'b2b', 'service' => ['code' => 'B', 'name' => 'BANKS DEPOSIT'],
-            'sender' => $this->sender(['business_name' => 'FlashPay Test SARL', 'registered_at' => '2020-01-01']),
+            'sender' => $this->sender(['business_name' => 'OfficePay Test SARL', 'registered_at' => '2020-01-01']),
             'beneficiary' => ['business_name' => 'Fournisseur CI SA', 'registration_number' => 'CI-ABJ-01'],
             'account' => ['account' => 'CI0080 1234 5678', 'bank_id' => 7, 'bank_name' => 'SGBCI'],
         ])->assertStatus(422)->assertJsonFragment(['message' => "Indiquez le numéro RCCM (registre du commerce) de l'entreprise (expéditeur)."]);
@@ -270,7 +270,7 @@ class InternationalTransferTest extends TestCase
 
         $r = $this->postJson('/api/pay/international/send', [
             'amount' => 200000, 'country' => 'CI', 'method' => 'bank', 'business_type' => 'b2b', 'service' => ['code' => 'B', 'name' => 'BANKS DEPOSIT'],
-            'sender' => $this->sender(['business_name' => 'FlashPay Test SARL', 'registration_number' => 'CG-BZV-2020-B-1', 'registered_at' => '2020-01-01']),
+            'sender' => $this->sender(['business_name' => 'OfficePay Test SARL', 'registration_number' => 'CG-BZV-2020-B-1', 'registered_at' => '2020-01-01']),
             'beneficiary' => ['business_name' => 'Fournisseur CI SA', 'business_type' => 'SA', 'registration_number' => 'CI-ABJ-01', 'phone' => '+2250102030405'],
             'account' => ['account' => 'CI0080 1234 5678', 'bank_id' => 7, 'bank_name' => 'SGBCI', 'swift' => 'sgcicia'],
             'why' => ['reason' => 'Advanced Goods Payments', 'origin_fund' => 'Business Income', 'relation' => 'Supplier'],
@@ -281,7 +281,7 @@ class InternationalTransferTest extends TestCase
         $this->assertSame('B', $sender['type']);
         $this->assertSame('RCCM', $sender['idType']);
         $this->assertSame('CG-BZV-2020-B-1', $sender['idNumber']);
-        $this->assertSame('FlashPay Test SARL', $sender['businessName']);
+        $this->assertSame('OfficePay Test SARL', $sender['businessName']);
         // Situation familiale et PPE déclarées par le client (orthographe WacePay « Maried »)
         $this->assertSame('Maried', $sender['civility']);
         $this->assertSame(0, $sender['pep']);
@@ -308,7 +308,7 @@ class InternationalTransferTest extends TestCase
         $this->terraAccount = 'unregistered';
         $payload = [
             'amount' => 65600, 'country' => 'FR', 'method' => 'wallet', 'business_type' => 'b2p',
-            'sender' => $this->sender(['business_name' => 'FlashPay Test SARL', 'registration_number' => 'CG-BZV-1', 'registered_at' => '2020-01-01']),
+            'sender' => $this->sender(['business_name' => 'OfficePay Test SARL', 'registration_number' => 'CG-BZV-1', 'registered_at' => '2020-01-01']),
             'beneficiary' => ['first_name' => 'Jean', 'last_name' => 'Martin'],
             'account' => ['msisdn' => '+33612345678'],
         ];
@@ -333,7 +333,7 @@ class InternationalTransferTest extends TestCase
         $this->assertSame('QT1', $send['internationalTransferInformation']['quoteId']);
         $this->assertSame('FR', $send['internationalTransferInformation']['receivingCountry']);
         $this->assertSame($tx->reference, $send['requestingOrganisationTransactionReference']);
-        $this->assertSame('FlashPay Test SARL', $send['senderKyc']['subjectName']['fullName']);
+        $this->assertSame('OfficePay Test SARL', $send['senderKyc']['subjectName']['fullName']);
         $this->assertSame('businessregistration', $send['senderKyc']['idDocument'][0]['idType']);
         $this->assertSame('Jean Martin', $send['recipientKyc']['subjectName']['fullName']);
         $this->assertSame('+33612345678', $send['creditParty'][0]['value']);

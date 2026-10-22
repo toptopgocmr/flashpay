@@ -72,7 +72,7 @@ class PawapayMomoConnector implements PaymentRailConnector
             $r = $this->client->initiate($kind, $id, [
                 'phone' => $p['phone'], 'provider' => $p['provider'], 'amount' => $amount, 'currency' => $currency,
                 'reference' => $tx?->reference ?? $ref,
-                'message' => $method === 'deposit' ? 'FlashPay ' . substr(preg_replace('/\W/', '', $tx?->reference ?? $ref), -10) : ($method === 'refund' ? 'FlashPay rembours.' : 'FlashPay'),
+                'message' => $method === 'deposit' ? 'OfficePay ' . substr(preg_replace('/\W/', '', $tx?->reference ?? $ref), -10) : ($method === 'refund' ? 'OfficePay rembours.' : 'OfficePay'),
             ]);
             $req->update(['partner_ref' => $id, 'status' => 'pending', 'raw_status' => $r['raw_status'], 'last_response' => $r['raw'], 'last_checked_at' => now()]);
             if ($tx) {

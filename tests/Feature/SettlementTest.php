@@ -45,11 +45,11 @@ class SettlementTest extends TestCase
         $this->postJson('/api/merchant/settlement/accounts', ['type' => 'wallet', 'phone' => '061111111'])->assertStatus(422);
         $this->postJson('/api/merchant/settlement/accounts', ['type' => 'bank', 'bank_name' => 'X'])->assertStatus(422);
 
-        // Wallet FlashPay : instantané
+        // Wallet OfficePay : instantané
         $this->postJson('/api/merchant/settlement/settle', ['account_id' => $wallet['id'], 'amount' => 20000])->assertStatus(201);
         $this->assertSame(20000, $friend->wallet->fresh()->balance);
 
-        // Banque : en attente de l'équipe FlashPay (frais 0,5 %)
+        // Banque : en attente de l'équipe OfficePay (frais 0,5 %)
         $b = $this->postJson('/api/merchant/settlement/settle', ['account_id' => $bank['id'], 'amount' => 50000])->assertStatus(202)->json();
         $this->assertSame(250, $b['fee']);
         $this->assertSame(100000 - 20200 - 50250, Wallet::where('user_id', $m->id)->value('balance'));

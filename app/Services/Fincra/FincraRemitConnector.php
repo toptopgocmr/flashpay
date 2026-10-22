@@ -19,7 +19,7 @@ use App\Services\Remit\WacepayRemitConnector;
  * /quotes/generate (action « receive », valable 30 s) fixe le montant à recevoir et sa référence
  * accompagne le versement.
  *
- * Référence Fincra (customerReference) = référence FlashPay : un renvoi est refusé par Fincra
+ * Référence Fincra (customerReference) = référence OfficePay : un renvoi est refusé par Fincra
  * (DUPLICATE_CUSTOMER_REFERENCE) et le statut reste toujours vérifiable.
  */
 class FincraRemitConnector extends RemitConnector
@@ -90,7 +90,7 @@ class FincraRemitConnector extends RemitConnector
             'destination' => $destination,
             'quote_reference' => $quote['reference'] ?? null,
             'payment_scheme' => $scheme,
-            'description' => mb_substr(trim(($remit['note'] ?? '') ?: ('FlashPay · ' . $w['reason'])), 0, 100),
+            'description' => mb_substr(trim(($remit['note'] ?? '') ?: ('OfficePay · ' . $w['reason'])), 0, 100),
             'beneficiary' => $beneficiary,
         ]);
 
@@ -119,7 +119,7 @@ class FincraRemitConnector extends RemitConnector
         return $code;
     }
 
-    /** customerReference = référence FlashPay : une issue incertaine reste vérifiable. */
+    /** customerReference = référence OfficePay : une issue incertaine reste vérifiable. */
     public function partnerRefFor(string $reference): ?string
     {
         return $reference;

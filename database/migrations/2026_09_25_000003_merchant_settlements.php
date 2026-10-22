@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Règlement des marchands : plusieurs comptes de règlement (mobile money de
- * tout opérateur, compte bancaire, wallet FlashPay, retrait cash agent) et
+ * tout opérateur, compte bancaire, wallet OfficePay, retrait cash agent) et
  * règlement automatique (quotidien / hebdomadaire) vers le compte par défaut.
  */
 return new class extends Migration {
@@ -18,7 +18,7 @@ return new class extends Migration {
             $table->string('type', 20);                 // mobile_money | bank | wallet | cash_pickup
             $table->string('label', 80)->nullable();    // ex. « MTN caisse », « BGFI principal »
             $table->string('country', 2);
-            $table->string('phone', 25)->nullable();    // mobile money / wallet FlashPay
+            $table->string('phone', 25)->nullable();    // mobile money / wallet OfficePay
             $table->string('operator', 60)->nullable(); // MTN Mobile Money, Airtel Money…
             $table->string('bank_name', 120)->nullable();
             $table->string('account_holder', 120)->nullable();

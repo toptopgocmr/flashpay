@@ -54,7 +54,7 @@ class WacepayRemitConnector extends RemitConnector
     public function partnerStatus(RemitRequest $req): array
     {
         $r = $this->client->status($req->partner_ref);
-        // « WAITING CONFIRMATION » : FlashPay confirme lui-même la transaction (une fois)
+        // « WAITING CONFIRMATION » : OfficePay confirme lui-même la transaction (une fois)
         if (strtoupper((string) $r['raw_status']) === 'WAITING CONFIRMATION' && config('flashpay.wacepay_remit.auto_confirm', true)) {
             try {
                 $this->client->confirm($req->partner_ref);

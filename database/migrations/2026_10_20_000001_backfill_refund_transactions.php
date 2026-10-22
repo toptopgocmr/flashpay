@@ -45,8 +45,8 @@ return new class extends Migration
                             'status' => 'successful', 'completed_at' => $at, 'initiated_by' => $tx->initiated_by,
                             'meta' => array_filter([
                                 'channel' => 'auto_refund', 'refund_of' => $tx->reference, 'refund_of_id' => $tx->id, 'backfilled' => true,
-                                'refunded_via' => $toWallet ? 'FlashPay' : ($m['outcome']['refund']['partner'] ?? null),
-                                'sender_name' => 'FlashPay (remboursement)',
+                                'refunded_via' => $toWallet ? 'OfficePay' : ($m['outcome']['refund']['partner'] ?? null),
+                                'sender_name' => 'OfficePay (remboursement)',
                                 'beneficiary_name' => $m['payer_verified_name'] ?? $m['payer_name'] ?? $m['sender_name'] ?? null,
                                 'destination_country' => $m['source_country'] ?? null, 'destination_operator' => $m['source_operator'] ?? null,
                             ], fn ($v) => $v !== null && $v !== ''),

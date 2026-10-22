@@ -102,7 +102,7 @@ class TransactionController extends Controller
     }
 
     /**
-     * Envoi de fonds (compatibilité v1) : wallet -> utilisateur FlashPay ou
+     * Envoi de fonds (compatibilité v1) : wallet -> utilisateur OfficePay ou
      * n'importe quel numéro mobile money couvert (MTN, Airtel, Orange…).
      * Préférer POST /api/pay/transfer (devis, source mobile, pays).
      */

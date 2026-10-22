@@ -33,7 +33,7 @@ class OtpService
             'expires_at' => now()->addMinutes(config('security.otp_ttl_minutes', 5)),
         ]);
 
-        $text = $message ? str_replace('{code}', $code, $message) : "Votre code FlashPay est {$code}. Ne le communiquez à personne. Valable " . config('security.otp_ttl_minutes', 5) . ' min.';
+        $text = $message ? str_replace('{code}', $code, $message) : "Votre code OfficePay est {$code}. Ne le communiquez à personne. Valable " . config('security.otp_ttl_minutes', 5) . ' min.';
         $this->notify->sms($phone, $text);
 
         $out = ['expires_at' => $otp->expires_at];

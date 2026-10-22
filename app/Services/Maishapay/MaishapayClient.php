@@ -106,7 +106,7 @@ class MaishapayClient
             'order' => array_filter([
                 'amount' => self::amount($p['amount']),
                 'currency' => strtoupper($p['currency']),
-                'customerFullName' => mb_substr(trim((string) ($p['name'] ?? '')) ?: 'Client FlashPay', 0, 100),
+                'customerFullName' => mb_substr(trim((string) ($p['name'] ?? '')) ?: 'Client OfficePay', 0, 100),
                 'customerEmailAdress' => $p['email'] ?? null,
             ], fn ($v) => $v !== null && $v !== ''),
             'paymentChannel' => [
@@ -132,7 +132,7 @@ class MaishapayClient
                 'amount' => self::amount($p['amount']),
                 'currency' => strtoupper($p['currency']),
                 'customerFirstname' => $p['first_name'] ?: 'Client',
-                'customerLastname' => $p['last_name'] ?: 'FlashPay',
+                'customerLastname' => $p['last_name'] ?: 'OfficePay',
                 'customerAddress' => $p['address'] ?: 'Brazzaville',
                 'customerCity' => $p['city'] ?: 'Brazzaville',
                 'customerPhoneNumber' => '+' . preg_replace('/\D/', '', (string) ($p['phone'] ?? '')),
@@ -164,7 +164,7 @@ class MaishapayClient
                 'amount' => self::amount($p['amount']),
                 'currency' => strtoupper($p['currency']),
                 'customerFirstname' => $p['first_name'] ?: 'Client',
-                'customerLastname' => $p['last_name'] ?: 'FlashPay',
+                'customerLastname' => $p['last_name'] ?: 'OfficePay',
                 'customerPhoneNumber' => '+' . preg_replace('/\D/', '', (string) ($p['phone'] ?? '')),
                 'customerEmailAdress' => $p['email'] ?: config('flashpay.digitwace.default_email', 'clients@flashpay.cg'),
             ],
@@ -188,10 +188,10 @@ class MaishapayClient
     {
         $body = $this->base($reference) + [
             'order' => [
-                'motif' => mb_substr((string) ($p['motif'] ?? 'FlashPay'), 0, 100),
+                'motif' => mb_substr((string) ($p['motif'] ?? 'OfficePay'), 0, 100),
                 'amount' => self::amount($p['amount']),
                 'currency' => strtoupper($p['currency']),
-                'customerFullName' => mb_substr(trim((string) ($p['name'] ?? '')) ?: 'Beneficiaire FlashPay', 0, 100),
+                'customerFullName' => mb_substr(trim((string) ($p['name'] ?? '')) ?: 'Beneficiaire OfficePay', 0, 100),
                 'customerEmailAdress' => '',
             ],
             'paymentChannel' => [

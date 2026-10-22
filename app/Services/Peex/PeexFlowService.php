@@ -12,10 +12,10 @@ use App\Services\SwitchService;
 /**
  * Parcours de paiement interopérables (style Wave), routés via PEEX :
  *
- *   transfer()     wallet | mobile  ->  utilisateur FlashPay | n'importe quel numéro couvert
+ *   transfer()     wallet | mobile  ->  utilisateur OfficePay | n'importe quel numéro couvert
  *   deposit()      mobile           ->  wallet (recharge, gratuit)
  *   withdraw()     wallet           ->  mobile money (retrait, gratuit)
- *   payMerchant()  wallet | mobile  ->  marchand FlashPay (QR dans l'app ou USSD initié par le marchand)
+ *   payMerchant()  wallet | mobile  ->  marchand OfficePay (QR dans l'app ou USSD initié par le marchand)
  *
  * Chaque parcours calcule d'abord un devis (QuoteService) puis exécute la
  * transaction via le Switch. Utilisé par l'API mobile, l'admin et les commandes.
@@ -29,7 +29,7 @@ class PeexFlowService
     ) {
     }
 
-    /** Rail FlashPay : « wallet » (interne) ou « peex » (passerelle externe par défaut). */
+    /** Rail OfficePay : « wallet » (interne) ou « peex » (passerelle externe par défaut). */
     public function railFor(array $route): string
     {
         return ($route['rail'] ?? null) === 'wallet' ? 'wallet' : 'peex';
@@ -60,7 +60,7 @@ class PeexFlowService
             return 'peex';
         }
         if (! config('flashpay.rails.digitwace.enabled', false) || ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled()) {
-            throw new PeexException('Collecte depuis ce pays confiée à WacePay, mais WacePay n\'est pas encore configuré. Contactez le support FlashPay.');
+            throw new PeexException('Collecte depuis ce pays confiée à WacePay, mais WacePay n\'est pas encore configuré. Contactez le support OfficePay.');
         }
         return 'digitwace';
     }
@@ -92,7 +92,7 @@ class PeexFlowService
         }
         if (! config('flashpay.rails.digitwace.enabled', false) || ! app(\App\Services\Digitwace\DigitwaceClient::class)->enabled()) {
             // WacePay choisi mais pas configuré : on refuse plutôt que de router en silence ailleurs
-            throw new PeexException('Versements vers ce pays confiés à WacePay, mais WacePay n\'est pas encore configuré. Contactez le support FlashPay.');
+            throw new PeexException('Versements vers ce pays confiés à WacePay, mais WacePay n\'est pas encore configuré. Contactez le support OfficePay.');
         }
 
         return 'digitwace';
@@ -102,7 +102,7 @@ class PeexFlowService
     protected function fincraRail(string $what): string
     {
         if (! config('flashpay.rails.fincra.enabled', false) || ! app(\App\Services\Fincra\FincraClient::class)->enabled()) {
-            throw new PeexException($what . ', mais Fincra n\'est pas encore configuré. Contactez le support FlashPay.');
+            throw new PeexException($what . ', mais Fincra n\'est pas encore configuré. Contactez le support OfficePay.');
         }
         return 'fincra';
     }
@@ -111,7 +111,7 @@ class PeexFlowService
     protected function maishapayRail(string $what): string
     {
         if (! config('flashpay.rails.maishapay.enabled', false) || ! app(\App\Services\Maishapay\MaishapayClient::class)->enabled()) {
-            throw new PeexException($what . ', mais MaishaPay n\'est pas encore configuré. Contactez le support FlashPay.');
+            throw new PeexException($what . ', mais MaishaPay n\'est pas encore configuré. Contactez le support OfficePay.');
         }
         return 'maishapay';
     }
@@ -120,7 +120,7 @@ class PeexFlowService
     protected function pawapayRail(string $what): string
     {
         if (! config('flashpay.rails.pawapay_momo.enabled', false) || ! app(\App\Services\Remit\PawapayClient::class)->enabled()) {
-            throw new PeexException($what . ', mais PawaPay n\'est pas encore configuré. Contactez le support FlashPay.');
+            throw new PeexException($what . ', mais PawaPay n\'est pas encore configuré. Contactez le support OfficePay.');
         }
         return 'pawapay_momo';
     }
@@ -182,7 +182,7 @@ class PeexFlowService
     /**
      * Règle « comptes liés » : le wallet ne peut être crédité (recharge) que depuis
      * un compte mobile money ou une carte LIÉS au profil du client. Le numéro du
-     * titulaire (celui de son compte FlashPay) est accepté comme compte lié.
+     * titulaire (celui de son compte OfficePay) est accepté comme compte lié.
      * Exemptés : tests de la console (meta « test ») et comptes internes (super admin).
      */
     protected function linkedCheckExempt(User $user, array $opt): bool
@@ -212,7 +212,7 @@ class PeexFlowService
             }
         }
         if ($user->phone && $norm($user->phone) === $wanted) {
-            return null; // numéro du titulaire du compte FlashPay
+            return null; // numéro du titulaire du compte OfficePay
         }
         throw new PeexException('Recharge refusée : le numéro ' . ($phone ?: '?') . ' n\'est pas un compte mobile money lié à votre profil. '
             . 'Ajoutez-le dans Profil › Comptes liés (code PIN demandé), puis réessayez.');
@@ -438,7 +438,7 @@ class PeexFlowService
                 'payer_verified_name' => $src['verified_name'] ?? null,
                 'beneficiary_verified_name' => $dst['verified_name'] ?? null,
                 'fx' => $converted ? $q['fx'] : null,
-                // Frais FlashPay + frais partenaires (collecte, versement) facturés au client
+                // Frais OfficePay + frais partenaires (collecte, versement) facturés au client
                 'fee_breakdown' => isset($q['fee_flashpay']) ? ['flashpay' => $q['fee_flashpay']] + ($q['partner_fees'] ?? []) : null,
             ], fn ($v) => $v !== null && $v !== ''),
         ];
@@ -485,7 +485,7 @@ class PeexFlowService
 
     // ------------------------------------------------------------ Helpers
 
-    /** Destinataire : wallet si le numéro appartient à un utilisateur FlashPay (sauf deliver_to=mobile). */
+    /** Destinataire : wallet si le numéro appartient à un utilisateur OfficePay (sauf deliver_to=mobile). */
     protected function destinationFor(string $phone, array $opt): array
     {
         $route = $this->corridors->resolve($phone, $opt['destination_country'] ?? null);
@@ -496,9 +496,9 @@ class PeexFlowService
             if ($user && ($wallet = $user->wallet) && $user->hasRole('client')) {
                 return ['type' => 'wallet', 'wallet' => $wallet];
             }
-            // Compte choisi = wallet FlashPay : pas de bascule silencieuse vers le mobile money
+            // Compte choisi = wallet OfficePay : pas de bascule silencieuse vers le mobile money
             if ($deliver === 'wallet') {
-                throw new PeexException("Le numéro {$route['phone']} n'a pas de compte FlashPay. Choisissez « Mobile money » comme compte du bénéficiaire.");
+                throw new PeexException("Le numéro {$route['phone']} n'a pas de compte OfficePay. Choisissez « Mobile money » comme compte du bénéficiaire.");
             }
         }
 

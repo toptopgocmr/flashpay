@@ -1,13 +1,13 @@
 /* =====================================================================
-   FlashPay Console — système de design
+   OfficePay Console — système de design
    Charte v2 (alignée sur l'app mobile) : bleu marine #1E3A8A pour la
-   navigation, les soldes et la validation ; rouge FlashPay #E11D2A pour
+   navigation, les soldes et la validation ; rouge OfficePay #E11D2A pour
    l'accent ; pastilles d'icônes rondes alternées rose / bleu pâle.
    ===================================================================== */
 :root {
-  --brand: #1e3a8a;          /* bleu marine FlashPay (app mobile v2) */
+  --brand: #1e3a8a;          /* bleu marine OfficePay (app mobile v2) */
   --brand-2: #172e6e;
-  --accent: #e11d2a;         /* rouge FlashPay */
+  --accent: #e11d2a;         /* rouge OfficePay */
   --accent-2: #c81e28;
   --on-accent: #ffffff;
   --rose: #fce7ea;           /* pastille rose (icône rouge) */

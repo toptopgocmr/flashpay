@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Log;
  *     accepte la valeur hex ou « sha256=<hex> ») ;
  *  2. Jeton partagé optionnel dans l'URL : ?token=DIGITWACE_WEBHOOK_TOKEN ;
  *  3. IP autorisées optionnelles : DIGITWACE_WEBHOOK_IPS.
- * Et surtout : le statut reçu n'est jamais appliqué tel quel — FlashPay
+ * Et surtout : le statut reçu n'est jamais appliqué tel quel — OfficePay
  * réinterroge l'API WacePay avant de valider ou de rembourser.
  */
 class DigitwaceWebhookController extends Controller

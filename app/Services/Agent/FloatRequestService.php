@@ -17,7 +17,7 @@ use Illuminate\Support\Str;
 
 /**
  * Demandes d'approvisionnement du float (§3.1.2, §3.4.3).
- *   cash_deposit / bank_transfer : validées par le back-office FlashPay (trésorerie → float)
+ *   cash_deposit / bank_transfer : validées par le back-office OfficePay (trésorerie → float)
  *   super_agent                  : validées par le super-agent (son float → float de l'agent)
  */
 class FloatRequestService

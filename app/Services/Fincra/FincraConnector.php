@@ -51,11 +51,11 @@ class FincraConnector implements PaymentRailConnector
     {
         $m = $tx->meta ?? [];
         return $this->start('refund', $tx->reference . '-R', $tx, (string) $tx->source_account, $m['source_country'] ?? null, $m['source_operator'] ?? null,
-            (int) $tx->amount + (int) $tx->fee, (string) $tx->currency, $m['payer_verified_name'] ?? $m['payer_name'] ?? $tx->initiator?->full_name, 'Remboursement FlashPay');
+            (int) $tx->amount + (int) $tx->fee, (string) $tx->currency, $m['payer_verified_name'] ?? $m['payer_name'] ?? $tx->initiator?->full_name, 'Remboursement OfficePay');
     }
 
     /** Prénom / nom (Fincra exige firstName + lastName pour un particulier). */
-    public static function splitName(?string $name, string $fallback = 'Beneficiaire FlashPay'): array
+    public static function splitName(?string $name, string $fallback = 'Beneficiaire OfficePay'): array
     {
         $parts = preg_split('/\s+/', trim((string) $name) ?: $fallback);
         $first = array_shift($parts);
@@ -91,7 +91,7 @@ class FincraConnector implements PaymentRailConnector
                 [$first, $last] = self::splitName($name);
                 $r = $this->client->payout($ref, [
                     'amount' => $amount, 'source_currency' => $currency, 'destination_currency' => $currency, 'destination' => 'mobile_money_wallet',
-                    'description' => $motif ?: 'FlashPay ' . ($tx?->reference ?? $ref),
+                    'description' => $motif ?: 'OfficePay ' . ($tx?->reference ?? $ref),
                     'beneficiary' => ['firstName' => $first, 'lastName' => $last, 'accountHolderName' => trim($first . ' ' . $last), 'type' => 'individual',
                         'country' => $iso, 'accountNumber' => $this->client->msisdn($route['phone']), 'mobileMoneyCode' => $code],
                 ]);

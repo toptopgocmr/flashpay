@@ -51,7 +51,7 @@ class NotificationService
             }
             if ($sms) {
                 $text = is_string($sms) ? $sms : trim($title . '. ' . $body);
-                if ($this->sms->send($user->phone, 'FlashPay: ' . $text)) {
+                if ($this->sms->send($user->phone, 'OfficePay: ' . $text)) {
                     $n->forceFill(['sms_sent_at' => now()])->saveQuietly();
                 }
             }
@@ -80,7 +80,7 @@ class NotificationService
 
         // Relais SMS des événements critiques (fraude, incident technique)
         if (($opt['severity'] ?? null) === 'critical' && ($phone = config('notifications.admin_critical_sms'))) {
-            $this->afterCommit(fn () => $this->sms->send($phone, "FlashPay ALERTE: {$title}"));
+            $this->afterCommit(fn () => $this->sms->send($phone, "OfficePay ALERTE: {$title}"));
         }
 
         return $n;

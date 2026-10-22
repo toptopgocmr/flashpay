@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
  *  - vers un numéro mobile money (disbursement / remittance selon le corridor) ;
  *  - vers un compte bancaire (Remittance › clients/request_bank_payment).
  *
- * L'argent part du compte PEEX de FlashPay : aucun wallet n'est débité ici.
+ * L'argent part du compte PEEX de OfficePay : aucun wallet n'est débité ici.
  * Chaque demande est une ligne peex_requests (track_id …-M1, -M2…) suivie par
  * peex:sync / callbacks ; elle ne modifie pas la transaction d'origine.
  */
@@ -67,7 +67,7 @@ class ManualRefundService
             } elseif ($d['channel'] === 'mobile') {
                 $res = $this->connector->manualMobileRefund($tx, $d['phone'], $amount, $currency, [
                     'beneficiary' => $d['beneficiary_name'],
-                    'sender' => 'FlashPay Remboursement',
+                    'sender' => 'OfficePay Remboursement',
                     'sender_phone' => $d['phone'],
                     'country_hint' => $d['country'] ?? null,
                     'purpose' => $d['purpose'] ?? 'Remboursement',

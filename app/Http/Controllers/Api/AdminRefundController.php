@@ -46,7 +46,7 @@ class AdminRefundController extends Controller
 
     /**
      * Remboursement de l'expéditeur par le partenaire qui a collecté (PEEX, WacePay, PawaPay),
-     * sur le compte débité ; wallet FlashPay pour une source wallet / carte, ou en repli.
+     * sur le compte débité ; wallet OfficePay pour une source wallet / carte, ou en repli.
      * Uniquement si le payeur a été débité et que le bénéficiaire n'a pas été crédité.
      */
     public function refundSource(Request $request, Transaction $transaction, \App\Services\SwitchService $switch)
@@ -165,8 +165,8 @@ class AdminRefundController extends Controller
         $name = trim((string) ($meta['payer_verified_name'] ?? $p['sender_name'] ?? ''));
         $parts = preg_split('/\s+/', $name) ?: [];
         $first = array_shift($parts) ?: '';
-        $sender = (string) config('flashpay.peex.sender_name', 'FlashPay Remboursement');
-        $sp = preg_split('/\s+/', trim($sender)) ?: ['FlashPay'];
+        $sender = (string) config('flashpay.peex.sender_name', 'OfficePay Remboursement');
+        $sp = preg_split('/\s+/', trim($sender)) ?: ['OfficePay'];
         $payoutApi = null;
         try {
             $payoutApi = app(\App\Services\Peex\PeexCorridors::class)->country($country)['payout_api'] ?? null;
@@ -177,7 +177,7 @@ class AdminRefundController extends Controller
             'api' => $payoutApi === 'remittance' ? 'remittance' : 'disbursement',
             'amount' => ManualRefundService::refundableOf($tx),
             'currency' => $tx->currency ?: 'XAF', 'from_currency' => $tx->currency ?: 'XAF', 'to_currency' => $tx->currency ?: 'XAF', 'fxrate' => 1,
-            'sender_first_name' => array_shift($sp) ?: 'FlashPay', 'sender_last_name' => implode(' ', $sp) ?: 'Remboursement',
+            'sender_first_name' => array_shift($sp) ?: 'OfficePay', 'sender_last_name' => implode(' ', $sp) ?: 'Remboursement',
             'sender_mobile_phone' => (string) config('flashpay.peex.sender_phone', ''),
             'sender_country' => (string) config('flashpay.peex.sender_country', 'CG'), 'sender_email' => (string) config('mail.from.address', ''), 'sender_city' => 'Brazzaville',
             'first_name' => $first, 'last_name' => implode(' ', $parts),

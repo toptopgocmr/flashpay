@@ -10,7 +10,7 @@ use App\Models\Wallet;
  * Présentation « journal » d'une transaction, du point de vue d'un utilisateur
  * (ou du client concerné quand c'est la console qui regarde) :
  *
- *   Recharges (cash_in, dépôt)  → « Recharge compte FlashPay », CRÉDIT ↓
+ *   Recharges (cash_in, dépôt)  → « Recharge compte OfficePay », CRÉDIT ↓
  *                                 canal Wallet → Wallet | Mobile → Wallet |
  *                                 Carte bancaire → Wallet | Cash → Wallet
  *   Réceptions d'argent         → « Transfert entrant » / « Paiement entrant », CRÉDIT ↓
@@ -45,7 +45,7 @@ class TransactionPresenter
         }
 
         $label = match (true) {
-            $recharge => 'Recharge compte FlashPay',
+            $recharge => 'Recharge compte OfficePay',
             $credit && in_array($type, self::REFUND_TYPES, true) => 'Remboursement (entrant)',
             $credit && in_array($type, self::PAYMENT_TYPES, true) => 'Paiement entrant',
             $credit => 'Transfert entrant',
@@ -103,7 +103,7 @@ class TransactionPresenter
         [$bn, $bp] = self::beneficiary($tx);
 
         return [
-            'sender_name' => $sn ?: ($sp ? null : 'FlashPay'),
+            'sender_name' => $sn ?: ($sp ? null : 'OfficePay'),
             'sender_phone' => $sp ? self::phone($sp) : null,
             'beneficiary_name' => $bn,
             'beneficiary_phone' => $bp ? self::phone($bp) : null,
@@ -131,9 +131,9 @@ class TransactionPresenter
             ['Type', self::channel($tx)],
             ['Statut', $tx->statusLabel()],
             ['Expéditeur', $who($p['sender_name'], $p['sender_phone'])],
-            ['Compte débité', $tx->source_rail === 'wallet' ? 'Wallet FlashPay' : ($tx->source_rail === 'card' ? ($tx->source_account ?: self::cardLabel($m)) : ($tx->source_rail === 'bank' ? ($tx->source_account ?: 'Compte bancaire') : ($tx->source_rail === 'crypto' ? ($tx->source_account ?: trim('Crypto ' . ($m['crypto_asset'] ?? ''))) : ($tx->source_account ? self::phone($tx->source_account) . ($operator($m['source_operator'] ?? null, $m['source_country'] ?? null) ? ' (' . $operator($m['source_operator'] ?? null, $m['source_country'] ?? null) . ')' : '') : null))))],
+            ['Compte débité', $tx->source_rail === 'wallet' ? 'Wallet OfficePay' : ($tx->source_rail === 'card' ? ($tx->source_account ?: self::cardLabel($m)) : ($tx->source_rail === 'bank' ? ($tx->source_account ?: 'Compte bancaire') : ($tx->source_rail === 'crypto' ? ($tx->source_account ?: trim('Crypto ' . ($m['crypto_asset'] ?? ''))) : ($tx->source_account ? self::phone($tx->source_account) . ($operator($m['source_operator'] ?? null, $m['source_country'] ?? null) ? ' (' . $operator($m['source_operator'] ?? null, $m['source_country'] ?? null) . ')' : '') : null))))],
             ['Bénéficiaire', $who($p['beneficiary_name'], $p['beneficiary_phone'])],
-            ['Compte crédité', $tx->destination_rail === 'wallet' ? 'Wallet FlashPay' : match ($tx->destination_rail) {
+            ['Compte crédité', $tx->destination_rail === 'wallet' ? 'Wallet OfficePay' : match ($tx->destination_rail) {
                 'cash' => 'Retrait en espèces', 'atm' => 'Retrait au GAB', 'bank' => trim('Compte bancaire ' . ($m['bank_name'] ?? '')),
                 default => $tx->destination_account ? self::phone($tx->destination_account) . ($operator($m['destination_operator'] ?? null, $m['destination_country'] ?? null) ? ' (' . $operator($m['destination_operator'] ?? null, $m['destination_country'] ?? null) . ')' : '') : null,
             }],
@@ -188,17 +188,17 @@ class TransactionPresenter
         };
         $place = function ($to) use ($tx, $m) {
             if ($to === 'wallet' || str_starts_with((string) ($m['refunded_to'] ?? ''), 'wallet:')) {
-                return 'votre wallet FlashPay';
+                return 'votre wallet OfficePay';
             }
-            return $to ? self::phone((string) $to) : ($tx->source_rail === 'wallet' ? 'votre wallet FlashPay' : self::phone((string) $tx->source_account));
+            return $to ? self::phone((string) $to) : ($tx->source_rail === 'wallet' ? 'votre wallet OfficePay' : self::phone((string) $tx->source_account));
         };
 
         return match (true) {
             $tx->status === 'reversed' => 'Remboursé : ' . $money($total) . ' (montant + frais) sur ' . $place($r['to'] ?? null) . $when(),
             $tx->stage === 'awaiting_refund' => 'Remboursement en cours : ' . $money($total) . ' vers ' . $place($tx->source_account),
-            $tx->status === 'failed' && ($r['to'] ?? null) === 'manual' => 'Débit effectué : ' . $money($total) . ' remboursés par le support FlashPay (aucune action de votre part)',
+            $tx->status === 'failed' && ($r['to'] ?? null) === 'manual' => 'Débit effectué : ' . $money($total) . ' remboursés par le support OfficePay (aucune action de votre part)',
             $tx->status === 'failed' && empty($m['outcome']['debit']) => 'Aucun montant prélevé : rien à rembourser',
-            $tx->status === 'failed' => 'Remboursement en cours de traitement par le support FlashPay',
+            $tx->status === 'failed' => 'Remboursement en cours de traitement par le support OfficePay',
             default => null,
         };
     }
@@ -218,14 +218,14 @@ class TransactionPresenter
         $c = (array) $o['credit'];
         $r = (array) ($o['refund'] ?? []);
         $n = fn ($v) => number_format((int) $v, 0, ',', ' ');
-        $from = ($d['account'] ?? null) === 'wallet' ? 'wallet FlashPay' : (string) ($d['account'] ?? $tx->source_account);
+        $from = ($d['account'] ?? null) === 'wallet' ? 'wallet OfficePay' : (string) ($d['account'] ?? $tx->source_account);
         return [
-            'debit' => "Débit effectué : {$n($d['amount'] ?? ($tx->amount + $tx->fee))} {$tx->currency} prélevés sur {$from}" . (! empty($d['partner']) && $d['partner'] !== 'FlashPay' ? " ({$d['partner']})" : ''),
+            'debit' => "Débit effectué : {$n($d['amount'] ?? ($tx->amount + $tx->fee))} {$tx->currency} prélevés sur {$from}" . (! empty($d['partner']) && ! in_array($d['partner'], ['OfficePay', 'FlashPay'], true) ? " ({$d['partner']})" : ''),
             'credit' => 'Crédit en échec vers ' . ($c['account'] ?? $tx->destination_account ?? 'le bénéficiaire') . (! empty($c['partner']) ? " ({$c['partner']})" : '') . ' : ' . ($c['error'] ?? 'erreur du partenaire'),
             'refund' => match (true) {
                 ! $r => $tx->stage === 'awaiting_refund' ? 'Remboursement en cours sur ' . $tx->source_account : null,
                 ($r['to'] ?? null) === 'manual' => 'Remboursement automatique impossible : remboursement manuel par le support',
-                ($r['to'] ?? null) === 'wallet' => 'Remboursé (montant + frais) sur le wallet FlashPay' . (! empty($r['why']) ? ' — ' . $r['why'] : ''),
+                ($r['to'] ?? null) === 'wallet' => 'Remboursé (montant + frais) sur le wallet OfficePay' . (! empty($r['why']) ? ' — ' . $r['why'] : ''),
                 default => 'Remboursé sur ' . ($r['to'] ?? $tx->source_account),
             },
             'refund_done' => (bool) ($r['done'] ?? false),
@@ -314,7 +314,7 @@ class TransactionPresenter
                     $out['operator'] = $rail === 'atm' ? 'Retrait au GAB' : 'Espèces (agent)';
                     break;
                 default:
-                    $out['operator'] = 'Wallet FlashPay';
+                    $out['operator'] = 'Wallet OfficePay';
             }
             return $out;
         };
@@ -325,7 +325,7 @@ class TransactionPresenter
 
         $in = $leg($tx->source_rail, $tx->source_account, $meta['source_country'] ?? null, true);
         $out = $leg($tx->destination_rail, $tx->destination_account, $meta['destination_country'] ?? null);
-        // Agent (dépôt / retrait d'espèces) et marchand : nommés à la place de « Wallet FlashPay »
+        // Agent (dépôt / retrait d'espèces) et marchand : nommés à la place de « Wallet OfficePay »
         if (in_array($tx->type, ['cash_in', 'float_topup'], true) && ! empty($meta['agent_name']) && $in['rail'] === 'wallet') {
             $in['operator'] = 'Agent · ' . $meta['agent_name'];
             $in['kind'] = 'agent';
@@ -339,7 +339,7 @@ class TransactionPresenter
             $out['kind'] = 'merchant';
         }
         if ($tx->source_rail === 'treasury') {
-            $in['operator'] = 'Trésorerie FlashPay';
+            $in['operator'] = 'Trésorerie OfficePay';
         }
         // Crédit téléphonique / TV / facture : fournisseur du service
         if (in_array($tx->type, self::SERVICE_TYPES, true)) {
@@ -421,7 +421,7 @@ class TransactionPresenter
             default => ucfirst((string) $tx->source_rail),
         };
         if ($tx->source_rail === 'treasury') {
-            $src = 'FlashPay';
+            $src = 'OfficePay';
         }
         $dst = match ($tx->destination_rail) {
             'wallet' => 'Wallet',
@@ -450,7 +450,7 @@ class TransactionPresenter
             ! empty($m['sender_name']) => $m['sender_name'],
             ! empty($m['payer_name']) => $m['payer_name'],
             (bool) $ownerSrc => $ownerSrc->full_name,
-            in_array($tx->type, self::REFUND_TYPES, true) => 'FlashPay',
+            in_array($tx->type, self::REFUND_TYPES, true) => 'OfficePay',
             default => $tx->initiator?->full_name,
         };
         $phone = $m['sender_phone'] ?? $tx->source_account ?? $ownerSrc?->phone;

@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Réseau cash FlashPay :
+ * Réseau cash OfficePay :
  *  - withdrawal_vouchers : bons de retrait (cash pickup chez un agent, GAB partenaire)
  *  - pay_codes           : codes de paiement client à usage unique (style Alipay / WeChat Pay),
  *                          scannés par un marchand (paiement) ou un agent (dépôt cash)

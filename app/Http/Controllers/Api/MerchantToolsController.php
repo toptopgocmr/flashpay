@@ -50,7 +50,7 @@ class MerchantToolsController extends Controller
             $n = app(\App\Services\Notifications\NotificationService::class);
             $text = $r->merchant->business_name . ' vous demande ' . number_format($r->amount, 0, ',', ' ') . " {$r->currency}";
             $u ? $n->toUser($u, 'payment_request', $text, $r->description, ['data' => ['payment_request' => $r->token]])
-               : $n->sms($v['customer_phone'], "FlashPay: {$text}. Payer: " . url("/p/{$r->token}"));
+               : $n->sms($v['customer_phone'], "OfficePay: {$text}. Payer: " . url("/p/{$r->token}"));
         }
         return response()->json($this->requests->present($r->fresh(['merchant', 'outlet']), true), 201);
     }

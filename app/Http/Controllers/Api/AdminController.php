@@ -158,7 +158,7 @@ class AdminController extends Controller
 
     /**
      * Crée (ou active) un compte marchand. Si le numéro a déjà un compte
-     * FlashPay (client…), le profil marchand y est ajouté sans changer le mot de passe.
+     * OfficePay (client…), le profil marchand y est ajouté sans changer le mot de passe.
      */
     public function createMerchant(Request $request)
     {
@@ -281,7 +281,7 @@ class AdminController extends Controller
         return response()->json(['message' => 'Mode de retrait supprimé.']);
     }
 
-    /** Crée (ou active) un agent FlashPay : dépôts d'espèces et retraits cash. */
+    /** Crée (ou active) un agent OfficePay : dépôts d'espèces et retraits cash. */
     public function createAgent(Request $request)
     {
         $v = $request->validate([
@@ -316,7 +316,7 @@ class AdminController extends Controller
 
     /**
      * Approvisionne le float électronique d'un agent (l'agent a versé l'équivalent
-     * en espèces / virement à FlashPay). Écriture : flashpay:float -> wallet agent.
+     * en espèces / virement à OfficePay). Écriture : flashpay:float -> wallet agent.
      */
     public function fundAgent(Request $request, Agent $agent)
     {

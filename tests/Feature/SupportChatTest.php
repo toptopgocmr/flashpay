@@ -32,7 +32,7 @@ class SupportChatTest extends TestCase
 
         // Le client ouvre le chat support et écrit
         $this->actingAs($client, 'sanctum');
-        $conv = $this->postJson('/api/chats/support')->assertOk()->assertJsonPath('user.name', 'Support FlashPay')->json();
+        $conv = $this->postJson('/api/chats/support')->assertOk()->assertJsonPath('user.name', 'Support OfficePay')->json();
         $this->postJson("/api/chats/{$conv['id']}/messages", ['body' => 'Mon retrait est bloqué'])->assertCreated();
         $this->assertTrue(AppNotification::where('audience', 'admin')->where('type', 'support_chat')->exists());
 

@@ -51,7 +51,7 @@
       <section class="gw-section">
         <GwHead icon="shield" title="IP autorisées" />
         <div class="gw-card">
-          <div class="gw-card-h"><div class="t"><h3>IP du serveur FlashPay</h3><p>À déclarer dans WacePay › Developers › IP Whitelist</p></div></div>
+          <div class="gw-card-h"><div class="t"><h3>IP du serveur OfficePay</h3><p>À déclarer dans WacePay › Developers › IP Whitelist</p></div></div>
           <div class="gw-card-b"><GwField :value="o.server_ip" placeholder="Inconnue" /></div>
         </div>
         <div class="gw-card">
@@ -266,9 +266,9 @@ const testBusy = ref('')
 const error = ref('')
 const svcError = ref('')
 const toast = ref(null)
-const tin = reactive({ service_id: '', iso: 'CG', local: '', amount: 100, currency: 'XAF', operator: '', name: 'Test FlashPay' })
-const tout = reactive({ service_id: '', iso: 'CG', local: '', amount: 100, name: 'Test FlashPay' })
-const tck = reactive({ method: 'card', service_id: '', iso: 'CG', local: '', amount: 100, currency: 'XAF', name: 'Test FlashPay', email: '' })
+const tin = reactive({ service_id: '', iso: 'CG', local: '', amount: 100, currency: 'XAF', operator: '', name: 'Test OfficePay' })
+const tout = reactive({ service_id: '', iso: 'CG', local: '', amount: 100, name: 'Test OfficePay' })
+const tck = reactive({ method: 'card', service_id: '', iso: 'CG', local: '', amount: 100, currency: 'XAF', name: 'Test OfficePay', email: '' })
 const checkoutUrl = ref('')
 // Indicatifs : pays des corridors + référentiel WacePay (renvoyés par /admin/wacepay/overview)
 const dialList = computed(() => o.value?.countries || [])

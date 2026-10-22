@@ -9,7 +9,7 @@ class SettlementAccount extends Model
     public const TYPES = [
         'mobile_money' => 'Mobile money',
         'bank' => 'Compte bancaire',
-        'wallet' => 'Wallet FlashPay',
+        'wallet' => 'Wallet OfficePay',
         'cash_pickup' => 'Retrait cash chez un agent',
     ];
 
@@ -33,7 +33,7 @@ class SettlementAccount extends Model
     {
         return match ($this->type) {
             'mobile_money' => trim(($this->operator ?: 'Mobile money') . ' · +' . ltrim((string) $this->phone, '+')),
-            'wallet' => 'FlashPay · +' . ltrim((string) $this->phone, '+'),
+            'wallet' => 'OfficePay · +' . ltrim((string) $this->phone, '+'),
             'bank' => trim(($this->bank_name ?: 'Banque') . ' · ****' . substr(preg_replace('/\s/', '', (string) $this->account_number), -4)),
             'cash_pickup' => 'Espèces chez un agent',
             default => $this->type,
