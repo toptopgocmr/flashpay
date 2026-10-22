@@ -226,13 +226,34 @@ class MaishapayClient
         try {
             $json = $this->send($path, $body);
         } catch (RemitException $e) {
-            if (in_array($e->httpStatus, [404], true) || preg_match('/not\s*found|introuvable|n\'existe/i', $e->getMessage())) {
+            // « Introuvable » seulement si MaishaPay le DIT (réponse JSON). Un 404 au corps vide
+            // (mauvais chemin, service coupé) ne prouve rien : issue incertaine, jamais un échec.
+            if (self::saysNotFound($e->response, $e->httpStatus)) {
                 return ['status' => 'pending', 'raw_status' => 'NOT_FOUND', 'raw' => $e->response, 'failure' => null, 'found' => false];
             }
             throw $e;
         }
         $raw = self::statusOf($json);
-        return ['status' => self::mapStatus($raw), 'raw_status' => $raw, 'raw' => $json, 'failure' => self::failureOf($json, $raw), 'found' => $raw !== null];
+        if ($raw === null && self::saysNotFound($json, 200)) {
+            return ['status' => 'pending', 'raw_status' => 'NOT_FOUND', 'raw' => $json, 'failure' => null, 'found' => false];
+        }
+        // Réponse reçue mais statut illisible : l'opération existe peut-être → reste « en cours » (jamais « introuvable »)
+        return ['status' => self::mapStatus($raw), 'raw_status' => $raw, 'raw' => $json, 'failure' => self::failureOf($json, $raw), 'found' => true];
+    }
+
+    /** MaishaPay répond explicitement que l'opération n'existe pas (message JSON, pas une simple page 404). */
+    public static function saysNotFound(array $json, ?int $http): bool
+    {
+        if ($json === []) {
+            return false;
+        }
+        $m = collect([data_get($json, 'message'), data_get($json, 'error'), data_get($json, 'data.message'), data_get($json, 'description'), data_get($json, 'transactionDescription')])
+            ->filter(fn ($v) => is_string($v))->implode(' ');
+        if ($m === '' || preg_match('/route|endpoint|url|path|method/i', $m)) {
+            return false; // adresse d'API introuvable ≠ opération introuvable
+        }
+        return (bool) preg_match('/not\s*found|introuvable|n\'existe|does\s*not\s*exist|aucune\s+transaction|no\s+transaction/i', $m)
+            || $http === 404;
     }
 
     /** Statut brut dans une réponse MaishaPay (racine ou data). */

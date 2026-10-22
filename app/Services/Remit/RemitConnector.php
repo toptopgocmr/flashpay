@@ -80,7 +80,9 @@ abstract class RemitConnector implements PaymentRailConnector
 
     public function checkStatus(string $externalRef): array
     {
-        $req = RemitRequest::where('partner_ref', $externalRef)->orWhere('reference', $externalRef)->first();
+        // Toujours limité à CE partenaire : une même référence peut exister chez un autre (bascule, collecte)
+        $req = RemitRequest::where('partner', $this->railName())
+            ->where(fn ($q) => $q->where('partner_ref', $externalRef)->orWhere('reference', $externalRef))->first();
         if (! $req || ! $req->partner_ref) {
             return ['status' => 'unknown', 'external_ref' => $externalRef, 'raw' => [], 'checked' => false];
         }

@@ -317,14 +317,19 @@ class FincraClient
         try {
             $json = $this->request('get', $path);
         } catch (RemitException $e) {
-            if ($e->httpStatus === 404 || preg_match('/not\s*found|does not exist|introuvable|no (transaction|payout|charge)/i', $e->getMessage())) {
+            // « Introuvable » seulement si Fincra le DIT (réponse JSON) : un 404 au corps vide
+            // (mauvaise URL, panne) ne prouve rien → issue incertaine, jamais un échec.
+            $m = collect([data_get($e->response, 'message'), data_get($e->response, 'error'), data_get($e->response, 'data.message')])
+                ->filter(fn ($v) => is_string($v))->implode(' ');
+            if ($e->response !== [] && ! preg_match('/route|endpoint|url|path|method/i', $m) && ($e->httpStatus === 404 || preg_match('/not\s*found|does not exist|introuvable|no (transaction|payout|charge)/i', $m))) {
                 return ['status' => 'pending', 'raw_status' => 'NOT_FOUND', 'raw' => $e->response, 'failure' => null, 'found' => false];
             }
             throw $e;
         }
         $raw = self::statusOf($json);
         $status = self::mapStatus($raw);
-        return ['status' => $status, 'raw_status' => $raw, 'raw' => $json, 'found' => $raw !== null,
+        // Réponse reçue mais statut illisible : l'opération existe peut-être → reste « en cours »
+        return ['status' => $status, 'raw_status' => $raw, 'raw' => $json, 'found' => true,
             'failure' => $status === 'failed' ? (self::reasonOf($json) ?: $raw) : null];
     }
 
