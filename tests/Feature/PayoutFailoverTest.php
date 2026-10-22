@@ -23,6 +23,7 @@ class PayoutFailoverTest extends TestCase
 {
     protected array $sent = [];
     protected string $pawaPayout = 'COMPLETED';
+    protected array $peexStatus = []; // track_id → statut renvoyé par all_requests (callbacks relus)
 
     protected function setUp(): void
     {
@@ -38,7 +39,7 @@ class PayoutFailoverTest extends TestCase
             return match (true) {
                 str_ends_with($path, 'collection/request_payment') => Http::response(['id' => 1, 'track_id' => $d['track_id'], 'status' => 'pending']),
                 str_ends_with($path, 'disbursement/request_payment') => Http::response(['error' => ['statusCode' => 422, 'message' => 'Invalid destination country code!']], 422),
-                str_contains($path, 'all_requests') => Http::response([]),
+                str_contains($path, 'all_requests') => Http::response(array_map(fn ($t, $st) => ['track_id' => $t, 'status' => $st], array_keys($this->peexStatus), $this->peexStatus)),
                 str_ends_with($path, '/me') => Http::response(['name' => 'GMC', 'is_activated' => true]),
                 $path === '/v2/predict-provider' => Http::response(['country' => 'COG', 'provider' => 'AIRTEL_COG', 'phoneNumber' => preg_replace('/\D/', '', $d['phoneNumber'])]),
                 $path === '/v2/active-conf' => Http::response(['countries' => [['country' => 'COG', 'providers' => [['provider' => 'AIRTEL_COG', 'displayName' => 'Airtel',
@@ -69,6 +70,7 @@ class PayoutFailoverTest extends TestCase
             'deliver_to' => 'mobile', 'amount' => 1000, 'beneficiary_name' => 'JEAN MOUKALA',
         ])->assertStatus(202)->json();
         $collect = PeexRequest::where('service', 'collect')->firstOrFail();
+        $this->peexStatus[$collect->track_id] = 'paid';
         $this->withHeaders(['Authorization' => 'Basic ' . base64_encode('peex:peex_callback')])
             ->postJson('/api/webhooks/peex/collect', [['track_id' => $collect->track_id, 'status' => 'paid', 'payment_proof' => 'x']])->assertOk();
         return Transaction::findOrFail($tx['id']);

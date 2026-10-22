@@ -26,14 +26,14 @@ class CardCheckoutController extends Controller
             $tx = $driver === 'maishapay' ? $this->cards->syncMaishapay($tx) : $this->cards->syncWacepay($tx);
             return response($this->page($tx, $token, null, true));
         }
-        abort_unless($driver === 'sandbox', 404);
+        abort_unless($driver === 'sandbox' && ! CardPaymentService::sandboxForbidden(), 404);
 
         return response($this->page($tx, $token));
     }
 
     public function submit(Request $request, string $token)
     {
-        abort_unless(($this->cards->pending($token)->meta['card_driver'] ?? null) === 'sandbox', 404);
+        abort_unless(($this->cards->pending($token)->meta['card_driver'] ?? null) === 'sandbox' && ! CardPaymentService::sandboxForbidden(), 404);
 
         if ($request->input('action') === 'cancel') {
             $tx = $this->cards->complete($token, false, null, 'Paiement par carte annulé');

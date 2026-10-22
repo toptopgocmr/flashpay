@@ -198,13 +198,33 @@ class AuthController extends Controller
 
         $user = $query->first();
         $secret = (string) $validated['password'];
+
+        // Sécurité : code à 4 chiffres = 10 000 possibilités. Après 5 erreurs sur un même compte,
+        // il est verrouillé 15 min (quelle que soit l'adresse IP de l'attaquant).
+        $lockKey = 'login-fail:' . ($user?->id ?? sha1($login));
+        if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($lockKey, (int) config('security.login_max_attempts', 5))) {
+            $min = (int) ceil(\Illuminate\Support\Facades\RateLimiter::availableIn($lockKey) / 60);
+            return response()->json(['message' => "Trop d'essais de code secret. Compte verrouillé pendant {$min} min, ou utilisez « Code oublié ».", 'code' => 'login_locked'], 429);
+        }
+
         $okPassword = $user && Hash::check($secret, $user->password);
         // Le code secret à 4 chiffres et le PIN sont le même code à l'inscription : si seul le PIN
         // a été réinitialisé (ancien « Code oublié »), on l'accepte et on resynchronise le mot de passe.
         $okPin = ! $okPassword && $user && $user->pin_hash && preg_match('/^\d{4,6}$/', $secret) && Hash::check($secret, $user->pin_hash)
             && ! ($user->pin_locked_until && $user->pin_locked_until->isFuture());
         if (! $user || (! $okPassword && ! $okPin)) {
+            \Illuminate\Support\Facades\RateLimiter::hit($lockKey, 60 * (int) config('security.login_lock_minutes', 15));
+            if ($user && \Illuminate\Support\Facades\RateLimiter::attempts($lockKey) === (int) config('security.login_max_attempts', 5)) {
+                \App\Support\Audit::log('security.login_locked', $user, ['ip' => $request->ip()], null);
+                app(\App\Services\Notifications\NotificationService::class)->toUser($user, 'login_locked', 'Connexion bloquée', 'Plusieurs codes secrets erronés ont été saisis sur votre compte : la connexion est bloquée pendant ' . config('security.login_lock_minutes', 15) . ' min. Si ce n\'est pas vous, contactez le support.', ['severity' => 'warning']);
+            }
             return response()->json(['message' => 'Numéro ou code secret incorrect.'], 401);
+        }
+        \Illuminate\Support\Facades\RateLimiter::clear($lockKey);
+
+        // Console : le mot de passe par défaut du super admin (public dans le code) est refusé
+        if ($user->hasAnyRole(['super_admin', 'support']) && $okPassword && Hash::check('ChangeMoi123!', $user->password)) {
+            return response()->json(['message' => 'Mot de passe par défaut interdit : changez-le avec « php artisan officepay:admin-password » sur le serveur.', 'code' => 'default_password'], 403);
         }
         if ($okPin) {
             $user->forceFill(['password' => Hash::make($secret)])->save();
@@ -235,8 +255,9 @@ class AuthController extends Controller
 
         // §15 — connexion depuis un appareil inconnu : confirmation par OTP
         $devices = app(\App\Services\Security\DeviceService::class);
-        if (config('security.otp_on_new_device') && ! empty($validated['device_id'])
-            && $devices->hasAnyDevice($user) && ! $devices->isKnown($user, $validated['device_id'])
+        // Sans identifiant d'appareil = appareil inconnu (sinon il suffirait de ne pas l'envoyer)
+        if (config('security.otp_on_new_device')
+            && $devices->hasAnyDevice($user) && (empty($validated['device_id']) || ! $devices->isKnown($user, $validated['device_id']))
             && ! $user->hasAnyRole(['super_admin', 'support'])
             && ! in_array(preg_replace('/\D+/', '', (string) $user->phone), config('security.review_phones', []), true)) {
             $otp = app(\App\Services\Security\OtpService::class);
@@ -293,10 +314,18 @@ class AuthController extends Controller
         if (! empty($v['password']) && ! Hash::check($v['password'], $user->password)) {
             return response()->json(['message' => 'Identifiants invalides.'], 401);
         }
-        $otp->verify($user->phone, 'pin_reset', $v['otp']);
-        if (! empty($v['id_number']) && $user->id_number && strcasecmp(trim($user->id_number), trim((string) ($v['id_number'] ?? ''))) !== 0) {
-            return response()->json(['message' => 'Numéro de pièce d\'identité incorrect.', 'code' => 'id_mismatch'], 422);
+        // Sécurité : tant que les codes SMS sont affichés dans l'app (FLASHPAY_OTP_DEBUG), le code
+        // seul ne prouve rien (n'importe qui l'obtient pour n'importe quel numéro) : le numéro de
+        // la pièce d'identité du titulaire est alors obligatoire. Il l'est aussi dès qu'il est connu.
+        $needId = config('security.otp_debug') || $user->id_number;
+        if ($needId && ! $user->id_number) {
+            return response()->json(['message' => 'Réinitialisation impossible depuis l\'application pour ce compte : contactez le support OfficePay avec votre pièce d\'identité.', 'code' => 'support_required'], 422);
         }
+        if ($needId && (empty($v['id_number']) || strcasecmp(preg_replace('/[\s-]/', '', $user->id_number), preg_replace('/[\s-]/', '', (string) $v['id_number'])) !== 0)) {
+            \App\Support\Audit::log('security.pin_reset_id_mismatch', $user, ['ip' => $request->ip()], null);
+            return response()->json(['message' => 'Indiquez le numéro exact de votre pièce d\'identité.', 'code' => 'id_mismatch'], 422);
+        }
+        $otp->verify($user->phone, 'pin_reset', $v['otp']);
         $pins->set($user, $v['new_pin']);
         // Code secret unique : le nouveau code sert aussi à la connexion (comme à l'inscription).
         $user->forceFill(['password' => Hash::make($v['new_pin'])])->save();

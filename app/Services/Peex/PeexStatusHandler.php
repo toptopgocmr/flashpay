@@ -53,14 +53,27 @@ class PeexStatusHandler
             return $req;
         }
 
+        // Sécurité : le statut d'un callback n'est JAMAIS appliqué tel quel (un faux « success »
+        // créditerait un wallet sans paiement). Il est relu auprès de l'API PEEX (all_requests).
         $req->fill([
-            'status' => $status,
             'peex_id' => $item['id'] ?? $req->peex_id,
-            'payment_proof' => isset($item['payment_proof']) && $item['payment_proof'] !== '' ? (string) $item['payment_proof'] : $req->payment_proof,
-            'message' => isset($item['message']) && $item['message'] !== '' ? (string) $item['message'] : $req->message,
             'last_callback' => $item,
             // Frais prélevés par PEEX sur l'opération (si communiqués)
             'fees' => \App\Support\PartnerFees::findFee($item) ?? $req->fees,
+        ])->save();
+        if (! config('flashpay.peex.trust_callback', false)) {
+            $check = $this->connector->checkStatus($req->track_id);
+            $req->refresh();
+            if (($check['checked'] ?? false) !== true || ! $check['raw']) {
+                Log::warning('Callback PEEX non confirmé par l\'API : statut non appliqué (peex:sync réessaiera)', ['track_id' => $trackId, 'statut_callback' => $status]);
+                return $req;
+            }
+            return $this->finalize($req, confirmed: true);
+        }
+        $req->fill([
+            'status' => $status,
+            'payment_proof' => isset($item['payment_proof']) && $item['payment_proof'] !== '' ? (string) $item['payment_proof'] : $req->payment_proof,
+            'message' => isset($item['message']) && $item['message'] !== '' ? (string) $item['message'] : $req->message,
         ])->save();
 
         return $this->finalize($req);

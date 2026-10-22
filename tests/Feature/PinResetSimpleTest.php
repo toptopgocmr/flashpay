@@ -18,15 +18,15 @@ class PinResetSimpleTest extends TestCase
 
         // Code invalide : refusé
         $this->postJson('/api/auth/otp', ['phone' => '+242067601919', 'purpose' => 'pin_reset'])->assertOk();
-        $this->postJson('/api/auth/pin/reset', ['phone' => '+242067601919', 'otp' => '000000', 'new_pin' => '4821'])->assertStatus(422);
+        $this->postJson('/api/auth/pin/reset', ['phone' => '+242067601919', 'otp' => '000000', 'new_pin' => '4821', 'id_number' => 'CG123'])->assertStatus(422);
 
         // Numéro + code + nouveau PIN : suffit (pas de mot de passe, pas de pièce)
         $this->travel(31)->seconds(); // délai minimal entre deux envois de code
         $otp = $this->postJson('/api/auth/otp', ['phone' => '+242067601919', 'purpose' => 'pin_reset'])->json('debug_code');
-        $this->postJson('/api/auth/pin/reset', ['phone' => '+242067601919', 'otp' => $otp, 'new_pin' => '4821'])->assertOk();
+        $this->postJson('/api/auth/pin/reset', ['phone' => '+242067601919', 'otp' => $otp, 'new_pin' => '4821', 'id_number' => 'CG123'])->assertOk();
         $this->assertTrue(Hash::check('4821', $u->fresh()->pin_hash));
 
         // Le code ne peut pas être réutilisé
-        $this->postJson('/api/auth/pin/reset', ['phone' => '+242067601919', 'otp' => $otp, 'new_pin' => '7777'])->assertStatus(422);
+        $this->postJson('/api/auth/pin/reset', ['phone' => '+242067601919', 'otp' => $otp, 'new_pin' => '7777', 'id_number' => 'CG123'])->assertStatus(422);
     }
 }

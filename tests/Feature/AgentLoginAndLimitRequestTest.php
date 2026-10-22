@@ -49,10 +49,10 @@ class AgentLoginAndLimitRequestTest extends TestCase
 
     public function test_forgotten_code_resets_login_secret_and_pin_fallback(): void
     {
-        $u = User::create(['full_name' => 'Awa', 'phone' => '242067601920', 'password' => 'secret123']);
+        $u = User::create(['full_name' => 'Awa', 'phone' => '242067601920', 'password' => 'secret123', 'id_number' => 'CG777']);
         $u->assignRole('agent');
         $otp = $this->postJson('/api/auth/otp', ['phone' => '+242067601920', 'purpose' => 'pin_reset'])->json('debug_code');
-        $this->postJson('/api/auth/pin/reset', ['phone' => '+242067601920', 'otp' => $otp, 'new_pin' => '4821'])->assertOk();
+        $this->postJson('/api/auth/pin/reset', ['phone' => '+242067601920', 'otp' => $otp, 'new_pin' => '4821', 'id_number' => 'CG777'])->assertOk();
         $this->postJson('/api/auth/login', ['phone' => '+242067601920', 'password' => '4821', 'profile' => 'agent'])->assertOk();
 
         // Ancien parcours : seul le PIN avait changé -> le PIN est accepté et le mot de passe resynchronisé

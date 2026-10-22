@@ -30,11 +30,19 @@ class CardPaymentService
 
     public function driver(?Transaction $tx = null): string
     {
-        return match ($tx?->source_rail) {
+        $d = match ($tx?->source_rail) {
             'bank' => (string) config('payment_methods.bank_debit_driver', 'none'),
             'crypto' => (string) config('payment_methods.crypto_driver', 'none'),
             default => (string) config('payment_methods.card_driver', 'none'),
         };
+        // Sécurité : la page carte SIMULÉE crédite le wallet sans paiement réel.
+        // Interdite en production (sauf FLASHPAY_ALLOW_SANDBOX_CARD=true pour une recette).
+        return $d === 'sandbox' && self::sandboxForbidden() ? 'none' : $d;
+    }
+
+    public static function sandboxForbidden(): bool
+    {
+        return app()->environment('production') && ! filter_var(env('FLASHPAY_ALLOW_SANDBOX_CARD', false), FILTER_VALIDATE_BOOL);
     }
 
     public function startCheckout(Transaction $tx): Transaction

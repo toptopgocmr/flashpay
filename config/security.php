@@ -9,6 +9,9 @@ return [
     // PIN applicatif exigé pour toute opération sortante (si false : exigé seulement une fois défini)
     'pin_mandatory' => (bool) env('FLASHPAY_PIN_MANDATORY', true),
     'pin_max_attempts' => 5,
+    // Connexion : verrouillage du compte après N codes erronés (toutes adresses IP confondues)
+    'login_max_attempts' => (int) env('FLASHPAY_LOGIN_MAX_ATTEMPTS', 5),
+    'login_lock_minutes' => (int) env('FLASHPAY_LOGIN_LOCK_MINUTES', 15),
     'pin_lock_minutes' => 30,
     'otp_ttl_minutes' => 5,
     'otp_max_attempts' => 5,
