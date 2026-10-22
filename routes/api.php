@@ -38,6 +38,7 @@ use Illuminate\Support\Facades\Route;
 
 // --- Public ---
 Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
+Route::post('/auth/register/verify-id', [AuthController::class, 'verifyId'])->middleware('throttle:10,1');
 Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:20,1');
 Route::post('/auth/otp', [AuthController::class, 'requestOtp'])->middleware('throttle:6,1');
 Route::post('/auth/pin/reset', [AuthController::class, 'resetPin'])->middleware('throttle:6,1');

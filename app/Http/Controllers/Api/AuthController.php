@@ -41,7 +41,21 @@ class AuthController extends Controller
             'pin' => 'nullable|string',
             'language' => 'nullable|in:fr,en,es,pt,de,ru,zh,sw,ln,ktu',
             'device_id' => 'nullable|string|max:120',
+            'id_check_token' => 'nullable|string|max:80',
         ])->validate();
+
+        // Client : pièce d'identité contrôlée automatiquement AVANT la création du compte
+        // (POST /auth/register/verify-id) — nom et date de naissance identiques à la pièce
+        $idCheck = null;
+        if ($validated['profile'] === 'client' && config('flashpay.kyc.id_check_on_register', true)) {
+            $idCheck = \Illuminate\Support\Facades\Cache::get('idcheck:' . ($validated['id_check_token'] ?? '-'));
+            $same = $idCheck && $idCheck['phone'] === $validated['phone']
+                && $idCheck['full_name'] === mb_strtoupper(trim($validated['full_name']))
+                && $idCheck['date_of_birth'] === (! empty($validated['date_of_birth']) ? \Carbon\Carbon::parse($validated['date_of_birth'])->toDateString() : null);
+            if (! $same) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['id_check_token' => 'Vérification de la pièce d\'identité requise : photographiez votre pièce (recto et verso) avant de créer le compte.']);
+            }
+        }
 
         // PIN transmis à l'inscription (même code que la connexion) : contrôlé
         // AVANT la création du compte pour ne pas laisser d'utilisateur orphelin.
@@ -68,6 +82,12 @@ class AuthController extends Controller
             'kyc_tier' => 0,
         ]);
         $user->forceFill(['phone_verified_at' => ! empty($validated['otp']) ? now() : null])->save();
+        if ($idCheck) {
+            // Pièce contrôlée : numéro enregistré, jeton à usage unique
+            $user->forceFill(['id_number' => mb_substr((string) $idCheck['document']['number'], 0, 60)])->save();
+            \Illuminate\Support\Facades\Cache::forget('idcheck:' . $validated['id_check_token']);
+            \App\Support\Audit::log('kyc.id_check_on_register', $user, ['document' => array_intersect_key($idCheck['document'], array_flip(['type', 'country', 'nationality', 'expiry']))], $user->id);
+        }
 
         $user->assignRole($validated['profile']);
         if (! empty($validated['pin'])) {
@@ -104,6 +124,52 @@ class AuthController extends Controller
             'user' => $this->userPayload($user),
             'token' => $token,
         ], 201);
+    }
+
+    /**
+     * Contrôle de la pièce d'identité avant l'inscription d'un client : la bande MRZ lue par
+     * l'app (id_text_front / id_text_back) ou par le serveur (photos id_card / id_card_back,
+     * si Tesseract est installé) doit donner le même nom et la même date de naissance que
+     * ceux saisis, avec des codes de contrôle valides et une pièce non expirée.
+     * Succès : jeton (30 min) à joindre à /auth/register. Échec : 422 avec les raisons.
+     */
+    public function verifyId(Request $request, \App\Services\Compliance\IdDocumentCheck $check)
+    {
+        if ($request->filled('phone')) {
+            $request->merge(['phone' => \App\Support\Phone::normalize($request->input('phone'))]);
+        }
+        $v = Validator::make($request->all(), [
+            'phone' => 'required|string|unique:users,phone',
+            'full_name' => 'required|string|max:150',
+            'date_of_birth' => 'required|date|before:today',
+            'id_text_front' => 'nullable|string|max:20000',
+            'id_text_back' => 'nullable|string|max:20000',
+            'id_card' => 'nullable|file|image|max:8192',
+            'id_card_back' => 'nullable|file|image|max:8192',
+        ], ['phone.unique' => 'Ce numéro a déjà un compte : connectez-vous.'])->validate();
+
+        $texts = array_values(array_filter([$v['id_text_front'] ?? null, $v['id_text_back'] ?? null]));
+        foreach (['id_card', 'id_card_back'] as $f) {
+            if ($request->hasFile($f) && ($t = $check->ocr($request->file($f)->getRealPath()))) {
+                $texts[] = $t;
+            }
+        }
+        $r = $check->verify($texts, $v['full_name'], $v['date_of_birth']);
+        if (! $r['ok']) {
+            \Illuminate\Support\Facades\Log::info('Inscription : pièce refusée', ['phone' => substr($v['phone'], 0, 6) . '…', 'reasons' => $r['reasons']]);
+            return response()->json(['message' => $r['reasons'][0], 'reasons' => $r['reasons'], 'code' => 'id_mismatch'], 422);
+        }
+        $token = Str::random(40);
+        \Illuminate\Support\Facades\Cache::put('idcheck:' . $token, [
+            'phone' => $v['phone'], 'full_name' => mb_strtoupper(trim($v['full_name'])),
+            'date_of_birth' => \Carbon\Carbon::parse($v['date_of_birth'])->toDateString(), 'document' => $r['document'],
+        ], now()->addMinutes(30));
+
+        $d = $r['document'];
+        return response()->json(['ok' => true, 'id_check_token' => $token, 'document' => [
+            'type' => $d['type'], 'country' => $d['country'], 'expiry' => $d['expiry'],
+            'number' => str_repeat('•', max(0, strlen((string) $d['number']) - 3)) . substr((string) $d['number'], -3),
+        ]]);
     }
 
     /**

@@ -17,6 +17,7 @@
         <env name="FLASHPAY_SINGLE_OPERATION" value="false"/>
         <env name="FLASHPAY_CASHIN_CONFIRM" value="false"/>
         <env name="FLASHPAY_OTP_DEBUG" value="true"/>
+        <env name="FLASHPAY_ID_CHECK_ON_REGISTER" value="false"/>
         <env name="APP_KEY" value="base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10="/>
     </php>
 </phpunit>

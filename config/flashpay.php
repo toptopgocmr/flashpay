@@ -93,6 +93,11 @@ return [
     | Moyens de réception : wallet mobile, compte bancaire, retrait cash (WacePay).
     | La source est toujours le wallet OfficePay du client (débité montant + frais).
     */
+    // Inscription client : pièce d'identité (bande MRZ) comparée au nom et à la date de naissance saisis ; écart = refus
+    'kyc' => [
+        'id_check_on_register' => (bool) env('FLASHPAY_ID_CHECK_ON_REGISTER', true),
+    ],
+
     'remit' => [
         // Bascule vers les partenaires de secours du pays (Console › Pays & change › Remittance)
         'failover' => (bool) env('FLASHPAY_REMIT_FAILOVER', true),
