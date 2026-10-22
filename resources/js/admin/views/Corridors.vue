@@ -10,9 +10,16 @@
     <!-- Toast toujours visible, même quand la page est défilée -->
     <div v-if="toast" class="fp-toast" :class="toast.kind" @click="toast = null">{{ toast.text }}</div>
 
-    <!-- Partenaires de paiement -->
-    <section class="gw-section">
-      <GwHead icon="partners" title="Partenaires de paiement" :count="partners.length || null" />
+    <div class="gw-stats">
+      <button class="gw-stat" :class="{ on: tab === 'collect' }" @click="tab = 'collect'"><span>Collecte</span><b>{{ n(kpi.collect) }} <small>/ {{ n(kpi.countries) }} pays</small></b><small>Recharges, paiements, débit du payeur</small></button>
+      <button class="gw-stat" :class="{ on: tab === 'payout' }" @click="tab = 'payout'"><span>Décaissement</span><b>{{ n(kpi.payout) }} <small>/ {{ n(kpi.countries) }} pays</small></b><small>Versements mobile money nationaux et régionaux</small></button>
+      <button class="gw-stat" :class="{ on: tab === 'remit' }" @click="tab = 'remit'"><span>Remittance (international)</span><b>{{ n(remit.kpi?.open) }} <small>/ {{ n(remit.kpi?.countries) }} pays</small></b><small>WacePay · TerraPay · PawaPay · Fincra</small></button>
+      <button class="gw-stat" :class="{ on: tab === 'rates' }" @click="tab = 'rates'"><span>Taux de change</span><b>{{ n(kpi.rates) }}</b><small :class="{ 't-warn': kpi.stale_rates }">{{ kpi.stale_rates ? kpi.stale_rates + ' à mettre à jour' : 'À jour' }}</small></button>
+    </div>
+
+    <!-- Partenaires de collecte et de décaissement (la remittance a ses propres partenaires, onglet « Remittance ») -->
+    <section class="gw-section" v-if="tab === 'collect' || tab === 'payout'">
+      <GwHead icon="partners" title="Partenaires de collecte et de décaissement" :count="partners.length || null" />
       <p class="pc-order-hint">Glissez les cases pour les réordonner<template v-if="cardOrder.length"> · <a href="#" @click.prevent="resetCardOrder">ordre par défaut</a></template></p>
       <div class="gw-cols">
         <div v-for="p in orderedPartners" :key="p.key" class="gw-card pc" :class="['p-' + p.key, { dragging: dragKey === p.key, 'drop-target': overKey === p.key && dragKey !== p.key }]"
@@ -31,15 +38,15 @@
               <div class="gw-main"><b>Collecte</b><small v-if="p.key === 'pawapay'">Mobile money · callback à saisir chez pawaPay</small><small v-else-if="p.key === 'digitwace' && p.coverage_countries">{{ p.coverage_payin }} pays disponibles · choisir WacePay dans la liste des pays</small></div>
               <div class="gw-end"><b>{{ p.flows.includes('collect') ? n(p.collect_countries) + ' pays' : '—' }}</b></div></div>
             <div class="gw-row"><span class="gw-dot" :class="{ off: !p.payout_countries }"></span>
-              <div class="gw-main"><b>Versement</b><small v-if="p.key === 'digitwace' && p.coverage_countries">{{ p.coverage_payout }} pays disponibles</small></div>
+              <div class="gw-main"><b>Décaissement</b><small v-if="p.key === 'digitwace' && p.coverage_countries">{{ p.coverage_payout }} pays disponibles</small></div>
               <div class="gw-end"><b>{{ n(p.payout_countries) }} pays</b></div></div>
             <div v-if="p.key === 'pawapay'" class="gw-row"><span class="gw-dot" :class="p.coverage_live ? '' : 'err'"></span>
-              <div class="gw-main"><b>Couverture</b><small :class="{ 't-err': !p.coverage_live }">{{ p.coverage_live ? `collecte ${p.coverage_payin} · versement ${p.coverage_payout}` + (p.coverage_list?.length ? ' · ' + p.coverage_list.join(', ') : '') + (p.coverage_synced_at ? ' · ' + dt(p.coverage_synced_at) : '') : 'Non lue : ' + (p.coverage_error || '') }}</small></div>
+              <div class="gw-main"><b>Couverture</b><small :class="{ 't-err': !p.coverage_live }">{{ p.coverage_live ? `collecte ${p.coverage_payin} · décaissement ${p.coverage_payout}` + (p.coverage_list?.length ? ' · ' + p.coverage_list.join(', ') : '') + (p.coverage_synced_at ? ' · ' + dt(p.coverage_synced_at) : '') : 'Non lue : ' + (p.coverage_error || '') }}</small></div>
               <div class="gw-end"><b v-if="p.coverage_live">{{ p.coverage_countries }} pays</b>
                 <button class="btn-normal sm" :disabled="pSyncing || !p.ready" @click="syncPawapay">{{ pSyncing ? '…' : 'Synchroniser' }}</button></div></div>
             <template v-if="p.key === 'digitwace'">
               <div class="gw-row"><span class="gw-dot" :class="{ off: !p.coverage_countries }"></span>
-                <div class="gw-main"><b>Couverture</b><small>{{ p.coverage_countries ? `collecte ${p.coverage_payin} · versement ${p.coverage_payout}` + (p.coverage_synced_at ? ' · ' + dt(p.coverage_synced_at) : '') : 'Non synchronisée' }}</small></div>
+                <div class="gw-main"><b>Couverture</b><small>{{ p.coverage_countries ? `collecte ${p.coverage_payin} · décaissement ${p.coverage_payout}` + (p.coverage_synced_at ? ' · ' + dt(p.coverage_synced_at) : '') : 'Non synchronisée' }}</small></div>
                 <div class="gw-end"><b v-if="p.coverage_countries">{{ p.coverage_countries }} pays</b>
                   <button class="btn-normal sm" :disabled="syncing" @click="syncWacepay">{{ syncing ? '…' : 'Synchroniser' }}</button></div></div>
               <div class="gw-row"><span class="gw-dot" :class="wBal?.ok ? '' : (wBal ? 'err' : 'wait')"></span>
@@ -57,7 +64,7 @@
           <div class="gw-card-b pc-bottom">
             <GwField :value="p.webhook" />
             <div class="pc-actions">
-              <button class="btn-normal sm" @click="tab = 'corridors'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
+              <button class="btn-normal sm" @click="tab = tab === 'payout' ? 'payout' : 'collect'; flt.partner = flt.partner === p.key ? '' : p.key">{{ flt.partner === p.key ? 'Tous les pays' : 'Voir ses pays' }}</button>
               <router-link class="btn-normal sm" :to="{ digitwace: '/wacepay', pawapay: '/pawapay', maishapay: '/maishapay', fincra: '/fincra' }[p.key] || '/peex'">Ouvrir la passerelle</router-link>
             </div>
           </div>
@@ -65,25 +72,21 @@
       </div>
     </section>
 
-    <div class="gw-stats">
-      <button class="gw-stat" :class="{ on: tab === 'corridors' && !flt.open }" @click="tab = 'corridors'; flt.open = ''"><span>Pays couverts</span><b>{{ n(kpi.countries) }}</b><small>{{ n(kpi.operators) }} opérateurs</small></button>
-      <button class="gw-stat" :class="{ on: tab === 'corridors' && flt.open === 'collect' }" @click="tab = 'corridors'; flt.open = flt.open === 'collect' ? '' : 'collect'"><span>Collecte ouverte</span><b>{{ n(kpi.collect) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
-      <button class="gw-stat" :class="{ on: tab === 'corridors' && flt.open === 'payout' }" @click="tab = 'corridors'; flt.open = flt.open === 'payout' ? '' : 'payout'"><span>Versement ouvert</span><b>{{ n(kpi.payout) }} <small>/ {{ n(kpi.countries) }}</small></b></button>
-      <button class="gw-stat" :class="{ on: tab === 'remit' }" @click="tab = 'remit'"><span>International</span><b>{{ n(remit.kpi?.open) }} <small>/ {{ n(remit.kpi?.countries) }}</small></b><small>WacePay · TerraPay · PawaPay · Fincra</small></button>
-      <button class="gw-stat" :class="{ on: tab === 'rates' }" @click="tab = 'rates'"><span>Taux de change</span><b>{{ n(kpi.rates) }}</b><small :class="{ 't-warn': kpi.stale_rates }">{{ kpi.stale_rates ? kpi.stale_rates + ' à mettre à jour' : 'À jour' }}</small></button>
-    </div>
 
     <section class="gw-section">
-    <GwHead :icon="tab === 'rates' ? 'swap' : 'globe'" :title="tab === 'rates' ? 'Taux de change' : tab === 'remit' ? 'Transferts internationaux (remittance)' : 'Pays & corridors'">
+    <GwHead :icon="tab === 'rates' ? 'swap' : 'globe'" :title="{ collect: 'Collecte — partenaire par pays', payout: 'Décaissement — partenaire par pays', remit: 'Remittance — transferts internationaux', rates: 'Taux de change' }[tab]">
       <div class="seg">
-        <button :class="{ on: tab === 'corridors' }" @click="tab = 'corridors'">Pays</button>
-        <button :class="{ on: tab === 'remit' }" @click="tab = 'remit'">International</button>
+        <button :class="{ on: tab === 'collect' }" @click="tab = 'collect'">Collecte</button>
+        <button :class="{ on: tab === 'payout' }" @click="tab = 'payout'">Décaissement</button>
+        <button :class="{ on: tab === 'remit' }" @click="tab = 'remit'">Remittance</button>
         <button :class="{ on: tab === 'rates' }" @click="tab = 'rates'">Taux</button>
       </div>
     </GwHead>
     <div>
-    <!-- ================= Corridors ================= -->
-    <template v-if="tab === 'corridors'">
+    <!-- ================= Collecte / Décaissement (flux nationaux et régionaux) ================= -->
+    <template v-if="tab === 'collect' || tab === 'payout'">
+      <div class="gw-note mb" v-if="tab === 'collect'"><span><b>Collecte</b> : le partenaire qui débite le payeur dans ce pays (recharge du wallet, envoi ou paiement depuis un mobile money, et payeur d'un transfert international payé en mobile money). Sans lien avec le partenaire de remittance.</span></div>
+      <div class="gw-note mb" v-else><span><b>Décaissement</b> : le partenaire qui crédite le bénéficiaire mobile money dans ce pays (envois nationaux et régionaux, retraits, remboursements). Les transferts internationaux ne passent pas par ici : ils sont réglés dans l'onglet « Remittance ».</span></div>
       <div class="toolbar mb">
         <div class="search">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg>
@@ -94,7 +97,7 @@
           <button v-for="(cur, z) in zones" :key="z" :class="{ on: flt.zone === z }" @click="flt.zone = z">{{ zoneLabel[z] || z }} · {{ cur }}</button>
         </div>
         <select v-model="flt.partner"><option value="">Tous les partenaires</option><option v-for="p in partners" :key="p.key" :value="p.key">{{ p.name }}</option></select>
-        <select v-model="flt.open"><option value="">Tous les statuts</option><option value="collect">Collecte ouverte</option><option value="payout">Versement ouvert</option><option value="closed">Fermés</option><option value="changed">Modifiés dans la console</option></select>
+        <select v-model="flt.open"><option value="">Tous les statuts</option><option value="open">{{ tab === 'collect' ? 'Collecte ouverte' : 'Décaissement ouvert' }}</option><option value="closed">Fermés</option><option value="changed">Modifiés dans la console</option></select>
       </div>
 
       <section class="container gw-card mb" v-for="(list, zone) in byZone" :key="zone">
@@ -103,86 +106,54 @@
         </div>
         <div class="container-body flush" style="overflow-x:auto;">
           <table>
-            <thead><tr><th>Pays</th><th>Indicatif</th><th>Opérateurs</th><th class="c">Collecte</th><th class="c">Versement</th><th>Partenaire des flux</th><th class="num">Activité 30 j</th><th></th></tr></thead>
+            <thead><tr><th>Pays</th><th>Indicatif</th><th>Opérateurs</th><th class="c">{{ tab === 'collect' ? 'Collecte' : 'Décaissement' }}</th><th>{{ tab === 'collect' ? 'Partenaire de collecte' : 'Partenaire de décaissement' }}</th><th class="num">Activité 30 j</th><th></th></tr></thead>
             <tbody>
-              <tr v-for="c in list" :key="c.country" :class="{ off: !c.collect && !c.payout }">
+              <tr v-for="c in list" :key="c.country" :class="{ off: !c[tab] }">
                 <td><Flag :iso="c.country" :size="15" /> <strong>{{ c.name }}</strong> <span class="stat-label">{{ c.country }}</span>
                   <span v-if="c.source === 'wacepay'" class="wace-tag" title="Pays ajouté par la synchronisation WacePay"><ProviderLogo name="WacePay" :size="12" /> via WacePay</span>
-                  <span v-if="c.overridden" class="changed" :title="'Défaut : collecte ' + (c.default_collect ? 'ouverte' : 'fermée') + ', versement ' + (c.default_payout ? 'ouvert' : 'fermé')">modifié</span></td>
+                  <span v-if="c.overridden" class="changed" :title="'Défaut : collecte ' + (c.default_collect ? 'ouverte' : 'fermée') + ', décaissement ' + (c.default_payout ? 'ouvert' : 'fermé')">modifié</span></td>
                 <td class="mono" style="white-space:nowrap;">{{ c.dial }} · {{ c.local_length }} ch.</td>
-                <td><span v-for="o in c.operators" :key="o.corridor" class="op" :title="(o.prefixes.length ? 'Préfixes : ' + o.prefixes.join(', ') : 'Préfixes non renseignés') + (o.wacepay ? ' · WacePay : ' + [o.wacepay.payin && 'collecte', o.wacepay.payout && 'versement'].filter(Boolean).join(' + ') : '')">{{ o.label }}</span><span v-for="l in (c.operators_off || [])" :key="'off-' + l" class="op op-off" title="Non proposé par WacePay dans ce pays : numéros refusés">{{ l }}</span></td>
-                <td class="c"><label class="switch"><input type="checkbox" :checked="c.collect" @change="update(c, { collect: $event.target.checked })" /><span></span></label></td>
-                <td class="c"><label class="switch"><input type="checkbox" :checked="c.payout" @change="update(c, { payout: $event.target.checked })" /><span></span></label></td>
+                <td><span v-for="o in c.operators" :key="o.corridor" class="op" :title="(o.prefixes.length ? 'Préfixes : ' + o.prefixes.join(', ') : 'Préfixes non renseignés') + (o.wacepay ? ' · WacePay : ' + [o.wacepay.payin && 'collecte', o.wacepay.payout && 'décaissement'].filter(Boolean).join(' + ') : '')">{{ o.label }}</span><span v-for="l in (c.operators_off || [])" :key="'off-' + l" class="op op-off" title="Non proposé par WacePay dans ce pays : numéros refusés">{{ l }}</span></td>
+                <td class="c"><label class="switch"><input type="checkbox" :checked="c[tab]" @change="update(c, { [tab]: $event.target.checked })" /><span></span></label></td>
                 <td class="partner-cell">
-                  <div class="pl pl-gw">
-                    <span class="lbl">Passerelle</span>
-                    <select class="api" :class="'p-' + gw(c)" :value="gw(c)" @change="setGateway(c, $event.target.value)" title="Collecte, versement, vérifications et soldes passent par cette passerelle">
+                  <div class="pl" :class="{ dim: !c[tab] }">
+                    <span class="lbl">Partenaire</span>
+                    <select class="api" :class="'p-' + c[tab + '_partner']" :value="c[tab + '_partner']" @change="update(c, { [tab + '_partner']: $event.target.value })">
                       <option value="peex" :disabled="c.source === 'wacepay' || c.source === 'world'">PEEX</option>
-                      <option value="digitwace" :disabled="!waceOk(c, 'payin') && !waceOk(c, 'payout')">WacePay</option>
-                      <option value="pawapay" :disabled="!c.pawapay?.collect || !c.pawapay?.payout">PawaPay{{ pawaNote(c) }}</option>
-                      <option value="maishapay" :disabled="!c.maishapay">MaishaPay{{ c.maishapay ? '' : ' — non couvert' }}</option>
-                      <option value="fincra" :disabled="!c.fincra">Fincra{{ c.fincra ? '' : ' — non couvert' }}</option>
-                      <option value="mixed" disabled>Par flux</option>
-                    </select>
-                    <button type="button" class="custom-btn" @click="custom[c.country] = !custom[c.country]">{{ custom[c.country] ? 'Masquer' : 'Par flux' }}</button>
-                  </div>
-                  <template v-if="custom[c.country] || gw(c) === 'mixed'">
-                  <div class="pl" :class="{ dim: !c.collect }">
-                    <span class="lbl">Collecte</span>
-                    <select class="api" :class="'p-' + c.collect_partner" :value="c.collect_partner" @change="update(c, { collect_partner: $event.target.value })">
-                      <option value="peex" :disabled="c.source === 'wacepay' || c.source === 'world'">PEEX</option>
-                      <option value="digitwace" :disabled="!waceOk(c, 'payin')">WacePay{{ waceNote(c, 'payin') }}</option>
-                      <option value="pawapay" :disabled="!c.pawapay?.collect">PawaPay{{ pawaNote(c, 'collect') }}</option>
+                      <option value="digitwace" :disabled="!waceOk(c, waceSvc)">WacePay{{ waceNote(c, waceSvc) }}</option>
+                      <option value="pawapay" :disabled="!c.pawapay?.[tab]">PawaPay{{ pawaNote(c, tab) }}</option>
                       <option value="maishapay" :disabled="!c.maishapay">MaishaPay{{ c.maishapay ? '' : ' — non couvert' }}</option>
                       <option value="fincra" :disabled="!c.fincra">Fincra{{ c.fincra ? '' : ' — non couvert' }}</option>
                     </select>
                   </div>
-                  <div class="pl" :class="{ dim: !c.payout }">
-                    <span class="lbl">Versement</span>
-                    <select class="api" :class="'p-' + c.payout_partner" :value="c.payout_partner" @change="update(c, { payout_partner: $event.target.value })">
-                      <option value="peex" :disabled="c.source === 'wacepay' || c.source === 'world'">PEEX</option>
-                      <option value="digitwace" :disabled="!waceOk(c, 'payout')">WacePay{{ waceNote(c, 'payout') }}</option>
-                      <option value="pawapay" :disabled="!c.pawapay?.payout">PawaPay{{ pawaNote(c, 'payout') }}</option>
-                      <option value="maishapay" :disabled="!c.maishapay">MaishaPay{{ c.maishapay ? '' : ' — non couvert' }}</option>
-                      <option value="fincra" :disabled="!c.fincra">Fincra{{ c.fincra ? '' : ' — non couvert' }}</option>
-                    </select>
-                  </div>
-                  </template>
                   <div class="pl pl-route">
-                    <span class="lbl">Routage</span>
-                    <select class="api" :value="c.routing_mode || 'auto'" @change="update(c, { routing_mode: $event.target.value })" :title="ROUTING_HELP[c.routing_mode || 'auto']">
-                      <option value="auto">Automatique</option>
-                      <option value="mixed">Mixte (secours choisis)</option>
-                      <option value="fixed">Manuel (aucune bascule)</option>
+                    <span class="lbl">Si refus</span>
+                    <select class="api" :value="c.routing_mode || 'auto'" @change="update(c, { routing_mode: $event.target.value })" :title="ROUTING_HELP[c.routing_mode || 'auto'] + ' (réglage commun à la collecte et au décaissement de ce pays)'">
+                      <option value="auto">Bascule automatique</option>
+                      <option value="mixed">Secours choisis</option>
+                      <option value="fixed">Aucune bascule</option>
                     </select>
                   </div>
-                  <template v-if="c.routing_mode === 'mixed'">
-                    <div v-for="flow in ['collect', 'payout']" :key="flow" class="pl pl-backup" :class="{ dim: !c[flow] }">
-                      <span class="lbl">{{ flow === 'collect' ? 'Secours coll.' : 'Secours vers.' }}</span>
-                      <select v-for="i in [0, 1]" :key="i" class="api sm" :value="(c[flow + '_backups'] || [])[i] || ''" @change="setBackup(c, flow, i, $event.target.value)">
-                        <option value="">{{ i === 0 ? '— aucun —' : '— 2e secours —' }}</option>
-                        <option v-for="p in PARTNERS.filter((p) => p !== c[flow + '_partner'])" :key="p" :value="p" :disabled="!backupOk(c, p, flow)">{{ partnerName(p) }}{{ backupOk(c, p, flow) ? '' : ' — non couvert' }}</option>
-                      </select>
-                    </div>
-                  </template>
-                  <div class="route-note">{{ routeSummary(c) }}</div>
-                  <div v-if="c.wacepay" class="wace-avail" :title="c.wacepay.payers.map((p) => p.name || p.code).join(', ')">
-                    WacePay ici : {{ [c.wacepay.payin && 'collecte', c.wacepay.payout && 'versement'].filter(Boolean).join(' + ') || '—' }} · {{ c.wacepay.payers.length }} opérateur(s)
+                  <div v-if="c.routing_mode === 'mixed'" class="pl pl-backup" :class="{ dim: !c[tab] }">
+                    <span class="lbl">Secours</span>
+                    <select v-for="i in [0, 1]" :key="i" class="api sm" :value="(c[tab + '_backups'] || [])[i] || ''" @change="setBackup(c, tab, i, $event.target.value)">
+                      <option value="">{{ i === 0 ? '— aucun —' : '— 2e secours —' }}</option>
+                      <option v-for="p in PARTNERS.filter((p) => p !== c[tab + '_partner'])" :key="p" :value="p" :disabled="!backupOk(c, p, tab)">{{ partnerName(p) }}{{ backupOk(c, p, tab) ? '' : ' — non couvert' }}</option>
+                    </select>
                   </div>
-                  <div v-if="c.payout_partner === 'peex'" class="pl" :class="{ dim: !c.payout }">
+                  <div class="route-note">{{ routeSummary(c, tab) }}</div>
+                  <div v-if="tab === 'payout' && c.payout_partner === 'peex'" class="pl" :class="{ dim: !c.payout }">
                     <span class="lbl"><ProviderLogo name="PEEX" :size="14" /> API PEEX</span>
-                    <select class="api" :value="c.payout_api" @change="update(c, { payout_api: $event.target.value })">
-                      <option value="disbursement">disbursement</option><option value="remittance">remittance</option>
+                    <select class="api" :value="c.payout_api" @change="update(c, { payout_api: $event.target.value })" title="Point d'accès PEEX utilisé pour le décaissement (réglage technique PEEX, sans lien avec la remittance internationale)">
+                      <option value="disbursement">Disbursement</option><option value="remittance">Point d'accès « remittance » PEEX</option>
                     </select>
                   </div>
-                  <div v-if="(c.payout_partner === 'digitwace' || c.collect_partner === 'digitwace') && !partnerReady('digitwace')" class="t-warn small">⚠ WacePay non configuré</div>
-                  <div v-if="c.pawapay && !c.pawapay.unverified" class="wace-avail">PawaPay ici : {{ [c.pawapay.collect && 'collecte', c.pawapay.payout && 'versement'].filter(Boolean).join(' + ') || '—' }}{{ c.pawapay.providers.length ? ' · ' + c.pawapay.providers.join(', ') : '' }}</div>
-                  <div v-if="(c.payout_partner === 'pawapay' || c.collect_partner === 'pawapay') && !partnerReady('pawapay')" class="t-warn small">⚠ PawaPay non configuré (PAWAPAY_ENABLED, PAWAPAY_API_TOKEN)</div>
-                  <div v-if="(c.payout_partner === 'maishapay' || c.collect_partner === 'maishapay') && !partnerReady('maishapay')" class="t-warn small">⚠ MaishaPay non configuré (MAISHAPAY_ENABLED, MAISHAPAY_PUBLIC_KEY, MAISHAPAY_SECRET_KEY)</div>
-                  <div v-if="(c.payout_partner === 'fincra' || c.collect_partner === 'fincra') && !partnerReady('fincra')" class="t-warn small">⚠ Fincra non configuré (FINCRA_ENABLED, FINCRA_SECRET_KEY, FINCRA_BUSINESS_ID)</div>
-                  <div v-if="(c.payout_partner === 'digitwace' && !waceOk(c, 'payout')) || (c.collect_partner === 'digitwace' && !waceOk(c, 'payin'))" class="t-warn small">
-                    ⚠ WacePay non confirmé ici ({{ c.wacepay ? 'service absent' : 'couverture non synchronisée' }})
+                  <div v-if="c.wacepay" class="wace-avail" :title="c.wacepay.payers.map((p) => p.name || p.code).join(', ')">
+                    WacePay ici : {{ c.wacepay[waceSvc] ? 'disponible' : 'non disponible' }} · {{ c.wacepay.payers.length }} opérateur(s)
                   </div>
+                  <div v-if="c.pawapay && !c.pawapay.unverified" class="wace-avail">PawaPay ici : {{ c.pawapay[tab] ? 'disponible' : 'non ouvert' }}{{ c.pawapay.providers.length ? ' · ' + c.pawapay.providers.join(', ') : '' }}</div>
+                  <div v-if="!partnerReady(c[tab + '_partner'])" class="t-warn small">⚠ {{ partnerName(c[tab + '_partner']) }} non configuré{{ ENV_HINT[c[tab + '_partner']] ? ' (' + ENV_HINT[c[tab + '_partner']] + ')' : '' }}</div>
+                  <div v-if="c[tab + '_partner'] === 'digitwace' && !waceOk(c, waceSvc)" class="t-warn small">⚠ WacePay non confirmé ici ({{ c.wacepay ? 'service absent' : 'couverture non synchronisée' }})</div>
                   <div v-if="rowErr[c.country]" class="row-err">{{ rowErr[c.country] }}</div>
                 </td>
                 <td class="num">{{ c.usage.count ? n(c.usage.count) + ' op. · ' + short(c.usage.volume) : '—' }}</td>
@@ -197,7 +168,7 @@
 
     <!-- ================= Transferts internationaux (remittance) ================= -->
     <template v-else-if="tab === 'remit'">
-      <div class="gw-note mb">Transferts internationaux de l'app (P2P, P2B, B2P, B2B depuis le wallet OfficePay). Choisissez le partenaire qui paie chaque pays de destination. Les flux mobile money nationaux et régionaux restent réglés dans l'onglet « Pays ».</div>
+      <div class="gw-note mb">Transferts internationaux de l'app (P2P, P2B, B2P, B2B depuis le wallet OfficePay). Choisissez le partenaire de remittance qui paie chaque pays de destination (mobile money, banque ou retrait cash). Ce choix est indépendant des partenaires de collecte et de décaissement.</div>
       <div class="gw-cols mb">
         <div v-for="p in remit.partners" :key="p.key" class="gw-card pc" :class="'p-' + p.key">
           <div class="gw-card-h">
@@ -348,7 +319,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../services/api'
 import { useRoute } from 'vue-router'
 
-const tab = ref('corridors')
+const tab = ref(['collect', 'payout', 'remit', 'rates'].includes(String(useRoute().query.tab)) ? String(useRoute().query.tab) : 'collect')
 const corridors = ref([])
 const zones = ref({})
 const kpi = ref({})
@@ -423,12 +394,16 @@ const fmtRate = (v) => (v >= 1 ? +Number(v).toFixed(4) : +Number(v).toPrecision(
 const clientRate = (r) => +(Number(r.rate || 0) * (1 - Number(r.margin_percent || 0) / 100)).toFixed(6)
 const stale = (r) => (r.source || '').includes('indicatif') || Date.now() - new Date(r.updated_at).getTime() > 7 * 864e5
 
+// Service WacePay du flux affiché (collecte = payin, décaissement = payout)
+const waceSvc = computed(() => (tab.value === 'collect' ? 'payin' : 'payout'))
+const ENV_HINT = { digitwace: 'DIGITWACE_*', pawapay: 'PAWAPAY_ENABLED, PAWAPAY_API_TOKEN', maishapay: 'MAISHAPAY_ENABLED, MAISHAPAY_PUBLIC_KEY, MAISHAPAY_SECRET_KEY', fincra: 'FINCRA_ENABLED, FINCRA_SECRET_KEY, FINCRA_BUSINESS_ID', peex: 'PEEX_*' }
 const byZone = computed(() => {
   const q = flt.q.toLowerCase().trim()
+  const flow = tab.value === 'payout' ? 'payout' : 'collect'
   return corridors.value.filter((c) => (!flt.zone || c.zone === flt.zone)
-    && (!flt.partner || c.payout_partner === flt.partner || c.collect_partner === flt.partner)
+    && (!flt.partner || c[flow + '_partner'] === flt.partner)
     && (!q || [c.name, c.country, c.dial, ...c.operators.map((o) => o.label)].join(' ').toLowerCase().includes(q))
-    && (!flt.open || (flt.open === 'collect' && c.collect) || (flt.open === 'payout' && c.payout) || (flt.open === 'closed' && !c.collect && !c.payout) || (flt.open === 'changed' && c.overridden)))
+    && (!flt.open || (flt.open === 'open' && c[flow]) || (flt.open === 'closed' && !c[flow]) || (flt.open === 'changed' && c.overridden)))
     .reduce((acc, c) => ((acc[c.zone] ||= []).push(c), acc), {})
 })
 const currencies = computed(() => [...new Set(['XAF', 'XOF', ...rates.value.flatMap((r) => [r.base, r.quote])])])
@@ -523,12 +498,11 @@ function setBackup(c, flow, i, value) {
   list[i] = value
   update(c, { [flow + '_backups']: list.filter(Boolean) })
 }
-function routeSummary(c) {
+function routeSummary(c, flow) {
   const mode = c.routing_mode || 'auto'
-  if (mode === 'fixed') return 'Aucune bascule'
-  if (mode === 'auto') return 'Bascule automatique si rejet'
-  const f = (flow) => [c[flow + '_partner'], ...(c[flow + '_backups'] || [])].map(partnerName).join(' → ')
-  return 'Collecte : ' + f('collect') + ' · Versement : ' + f('payout')
+  if (mode === 'fixed') return 'Refus = échec (aucune autre passerelle)'
+  if (mode === 'auto') return 'Refus = autre passerelle active du pays'
+  return [c[flow + '_partner'], ...(c[flow + '_backups'] || [])].map(partnerName).join(' → ')
 }
 // Passerelle du pays : la même pour tous les flux, sinon « Mixte » (réglage par flux)
 const gw = (c) => (c.collect_partner === c.payout_partner ? c.collect_partner : 'mixed')
@@ -561,10 +535,12 @@ async function run(fn, country = null) {
   }
 }
 async function update(c, patch) {
-  if (patch.payout === false && !(await confirmBox('Les envois vers ce pays seront refusés.', { title: `Fermer les versements vers ${c.name} ?`, confirmLabel: 'Fermer', danger: true }))) return load()
+  if (patch.payout === false && !(await confirmBox('Les envois vers ce pays seront refusés.', { title: `Fermer le décaissement vers ${c.name} ?`, confirmLabel: 'Fermer', danger: true }))) return load()
+  if (patch.collect_partner && patch.collect_partner !== c.collect_partner
+    && !(await confirmBox(`Les nouvelles collectes dans ce pays passeront par ${partnerName(patch.collect_partner)} (au lieu de ${partnerName(c.collect_partner)}) ; les opérations en cours restent chez l'ancien. La remittance internationale n'est pas concernée.`, { title: `Changer le partenaire de collecte de ${c.name} ?`, confirmLabel: 'Changer' }))) return load()
   if (patch.collect === false && !(await confirmBox('Les recharges et paiements depuis ce pays seront refusés.', { title: `Fermer la collecte depuis ${c.name} ?`, confirmLabel: 'Fermer', danger: true }))) return load()
   if (patch.payout_partner && patch.payout_partner !== c.payout_partner
-    && !(await confirmBox(`Les nouveaux envois vers ce pays passeront par ${partnerName(patch.payout_partner)} (au lieu de ${partnerName(c.payout_partner)}) ; les opérations en cours restent chez l'ancien.`, { title: `Changer le partenaire de versement de ${c.name} ?`, confirmLabel: 'Changer' }))) return load()
+    && !(await confirmBox(`Les nouveaux décaissements dans ce pays passeront par ${partnerName(patch.payout_partner)} (au lieu de ${partnerName(c.payout_partner)}) ; les opérations en cours restent chez l'ancien. La remittance internationale n'est pas concernée.`, { title: `Changer le partenaire de décaissement de ${c.name} ?`, confirmLabel: 'Changer' }))) return load()
   run(() => api.post(`/admin/corridors/${c.country}`, patch), c.country)
 }
 const reset = (c) => run(() => api.delete(`/admin/corridors/${c.country}`))
