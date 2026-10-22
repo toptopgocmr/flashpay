@@ -97,10 +97,14 @@ class FincraAdminController extends \App\Http\Controllers\Controller
 
     public function balances(FincraClient $client)
     {
+        $base = ['configured' => $client->enabled(), 'sandbox' => $client->sandbox(), 'checked_at' => now()->toIso8601String()];
+        if (! $client->enabled()) {
+            return response()->json($base + ['ok' => false, 'error' => 'Fincra non configuré.', 'accounts' => []]);
+        }
         try {
-            return response()->json(['ok' => true, 'accounts' => $client->balances()]);
+            return response()->json($base + ['ok' => true, 'accounts' => $client->balances()]);
         } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'error' => mb_substr($e->getMessage(), 0, 300), 'accounts' => []]);
+            return response()->json($base + ['ok' => false, 'error' => mb_substr($e->getMessage(), 0, 300), 'accounts' => []]);
         }
     }
 

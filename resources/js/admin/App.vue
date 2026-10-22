@@ -51,7 +51,7 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg>
         <span v-if="badges.notifications" class="bell-count">{{ badges.notifications }}</span>
       </router-link>
-      <span v-for="e in envs" :key="e.key" class="env-pill" :class="e.sandbox ? 'sandbox' : 'live'" :title="'Environnement ' + e.name"><ProviderLogo :name="e.name" :size="18" class="env-logo" />{{ e.name }} · {{ e.sandbox ? 'SANDBOX' : 'PROD' }}</span>
+      <span v-for="e in envs" :key="e.key" class="env-pill" :class="!e.enabled ? 'off' : (e.sandbox ? 'sandbox' : 'live')" :title="e.enabled ? 'Environnement ' + e.name : e.name + ' : clés API à saisir sur Railway'"><ProviderLogo :name="e.name" :size="18" class="env-logo" />{{ e.name }}<template v-if="e.enabled"> · {{ e.sandbox ? 'SANDBOX' : 'PROD' }}</template></span>
 
       <div class="dropdown">
         <button class="nav-btn" :class="{ open: userOpen }" @click="toggle('user')">
@@ -107,7 +107,7 @@
           </div>
         </div>
       </nav>
-      <div class="foot">OfficePay Group · Brazzaville<br /><span style="font-size:11px;">Console v2 · {{ envs.map((e) => e.name + ' ' + (e.sandbox ? 'sandbox' : 'production')).join(' · ') }}</span></div>
+      <div class="foot">OfficePay Group · Brazzaville<br /><span style="font-size:11px;">Console v2 · {{ envs.filter((e) => e.enabled).map((e) => e.name + ' ' + (e.sandbox ? 'sandbox' : 'production')).join(' · ') }}</span></div>
     </aside>
 
     <div v-if="!collapsed && narrow" class="side-backdrop" @click.stop="collapsed = true"></div>
@@ -439,7 +439,8 @@ async function loadEnv() {
   try {
     const { data } = await api.get('/peex/corridors')
     sandbox.value = !!data.sandbox
-    envs.value = (data.environments || [{ key: 'peex', name: 'PEEX', sandbox: !!data.sandbox, enabled: true }]).filter((e) => e.enabled)
+    // Tous les partenaires : ceux sans clés apparaissent en gris « NON CONFIGURÉ »
+    envs.value = (data.environments || [{ key: 'peex', name: 'PEEX', sandbox: !!data.sandbox, enabled: true }])
   } catch (_) { /* non bloquant */ }
   loadBadges()
 }

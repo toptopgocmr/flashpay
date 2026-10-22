@@ -56,7 +56,7 @@
             <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor"><circle cx="3" cy="3" r="1.4"/><circle cx="9" cy="3" r="1.4"/><circle cx="3" cy="8" r="1.4"/><circle cx="9" cy="8" r="1.4"/><circle cx="3" cy="13" r="1.4"/><circle cx="9" cy="13" r="1.4"/></svg>
           </span>
           <div class="w-title">
-            <h2><ProviderLogo v-if="['peex', 'wacepay', 'pawapay'].includes(w.key)" :name="w.key" :size="22" />{{ W[w.key].title }}
+            <h2><ProviderLogo v-if="['peex', 'wacepay', 'pawapay', 'maishapay', 'fincra'].includes(w.key)" :name="w.key" :size="22" />{{ W[w.key].title }}
               <span v-if="w.key === 'recent'" class="counter">({{ d?.recent.length ?? 0 }})</span>
               <span v-if="w.key === 'peex' && peex?.sandbox" class="status pending">Sandbox</span>
             </h2>
@@ -68,6 +68,18 @@
               <span class="muted" v-if="wace?.checked_at">Vérifié à {{ new Date(wace.checked_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }}</span>
               <button class="icon-btn" @click="loadWace(true)" :disabled="waceLoading" title="Rafraîchir les soldes">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" :class="{ rot: waceLoading }"><path d="M14 8a6 6 0 1 1-2-4.5M14 2v4h-4"/></svg>
+              </button>
+            </template>
+            <template v-if="w.key === 'maishapay'">
+              <span v-if="maisha?.configured" class="status" :class="maisha.sandbox ? 'pending' : 'successful'">{{ maisha.sandbox ? 'Sandbox' : 'Production' }}</span>
+              <button class="icon-btn" @click="loadMaisha()" :disabled="maishaLoading" title="Rafraîchir">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" :class="{ rot: maishaLoading }"><path d="M14 8a6 6 0 1 1-2-4.5M14 2v4h-4"/></svg>
+              </button>
+            </template>
+            <template v-if="w.key === 'fincra'">
+              <span v-if="fincra?.configured" class="status" :class="fincra.sandbox ? 'pending' : 'successful'">{{ fincra.sandbox ? 'Sandbox' : 'Production' }}</span>
+              <button class="icon-btn" @click="loadFincra()" :disabled="fincraLoading" title="Rafraîchir les soldes">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" :class="{ rot: fincraLoading }"><path d="M14 8a6 6 0 1 1-2-4.5M14 2v4h-4"/></svg>
               </button>
             </template>
             <template v-if="w.key === 'pawapay'">
@@ -237,6 +249,41 @@
                 </router-link>
               </li>
               <li v-if="pawa?.ok && !pawa.accounts.length" class="muted" style="padding:8px 0;">Aucun solde renvoyé par PawaPay.</li>
+            </ul>
+          </div>
+
+          <!-- ---------- MaishaPay (pas d'API de solde : activité et réglages) ---------- -->
+          <div v-else-if="w.key === 'maishapay'">
+            <div v-if="maisha && !maisha.configured" class="flash err"><div>MaishaPay n’est pas encore configuré (MAISHAPAY_ENABLED, MAISHAPAY_PUBLIC_KEY, MAISHAPAY_SECRET_KEY).</div></div>
+            <router-link to="/maishapay" class="peex-total">
+              <span>Opérations MaishaPay (30 j)</span>
+              <b :class="{ skeleton: !maisha }">{{ maisha ? n((maisha.stats?.deposit || 0) + (maisha.stats?.payout || 0) + (maisha.stats?.services || 0)) : '—' }}</b>
+            </router-link>
+            <ul class="peex-list">
+              <li><router-link to="/maishapay"><div class="row1"><span class="lbl">Collectes (mobile + carte)</span><span class="amt">{{ n(maisha?.stats?.deposit) }}</span></div></router-link></li>
+              <li><router-link to="/maishapay"><div class="row1"><span class="lbl">Décaissements / remboursements</span><span class="amt">{{ n(maisha?.stats?.payout) }}</span></div></router-link></li>
+              <li><router-link to="/maishapay"><div class="row1"><span class="lbl">En attente · échecs</span><span class="amt">{{ n(maisha?.stats?.pending) }} · <span :class="{ 't-warn': maisha?.stats?.failed }">{{ n(maisha?.stats?.failed) }}</span></span></div></router-link></li>
+              <li><router-link to="/corridors"><div class="row2">Collecte : {{ maisha?.countries_collect?.length || 0 }} pays · Décaissement : {{ maisha?.countries_payout?.length || 0 }} pays · Carte {{ maisha?.card ? 'active' : 'inactive' }}</div></router-link></li>
+            </ul>
+            <p class="muted" style="margin:8px 2px 0;font-size:12px;">Solde : à consulter sur <a href="https://marchand.maishapay.online" target="_blank" rel="noopener">marchand.maishapay.online</a> (MaishaPay ne fournit pas d’API de solde).</p>
+          </div>
+
+          <!-- ---------- Soldes Fincra ---------- -->
+          <div v-else-if="w.key === 'fincra'">
+            <div v-if="fincra && !fincra.configured" class="flash err"><div>Fincra n’est pas encore configuré (FINCRA_ENABLED, FINCRA_SECRET_KEY, FINCRA_BUSINESS_ID).</div></div>
+            <div v-else-if="fincra && !fincra.ok" class="flash err"><div>Soldes Fincra indisponibles : {{ fincra.error }}</div></div>
+            <router-link to="/fincra" class="peex-total">
+              <span>Total chez Fincra (XAF/XOF)</span>
+              <b :class="{ skeleton: !fincra }">{{ fincra?.ok ? xaf(fincraTotal) : '—' }}</b>
+            </router-link>
+            <ul class="peex-list">
+              <li v-for="a in fincra?.accounts || []" :key="a.currency">
+                <router-link to="/fincra">
+                  <div class="row1"><span class="lbl">{{ a.currency }}</span><span class="amt">{{ n(a.available) }} {{ a.currency }}</span></div>
+                  <div class="row2" v-if="a.ledger != null">Solde comptable {{ n(a.ledger) }} {{ a.currency }}</div>
+                </router-link>
+              </li>
+              <li v-if="fincra?.ok && !fincra.accounts.length" class="muted" style="padding:8px 0;">Aucun solde renvoyé par Fincra.</li>
             </ul>
           </div>
 
@@ -456,6 +503,8 @@ const W = {
   quick: { title: 'Récemment visités', about: 'Vos derniers écrans et les accès rapides.', size: 1 },
   peex: { title: 'Soldes PEEX', desc: 'Disponible = solde − montants engagés', about: 'Soldes des comptes OfficePay chez PEEX.', size: 2, foot: { to: '/peex', l: 'Passerelle PEEX' } },
   wacepay: { title: 'Soldes WacePay', desc: 'Disponible = solde − versements en cours', about: 'Soldes du compte OfficePay chez WacePay (Digitwace), par devise.', size: 2, foot: { to: '/corridors', l: 'Pays & partenaires' } },
+  maishapay: { title: 'MaishaPay', desc: 'Activité sur 30 jours et pays confiés', about: 'Collectes, décaissements et services MaishaPay (pas d’API de solde).', size: 2, foot: { to: '/maishapay', l: 'Passerelle MaishaPay' } },
+  fincra: { title: 'Soldes Fincra', desc: 'Solde disponible chez Fincra, par devise', about: 'Soldes du compte OfficePay chez Fincra.', size: 2, foot: { to: '/fincra', l: 'Passerelle Fincra' } },
   pawapay: { title: 'Soldes PawaPay', desc: 'Solde du compte OfficePay chez PawaPay, par pays', about: 'Soldes PawaPay (collecte, versement, remittance mobile money).', size: 2, foot: { to: '/pawapay', l: 'Passerelle PawaPay' } },
   activity: { title: 'Activité', desc: 'Volume réussi et nombre de transactions par jour', about: 'Graphique quotidien du volume et du nombre.', size: 2 },
   network: { title: 'Réseau par rôle', about: 'Comptes des six profils de l’application mobile.', size: 2, foot: { to: '/roles', l: 'Rôles & habilitations' } },
@@ -465,7 +514,7 @@ const W = {
   agents: { title: 'Top 5 agents', about: 'Agents les plus actifs sur la période.', size: 2, flush: true, foot: { to: '/agents', l: 'Tous les agents' } },
   recent: { title: 'Transactions récentes', about: 'Les dernières opérations de la plateforme.', size: 4, flush: true, foot: { to: '/transactions', l: 'Voir toutes les transactions' } },
 }
-const DEFAULT_ORDER = ['kpi', 'status', 'health', 'todo', 'quick', 'peex', 'wacepay', 'pawapay', 'activity', 'ops', 'network', 'compare', 'merchants', 'agents', 'recent']
+const DEFAULT_ORDER = ['kpi', 'status', 'health', 'todo', 'quick', 'peex', 'wacepay', 'maishapay', 'fincra', 'pawapay', 'activity', 'ops', 'network', 'compare', 'merchants', 'agents', 'recent']
 const LS_KEY = 'fp_admin_dashboard_layout_v2'
 const SIZES = [{ v: 1, l: 'Petite (1/4)' }, { v: 2, l: 'Moyenne (1/2)' }, { v: 3, l: 'Grande (3/4)' }, { v: 4, l: 'Pleine largeur' }]
 
@@ -792,6 +841,26 @@ function loadPawa() {
     .catch((e) => { pawa.value = { ok: false, error: e.response?.data?.message || e.message, accounts: [] } })
     .finally(() => { pawaLoading.value = false })
 }
+/* ------------------------------------------------------------------ MaishaPay / Fincra */
+const maisha = ref(null)
+const maishaLoading = ref(false)
+function loadMaisha() {
+  maishaLoading.value = true
+  api.get('/admin/maishapay/overview')
+    .then(({ data }) => { maisha.value = data })
+    .catch(() => { maisha.value = { configured: false, stats: {} } })
+    .finally(() => { maishaLoading.value = false })
+}
+const fincra = ref(null)
+const fincraLoading = ref(false)
+const fincraTotal = computed(() => (fincra.value?.accounts || []).filter((a) => ['XAF', 'XOF'].includes(a.currency)).reduce((t, a) => t + Number(a.available || 0), 0))
+function loadFincra() {
+  fincraLoading.value = true
+  api.get('/admin/fincra/balances')
+    .then(({ data }) => { fincra.value = data })
+    .catch((e) => { fincra.value = { ok: false, configured: true, error: e.response?.data?.message || e.message, accounts: [] } })
+    .finally(() => { fincraLoading.value = false })
+}
 function loadNet() { api.get('/admin/roles').then(({ data }) => { net.value = data }).catch(() => {}) }
 
 async function load() {
@@ -799,6 +868,8 @@ async function load() {
   loadPeex()
   loadWace()
   loadPawa()
+  loadMaisha()
+  loadFincra()
   loading.value = true
   error.value = ''
   try {
