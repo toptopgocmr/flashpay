@@ -90,4 +90,17 @@ class IdCheckOnRegisterTest extends TestCase
         $this->postJson('/api/auth/register', $base + ['password' => '4827', 'password_confirmation' => '4827', 'profile' => 'client', 'id_check_token' => $tok])->assertCreated();
         $this->assertSame('OA1234567', User::where('phone', '242061112233')->value('id_number'));
     }
+
+    public function test_congo_niu_card_without_mrz_is_read_from_printed_fields(): void
+    {
+        $recto = "REPUBLIQUE DU CONGO\nNUMERO D'IDENTIFICATION UNIQUE\nP23000000366810W\nNom(s) / Surname\nIBATA\nPrénom(s) / Given names\nKANI ARNAUD\n"
+            . "Date de naissance / Date de création\n30.07.78\nLieu de naissance\nBRAZZAVILLE\nNationalité\nCOG\nN° document\nT0302041R";
+        $base = ['phone' => '242061112244', 'full_name' => 'Kani Arnaud Ibata', 'date_of_birth' => '1978-07-30'];
+        $this->postJson('/api/auth/register/verify-id', $base + ['id_text_front' => $recto, 'id_text_back' => 'puce'])
+            ->assertOk()->assertJsonPath('document.type', 'niu_card');
+        $this->postJson('/api/auth/register/verify-id', array_merge($base, ['date_of_birth' => '1978-07-31']) + ['id_text_front' => $recto])->assertStatus(422);
+        $this->postJson('/api/auth/register/verify-id', array_merge($base, ['full_name' => 'Paul Ibata']) + ['id_text_front' => $recto])->assertStatus(422);
+        // Une lettre mal lue (hologramme) est tolérée
+        $this->postJson('/api/auth/register/verify-id', $base + ['id_text_front' => str_replace('KANI', 'KANl', $recto)])->assertOk();
+    }
 }

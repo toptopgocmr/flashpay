@@ -23,18 +23,26 @@ class IdDocumentCheck
      */
     public function verify(array $texts, string $fullName, ?string $dateOfBirth): array
     {
-        $mrz = $this->parse(...$texts);
+        // 1. Bande MRZ (passeports, cartes à bande « <<< ») ; 2. carte NIU du Congo (pas de bande :
+        //    lecture des champs imprimés « Nom », « Prénom », « Date de naissance », « N° document »)
+        $mrz = $this->parse(...$texts) ?? $this->parseNiu(...$texts);
         if (! $mrz) {
             return ['ok' => false, 'document' => null, 'reasons' => [
-                'Pièce illisible : la bande de lecture (lignes « <<< » en bas du passeport ou de la carte) n\'a pas pu être lue. Reprenez une photo nette, bien éclairée et à plat, ou utilisez un passeport ou une carte d\'identité récente.',
+                'Pièce illisible : ni la bande de lecture (lignes « <<< ») ni les champs de la carte NIU n\'ont pu être lus. Reprenez la photo du recto bien à plat, sans reflet ni flash, avec les 4 coins visibles.',
             ]];
         }
 
         $reasons = [];
+        $viz = $mrz['format'] === 'NIU';
+        if ($viz && (! $mrz['surname'] || ! $mrz['date_of_birth'])) {
+            return ['ok' => false, 'document' => null, 'reasons' => [
+                'Carte NIU reconnue mais ' . (! $mrz['surname'] ? 'le nom' : 'la date de naissance') . ' n\'a pas pu être lu(e) : reprenez la photo du recto sans reflet (évitez le flash et la lumière directe), carte bien à plat.',
+            ]];
+        }
         if (! $mrz['checks_ok']) {
             $reasons[] = 'Pièce illisible ou non authentique : les codes de contrôle de la bande de lecture ne correspondent pas. Reprenez une photo plus nette.';
         }
-        if (! $this->sameName($fullName, $mrz['surname'], $mrz['given_names'])) {
+        if (! $this->sameName($fullName, $mrz['surname'], $mrz['given_names'], $viz)) {
             $reasons[] = 'Le nom saisi (« ' . trim($fullName) . ' ») ne correspond pas à celui de la pièce (« ' . trim($mrz['given_names'] . ' ' . $mrz['surname']) . ' »).';
         }
         if (! $dateOfBirth) {
@@ -48,7 +56,7 @@ class IdDocumentCheck
         }
 
         return ['ok' => ! $reasons, 'reasons' => $reasons, 'document' => [
-            'type' => $mrz['format'] === 'TD3' ? 'passport' : 'id_card',
+            'type' => $mrz['format'] === 'TD3' ? 'passport' : ($viz ? 'niu_card' : 'id_card'),
             'number' => $mrz['number'],
             'country' => $mrz['country'],
             'nationality' => $mrz['nationality'],
@@ -152,13 +160,89 @@ class IdDocumentCheck
         ];
     }
 
+    // ------------------------------------------------------------ Carte NIU (Congo)
+
+    /**
+     * Carte d'identité NIU (Numéro d'Identification Unique) du Congo : pas de bande MRZ.
+     * Champs lus sur le texte imprimé : NIU (P + chiffres + lettre), Nom(s), Prénom(s),
+     * Date de naissance, N° document, date d'expiration si présente.
+     */
+    public function parseNiu(string ...$texts): ?array
+    {
+        $raw = implode("\n", $texts);
+        $lines = array_values(array_filter(array_map(fn ($l) => trim(preg_replace('/\s+/', ' ', strtoupper(Str::ascii($l)))), preg_split('/\R/', $raw)), fn ($l) => $l !== ''));
+        $all = implode("\n", $lines);
+        $niu = preg_match('/\bP\s?([0-9O]{10,16})\s?([A-Z])\b/', $all, $m) ? 'P' . strtr($m[1], ['O' => '0']) . $m[2] : null;
+        if (! $niu && ! preg_match('/IDENTIFICATION\s+UNIQUE|\bNIU\b/', $all)) {
+            return null;
+        }
+
+        $isLabel = fn (string $l) => (bool) preg_match('/\b(NOM|NOMS|PRENOM|PRENOMS|SURNAME|GIVEN|NAISSANCE|BIRTH|CREATION|LIEU|NATIONALIT|ADRESSE|DOCUMENT|EXPIR|VALID|SEXE|PROFESSION|DELIVR|NUMERO)\b/', $l);
+        // Valeur d'un champ : sur la même ligne après l'étiquette, sinon la ligne suivante qui n'est pas une étiquette
+        $field = function (string $labelRe, string $valueRe) use ($lines, $isLabel): ?string {
+            foreach ($lines as $i => $l) {
+                if (! preg_match($labelRe, $l)) {
+                    continue;
+                }
+                $after = trim(preg_replace('/^.*?' . trim($labelRe, '/') . '[A-Z()]*\s*(\/[^A-Z0-9]*[A-Z ()]*)?[:\s]*/', '', $l));
+                if ($after !== '' && preg_match($valueRe, $after, $mm) && ! $isLabel($after)) {
+                    return trim($mm[0]);
+                }
+                for ($j = $i + 1; $j <= min($i + 2, count($lines) - 1); $j++) {
+                    if (! $isLabel($lines[$j]) && preg_match($valueRe, $lines[$j], $mm)) {
+                        return trim($mm[0]);
+                    }
+                }
+            }
+            return null;
+        };
+        $name = '/^[A-Z][A-Z\' -]{1,60}$/';
+        $surname = $field('/\bNOMS?\b(?!.*PRENOM)/', $name);
+        $given = $field('/\bPRENOMS?\b/', $name);
+        $dateRe = '/\b(\d{2})[.\/\- ](\d{2})[.\/\- ](\d{4}|\d{2})\b/';
+        $dob = $field('/NAISSANCE|BIRTH/', $dateRe);
+        if (! $dob && preg_match($dateRe, $all, $dm)) {
+            $dob = $dm[0]; // première date de la carte = naissance
+        }
+        $exp = $field('/EXPIR|VALIDIT|VALABLE/', $dateRe);
+        $doc = $field('/DOCUMENT/', '/\b[A-Z]\d{6,9}[A-Z]?\b/');
+
+        return [
+            'format' => 'NIU',
+            'country' => 'COG',
+            'number' => $doc ?? $niu,
+            'niu' => $niu,
+            'nationality' => str_contains($all, 'COG') ? 'COG' : null,
+            'date_of_birth' => $dob ? self::vizDate($dob, true) : null,
+            'sex' => null,
+            'expiry' => $exp ? self::vizDate($exp, false) : null,
+            'surname' => $surname ? trim(preg_replace('/\s+/', ' ', $surname)) : '',
+            'given_names' => $given ? trim(preg_replace('/\s+/', ' ', $given)) : '',
+            'checks_ok' => true, // pas de code de contrôle sur la face imprimée
+        ];
+    }
+
+    /** « 30.07.78 » / « 30/07/1978 » → 1978-07-30 */
+    protected static function vizDate(string $s, bool $birth): ?string
+    {
+        if (! preg_match('/(\d{2})[.\/\- ](\d{2})[.\/\- ](\d{4}|\d{2})/', $s, $m)) {
+            return null;
+        }
+        $y = (int) $m[3];
+        if (strlen($m[3]) === 2) {
+            $now = (int) now()->format('y');
+            $y = $birth ? ($y > $now ? 1900 + $y : 2000 + $y) : 2000 + $y;
+        }
+        return checkdate((int) $m[2], (int) $m[1], $y) ? sprintf('%04d-%02d-%02d', $y, (int) $m[2], (int) $m[1]) : null;
+    }
+
     // ------------------------------------------------------------ Comparaison des noms
 
     /**
      * Même personne : mêmes mots (ordre libre, sans accents ni tirets). La MRZ peut couper
      * un nom trop long : le dernier mot de la MRZ peut n'être que le début du mot saisi.
      */
-    public function sameName(string $entered, string $surname, string $given): bool
+    public function sameName(string $entered, string $surname, string $given, bool $ocrTolerant = false): bool
     {
         $e = self::words($entered);
         $m = self::words($surname . ' ' . $given);
@@ -168,6 +252,15 @@ class IdDocumentCheck
         $left = $e;
         foreach ($m as $i => $w) {
             $k = array_search($w, $left, true);
+            if ($k === false && $ocrTolerant && strlen($w) >= 4) {
+                // Carte lue sur sa face imprimée (hologrammes, reflets) : une lettre mal lue est tolérée
+                foreach ($left as $kk => $x) {
+                    if (abs(strlen($x) - strlen($w)) <= 1 && levenshtein($x, $w) <= 1) {
+                        $k = $kk;
+                        break;
+                    }
+                }
+            }
             if ($k === false && $i === array_key_last($m)) {
                 // mot tronqué par la MRZ
                 foreach ($left as $kk => $x) {
