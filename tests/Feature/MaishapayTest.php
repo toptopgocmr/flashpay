@@ -59,6 +59,8 @@ class MaishapayTest extends TestCase
                 str_contains($path, '/services/') => Http::response(['status' => 'success', 'data' => ['transaction_id' => $id, 'payment_status' => 'PENDING']], 201),
                 str_ends_with($path, '/transaction/rest/v2/check') => Http::response(['status_code' => 200, 'transactionId' => (int) $req['transactionId'],
                     'transactionStatus' => $this->status[(string) $req['transactionId']] ?? 'PENDING']),
+                str_contains($path, '/postRedirectionRequest/') => Http::response('<html><body><form id="payment_confirmation" action="https://secureacceptance.cybersource.com/pay" method="post">'
+                    . '<input type="hidden" name="access_key" value="ak"><input type="hidden" name="amount" value="5000"><input type="hidden" name="signature" value="sig=="></form></body></html>', 200, ['Content-Type' => 'text/html']),
                 default => Http::response(['message' => 'not found'], 404),
             };
         });
@@ -137,7 +139,12 @@ class MaishapayTest extends TestCase
         \App\Models\LinkedAccount::create(['user_id' => $u->id, 'type' => 'card', 'card_brand' => 'Mastercard', 'card_last4' => '5100', 'account_holder' => 'JEAN TEST', 'is_default' => true, 'country' => 'CG']);
         $tx = app(\App\Services\Peex\PeexFlowService::class)->cardDeposit($u->fresh(), 5000);
         $this->assertSame('awaiting_card', $tx->stage);
-        $this->assertStringStartsWith('https://marchand.maishapay.test/api/collect/postRedirectionRequest/', $tx->meta['checkout_url']);
+        $this->assertStringStartsWith('https://marchand.maishapay.test/api/collect/postRedirectionRequest/', $tx->meta['maishapay_page']);
+        // Le téléphone ouvre la page relais OfficePay, qui envoie le formulaire signé à CyberSource
+        $this->assertStringEndsWith('/api/card-checkout/' . $tx->source_external_ref . '/pay', $tx->meta['checkout_url']);
+        $this->get('/api/card-checkout/' . $tx->source_external_ref . '/pay')->assertOk()
+            ->assertSee('action="https://secureacceptance.cybersource.com/pay"', false)->assertSee('name="signature" value="sig=="', false);
+        $this->assertNull(\App\Http\Controllers\CardCheckoutController::cybersourceForm('<form action="https://evil.example/pay"><input name="signature" value="x"><input name="access_key" value="y"></form>'));
         $card = collect($this->sent)->first(fn ($r) => str_ends_with($r->url(), 'store/card'));
         $this->assertSame(['CARD', 'MASTERCARD'], [$card['paymentChannel']['channel'], $card['paymentChannel']['provider']]);
         $this->assertStringContainsString('/api/card-checkout/', $card['paymentChannel']['callbackUrl']);

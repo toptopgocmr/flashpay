@@ -74,6 +74,7 @@ Route::post('/webhooks/peex/{service?}', [WebhookController::class, 'peex'])
 
 // Page de paiement carte simulée (FLASHPAY_CARD_DRIVER=sandbox)
 Route::get('/card-checkout/{token}', [\App\Http\Controllers\CardCheckoutController::class, 'show']);
+Route::get('/card-checkout/{token}/pay', [\App\Http\Controllers\CardCheckoutController::class, 'pay'])->middleware('throttle:30,1');
 Route::post('/card-checkout/{token}', [\App\Http\Controllers\CardCheckoutController::class, 'submit'])->middleware('throttle:30,1');
 
 // Banque partenaire : retrait GAB avec code OfficePay (header X-Partner-Key)

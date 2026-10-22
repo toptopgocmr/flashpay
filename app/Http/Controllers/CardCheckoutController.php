@@ -31,6 +31,69 @@ class CardCheckoutController extends Controller
         return response($this->page($tx, $token));
     }
 
+    /**
+     * Carte MaishaPay : relais de la page de paiement. Le serveur lit la page MaishaPay (formulaire
+     * signé vers CyberSource) et la renvoie depuis le domaine OfficePay ; le téléphone n'ouvre que
+     * OfficePay puis CyberSource. Échec de lecture → page MaishaPay d'origine.
+     */
+    public function pay(string $token)
+    {
+        $tx = $this->cards->pending($token);
+        $page = (string) ($tx->meta['maishapay_page'] ?? '');
+        if (($tx->meta['card_driver'] ?? null) !== 'maishapay' || $page === '' || $tx->stage !== 'awaiting_card') {
+            return redirect('/api/card-checkout/' . $token);
+        }
+        try {
+            $res = \Illuminate\Support\Facades\Http::timeout(20)->withHeaders(['Accept' => 'text/html'])->get($page);
+            $form = $res->successful() ? self::cybersourceForm((string) $res->body()) : null;
+        } catch (\Throwable $e) {
+            $form = null;
+            \Illuminate\Support\Facades\Log::warning('MaishaPay : page carte illisible, redirection directe', ['reference' => $tx->reference, 'error' => $e->getMessage()]);
+        }
+        if (! $form) {
+            return redirect()->away($page);
+        }
+        $inputs = collect($form['fields'])->map(fn ($v, $k) => '<input type="hidden" name="' . e($k) . '" value="' . e($v) . '">')->implode('');
+        $amount = number_format((int) $tx->amount + (int) $tx->fee, 0, ',', ' ') . ' ' . e($tx->currency);
+        return response('<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            . '<title>Paiement par carte · OfficePay</title><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f5f7;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;color:#111827}'
+            . '.c{background:#fff;border-radius:20px;padding:28px 24px;max-width:360px;width:88%;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.08)}'
+            . '.b{font-size:24px;font-weight:700;color:#1E3A8A}.b span{color:#E11D2A}.s{width:34px;height:34px;border:4px solid #e5e7eb;border-top-color:#1E3A8A;border-radius:50%;margin:20px auto;animation:r 1s linear infinite}'
+            . '@keyframes r{to{transform:rotate(360deg)}}button{background:#1E3A8A;color:#fff;border:0;border-radius:24px;padding:12px 22px;font-size:15px;font-weight:600;margin-top:8px}p{color:#6b7280;font-size:14px}</style></head>'
+            . '<body><div class="c"><div class="b">Office<span>Pay</span></div><div class="s"></div><p>Paiement de <b>' . $amount . '</b><br>Ouverture de la page sécurisée de votre banque (Visa / Mastercard)…</p>'
+            . '<form id="f" method="post" action="' . e($form['action']) . '">' . $inputs . '<button type="submit">Continuer</button></form></div>'
+            . '<script>setTimeout(function(){document.getElementById("f").submit()},400)</script></body></html>');
+    }
+
+    /** Formulaire CyberSource (action + champs) d'une page MaishaPay ; null si absent ou hôte inattendu. */
+    public static function cybersourceForm(string $html): ?array
+    {
+        if ($html === '') {
+            return null;
+        }
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="utf-8"?>' . $html);
+        libxml_clear_errors();
+        foreach ($dom->getElementsByTagName('form') as $f) {
+            $action = (string) $f->getAttribute('action');
+            $host = strtolower((string) parse_url($action, PHP_URL_HOST));
+            if (parse_url($action, PHP_URL_SCHEME) !== 'https' || ! ($host === 'cybersource.com' || str_ends_with($host, '.cybersource.com'))) {
+                continue;
+            }
+            $fields = [];
+            foreach ($f->getElementsByTagName('input') as $i) {
+                if ($i->getAttribute('name') !== '') {
+                    $fields[$i->getAttribute('name')] = $i->getAttribute('value');
+                }
+            }
+            if (isset($fields['signature'], $fields['access_key'])) {
+                return ['action' => $action, 'fields' => $fields];
+            }
+        }
+        return null;
+    }
+
     public function submit(Request $request, string $token)
     {
         abort_unless(($this->cards->pending($token)->meta['card_driver'] ?? null) === 'sandbox' && ! CardPaymentService::sandboxForbidden(), 404);

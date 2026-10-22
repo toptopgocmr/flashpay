@@ -117,7 +117,13 @@ class CardPaymentService
                 $this->complete($token, false, null, 'MaishaPay n\'a pas renvoyé de page de paiement');
                 throw new CashNetworkException("{$label} est momentanément indisponible. Aucun montant n'a été débité.");
             }
-            $tx->update(['meta' => array_merge($tx->fresh()->meta ?? [], ['checkout_url' => $res['url'], 'return_url' => $ourUrl, 'maishapay_ref' => $reference])]);
+            // Carte : la page MaishaPay n'est qu'un formulaire signé envoyé à CyberSource. OfficePay le relaie
+            // depuis son propre domaine (/pay) : sur certains téléphones / réseaux, la connexion sécurisée à
+            // marchand.maishapay.online échoue (ERR_SSL_PROTOCOL_ERROR) alors que CyberSource répond.
+            $tx->update(['meta' => array_merge($tx->fresh()->meta ?? [], [
+                'checkout_url' => $crypto ? $res['url'] : $ourUrl . '/pay', 'maishapay_page' => $res['url'],
+                'return_url' => $ourUrl, 'maishapay_ref' => $reference,
+            ])]);
         }
 
         return $tx->fresh();
