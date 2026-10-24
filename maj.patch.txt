@@ -1,3 +1,0 @@
-$t = [IO.File]::ReadAllText("$PWD\maj.patch") -replace "`r`n", "`n"
-[IO.File]::WriteAllText("$PWD\maj.patch", $t, (New-Object Text.UTF8Encoding $false))
-git apply --check maj.patch
