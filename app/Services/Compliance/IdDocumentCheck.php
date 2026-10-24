@@ -17,46 +17,48 @@ use Illuminate\Support\Str;
  */
 class IdDocumentCheck
 {
+    /** Types de pièces acceptés à l'inscription. */
+    public const TYPES = [
+        'passport' => 'passeport',
+        'id_card' => 'carte d\'identité',
+        'niu_card' => 'carte NIU',
+        'residence_card' => 'carte de résident',
+        'driving_licence' => 'permis de conduire',
+    ];
+
     /**
      * @param list<string> $texts textes lus sur le recto et le verso
-     * @return array{ok:bool, reasons:list<string>, document:?array}
+     * @param ?string $type type choisi par le client (self::TYPES), null = détection automatique
+     * @return array{ok:bool, code:?string, title:?string, reasons:list<string>, read:?array, document:?array}
      */
-    public function verify(array $texts, string $fullName, ?string $dateOfBirth): array
+    public function verify(array $texts, string $fullName, ?string $dateOfBirth, ?string $type = null): array
     {
-        // 1. Bande MRZ (passeports, cartes à bande « <<< ») ; 2. carte NIU du Congo (pas de bande :
-        //    lecture des champs imprimés « Nom », « Prénom », « Date de naissance », « N° document »)
-        $mrz = $this->parse(...$texts) ?? $this->parseNiu(...$texts);
+        $type = isset(self::TYPES[$type]) ? $type : null;
+        $label = $type ? self::TYPES[$type] : 'pièce';
+        // 1. Bande MRZ (passeports, cartes et titres de séjour à bande « <<< ») ;
+        // 2. champs imprimés (carte NIU du Congo, carte de résident, permis de conduire, carte sans bande)
+        $mrz = $this->parse(...$texts) ?? $this->parsePrinted($type, ...$texts);
+        $fail = fn (string $code, string $title, array $reasons, ?array $read = null) => ['ok' => false, 'code' => $code, 'title' => $title, 'reasons' => $reasons, 'read' => $read, 'document' => null];
+        $tips = 'Reprenez la photo du recto bien à plat, sans flash ni reflet (hologramme), avec les 4 coins visibles et le texte net.';
         if (! $mrz) {
-            return ['ok' => false, 'document' => null, 'reasons' => [
-                'Pièce illisible : ni la bande de lecture (lignes « <<< ») ni les champs de la carte NIU n\'ont pu être lus. Reprenez la photo du recto bien à plat, sans reflet ni flash, avec les 4 coins visibles.',
-            ]];
+            $what = match ($type) {
+                'passport' => 'la bande de lecture du passeport (2 lignes « <<< » en bas de la page photo)',
+                'id_card' => 'la bande de lecture (lignes « <<< ») ni les champs Nom, Prénom et Date de naissance',
+                'niu_card' => 'les champs de la carte NIU (numéro NIU, Nom, Prénom, Date de naissance)',
+                'residence_card' => 'la bande de lecture ni les champs Nom, Prénom et Date de naissance de la carte de résident',
+                'driving_licence' => 'les champs du permis (1. Nom, 2. Prénoms, 3. Date de naissance)',
+                default => 'ni bande de lecture (« <<< ») ni champs Nom, Prénom et Date de naissance',
+            };
+            return $fail('id_unreadable', 'Pièce illisible', ["Aucune information n'a pu être lue sur la {$label} : {$what} introuvable. {$tips}"]);
         }
 
-        $reasons = [];
-        $viz = $mrz['format'] === 'NIU';
-        if ($viz && (! $mrz['surname'] || ! $mrz['date_of_birth'])) {
-            return ['ok' => false, 'document' => null, 'reasons' => [
-                'Carte NIU reconnue mais ' . (! $mrz['surname'] ? 'le nom' : 'la date de naissance') . ' n\'a pas pu être lu(e) : reprenez la photo du recto sans reflet (évitez le flash et la lumière directe), carte bien à plat.',
-            ]];
-        }
-        if (! $mrz['checks_ok']) {
-            $reasons[] = 'Pièce illisible ou non authentique : les codes de contrôle de la bande de lecture ne correspondent pas. Reprenez une photo plus nette.';
-        }
-        if (! $this->sameName($fullName, $mrz['surname'], $mrz['given_names'], $viz)) {
-            $reasons[] = 'Le nom saisi (« ' . trim($fullName) . ' ») ne correspond pas à celui de la pièce (« ' . trim($mrz['given_names'] . ' ' . $mrz['surname']) . ' »).';
-        }
-        if (! $dateOfBirth) {
-            $reasons[] = 'Indiquez votre date de naissance.';
-        } elseif (! $mrz['date_of_birth'] || $mrz['date_of_birth'] !== Carbon::parse($dateOfBirth)->toDateString()) {
-            $reasons[] = 'La date de naissance saisie (' . Carbon::parse($dateOfBirth)->format('d/m/Y') . ') ne correspond pas à celle de la pièce'
-                . ($mrz['date_of_birth'] ? ' (' . Carbon::parse($mrz['date_of_birth'])->format('d/m/Y') . ').' : '.');
-        }
-        if ($mrz['expiry'] && Carbon::parse($mrz['expiry'])->endOfDay()->isPast()) {
-            $reasons[] = 'Pièce expirée le ' . Carbon::parse($mrz['expiry'])->format('d/m/Y') . ' : utilisez une pièce en cours de validité.';
-        }
-
-        return ['ok' => ! $reasons, 'reasons' => $reasons, 'document' => [
-            'type' => $mrz['format'] === 'TD3' ? 'passport' : ($viz ? 'niu_card' : 'id_card'),
+        $doc = [
+            'type' => match (true) {
+                $mrz['format'] === 'TD3' => 'passport',
+                in_array($mrz['format'], ['NIU', 'RES', 'DL', 'CNI'], true) => ['NIU' => 'niu_card', 'RES' => 'residence_card', 'DL' => 'driving_licence', 'CNI' => 'id_card'][$mrz['format']],
+                $type === 'residence_card' => 'residence_card',
+                default => 'id_card',
+            },
             'number' => $mrz['number'],
             'country' => $mrz['country'],
             'nationality' => $mrz['nationality'],
@@ -65,7 +67,48 @@ class IdDocumentCheck
             'date_of_birth' => $mrz['date_of_birth'],
             'expiry' => $mrz['expiry'],
             'sex' => $mrz['sex'],
-        ]];
+        ];
+        $read = [
+            'type' => self::TYPES[$doc['type']],
+            'name' => trim($mrz['given_names'] . ' ' . $mrz['surname']) ?: null,
+            'date_of_birth' => $mrz['date_of_birth'] ? Carbon::parse($mrz['date_of_birth'])->format('d/m/Y') : null,
+            'expiry' => $mrz['expiry'] ? Carbon::parse($mrz['expiry'])->format('d/m/Y') : null,
+        ];
+        $printed = ! in_array($mrz['format'], ['TD1', 'TD2', 'TD3'], true);
+        if ($printed && (! $mrz['surname'] || ! $mrz['date_of_birth'])) {
+            $missing = implode(' et ', array_filter([! $mrz['surname'] ? 'le nom' : null, ! $mrz['date_of_birth'] ? 'la date de naissance' : null]));
+            return $fail('id_unreadable', 'Pièce mal lue', [ucfirst(self::TYPES[$doc['type']]) . " reconnue, mais {$missing} n'a pas pu être lu. {$tips}"], $read);
+        }
+
+        $reasons = [];
+        $mismatch = false;
+        if (! $mrz['checks_ok']) {
+            $reasons[] = 'Bande de lecture mal lue ou pièce non authentique : les codes de contrôle de la bande « <<< » ne correspondent pas. Reprenez une photo plus nette de la bande.';
+        }
+        if (! $this->sameName($fullName, $mrz['surname'], $mrz['given_names'], $printed)) {
+            $mismatch = true;
+            $reasons[] = 'Nom différent : vous avez saisi « ' . trim($fullName) . ' », la pièce indique « ' . $read['name'] . ' ». Saisissez exactement le nom et les prénoms de la pièce.';
+        }
+        if (! $dateOfBirth) {
+            $reasons[] = 'Indiquez votre date de naissance.';
+        } elseif (! $mrz['date_of_birth'] || $mrz['date_of_birth'] !== Carbon::parse($dateOfBirth)->toDateString()) {
+            $mismatch = true;
+            $reasons[] = 'Date de naissance différente : vous avez saisi le ' . Carbon::parse($dateOfBirth)->format('d/m/Y')
+                . ($read['date_of_birth'] ? ', la pièce indique le ' . $read['date_of_birth'] . '.' : ', elle n\'a pas pu être lue sur la pièce.');
+        }
+        $expired = $mrz['expiry'] && Carbon::parse($mrz['expiry'])->endOfDay()->isPast();
+        if ($expired) {
+            $reasons[] = 'Pièce expirée le ' . $read['expiry'] . ' : utilisez une pièce en cours de validité.';
+        }
+        if (! $reasons) {
+            return ['ok' => true, 'code' => null, 'title' => null, 'reasons' => [], 'read' => $read, 'document' => $doc];
+        }
+        [$code, $title] = match (true) {
+            $mismatch => ['id_mismatch', 'Les informations saisies ne correspondent pas à votre ' . self::TYPES[$doc['type']]],
+            $expired => ['id_expired', 'Pièce expirée'],
+            default => ['id_unreadable', 'Pièce mal lue'],
+        };
+        return $fail($code, $title, $reasons, $read);
     }
 
     // ------------------------------------------------------------ Lecture MRZ
@@ -163,22 +206,32 @@ class IdDocumentCheck
     // ------------------------------------------------------------ Carte NIU (Congo)
 
     /**
-     * Carte d'identité NIU (Numéro d'Identification Unique) du Congo : pas de bande MRZ.
-     * Champs lus sur le texte imprimé : NIU (P + chiffres + lettre), Nom(s), Prénom(s),
-     * Date de naissance, N° document, date d'expiration si présente.
+     * Pièces sans bande MRZ, lues sur le texte imprimé :
+     *  - carte NIU du Congo (Numéro d'Identification Unique : P + chiffres + lettre) ;
+     *  - carte de résident / titre de séjour ;
+     *  - permis de conduire (champs numérotés 1. Nom, 2. Prénoms, 3. Naissance, 4b. Expiration, 5. Numéro) ;
+     *  - carte d'identité sans bande (si le client l'a choisie).
      */
-    public function parseNiu(string ...$texts): ?array
+    public function parsePrinted(?string $type, string ...$texts): ?array
     {
         $raw = implode("\n", $texts);
         $lines = array_values(array_filter(array_map(fn ($l) => trim(preg_replace('/\s+/', ' ', strtoupper(Str::ascii($l)))), preg_split('/\R/', $raw)), fn ($l) => $l !== ''));
         $all = implode("\n", $lines);
         $niu = preg_match('/\bP\s?([0-9O]{10,16})\s?([A-Z])\b/', $all, $m) ? 'P' . strtr($m[1], ['O' => '0']) . $m[2] : null;
-        if (! $niu && ! preg_match('/IDENTIFICATION\s+UNIQUE|\bNIU\b/', $all)) {
+
+        $kind = match (true) {
+            $type === 'driving_licence' || (! $type && (bool) preg_match('/PERMIS DE CONDUIRE|DRIVING LICEN|DRIVER/', $all)) => 'DL',
+            $type === 'residence_card' || (! $type && (bool) preg_match('/RESIDEN|SEJOUR/', $all)) => 'RES',
+            $type === 'niu_card' || (bool) $niu || (bool) preg_match('/IDENTIFICATION\s+UNIQUE|\bNIU\b/', $all) => 'NIU',
+            $type === 'id_card' || (bool) preg_match('/CARTE NATIONALE D.?IDENTITE|IDENTITY CARD/', $all) => 'CNI',
+            default => null,
+        };
+        if (! $kind) {
             return null;
         }
 
-        $isLabel = fn (string $l) => (bool) preg_match('/\b(NOM|NOMS|PRENOM|PRENOMS|SURNAME|GIVEN|NAISSANCE|BIRTH|CREATION|LIEU|NATIONALIT|ADRESSE|DOCUMENT|EXPIR|VALID|SEXE|PROFESSION|DELIVR|NUMERO)\b/', $l);
-        // Valeur d'un champ : sur la même ligne après l'étiquette, sinon la ligne suivante qui n'est pas une étiquette
+        $isLabel = fn (string $l) => (bool) preg_match('/\b(NOM|NOMS|PRENOM|PRENOMS|SURNAME|GIVEN|NAISSANCE|BIRTH|CREATION|LIEU|NATIONALIT|ADRESSE|DOCUMENT|EXPIR|VALID|VALABLE|SEXE|PROFESSION|DELIVR|NUMERO|CATEGOR|PERMIS|TITRE)\b/', $l);
+        // Valeur d'un champ : sur la même ligne après l'étiquette, sinon une des 2 lignes suivantes qui n'est pas une étiquette
         $field = function (string $labelRe, string $valueRe) use ($lines, $isLabel): ?string {
             foreach ($lines as $i => $l) {
                 if (! preg_match($labelRe, $l)) {
@@ -196,23 +249,35 @@ class IdDocumentCheck
             }
             return null;
         };
+        // Permis : champ numéroté « 1. NGASSAKI », « 4B. 01.01.2030 »
+        $numbered = function (string $n, string $valueRe) use ($lines): ?string {
+            foreach ($lines as $l) {
+                if (preg_match('/^' . $n . '(?:[.)]\s*|\s+)(.+)$/', $l, $m) && preg_match($valueRe, trim($m[1]), $mm)) {
+                    return trim($mm[0]);
+                }
+            }
+            return null;
+        };
         $name = '/^[A-Z][A-Z\' -]{1,60}$/';
-        $surname = $field('/\bNOMS?\b(?!.*PRENOM)/', $name);
-        $given = $field('/\bPRENOMS?\b/', $name);
         $dateRe = '/\b(\d{2})[.\/\- ](\d{2})[.\/\- ](\d{4}|\d{2})\b/';
-        $dob = $field('/NAISSANCE|BIRTH/', $dateRe);
-        if (! $dob && preg_match($dateRe, $all, $dm)) {
-            $dob = $dm[0]; // première date de la carte = naissance
+        $dl = $kind === 'DL';
+
+        $surname = ($dl ? $numbered('1', $name) : null) ?? $field('/\bNOMS?\b(?!.*PRENOM)|\bSURNAME\b/', $name);
+        $given = ($dl ? $numbered('2', $name) : null) ?? $field('/\bPRENOMS?\b|\bGIVEN\b/', $name);
+        $dob = ($dl ? $numbered('3', $dateRe) : null) ?? $field('/NAISSANCE|BIRTH|\bNEE? LE\b/', $dateRe);
+        if (! $dob && ! $dl && preg_match($dateRe, $all, $dm)) {
+            $dob = $dm[0]; // NIU / résident : la première date de la carte est la naissance
         }
-        $exp = $field('/EXPIR|VALIDIT|VALABLE/', $dateRe);
-        $doc = $field('/DOCUMENT/', '/\b[A-Z]\d{6,9}[A-Z]?\b/');
+        $exp = ($dl ? $numbered('4B', $dateRe) : null) ?? $field('/EXPIR|VALIDIT|VALABLE|JUSQU/', $dateRe);
+        $doc = ($dl ? $numbered('5', '/\b[A-Z0-9][A-Z0-9 -]{4,20}\b/') : null)
+            ?? $field('/DOCUMENT|\bN[O0°]\.?\s|NUMERO|TITRE|PERMIS N/', '/\b[A-Z]{0,3}\d{5,12}[A-Z]?\b/');
 
         return [
-            'format' => 'NIU',
-            'country' => 'COG',
+            'format' => $kind,
+            'country' => $kind === 'NIU' || str_contains($all, 'CONGO') ? 'COG' : null,
             'number' => $doc ?? $niu,
             'niu' => $niu,
-            'nationality' => str_contains($all, 'COG') ? 'COG' : null,
+            'nationality' => preg_match('/\bCOG\b/', $all) ? 'COG' : null,
             'date_of_birth' => $dob ? self::vizDate($dob, true) : null,
             'sex' => null,
             'expiry' => $exp ? self::vizDate($exp, false) : null,
@@ -220,6 +285,13 @@ class IdDocumentCheck
             'given_names' => $given ? trim(preg_replace('/\s+/', ' ', $given)) : '',
             'checks_ok' => true, // pas de code de contrôle sur la face imprimée
         ];
+    }
+
+    /** Compatibilité : carte NIU. */
+    public function parseNiu(string ...$texts): ?array
+    {
+        $r = $this->parsePrinted('niu_card', ...$texts);
+        return $r && ($r['niu'] || preg_match('/IDENTIFICATION\s+UNIQUE|\bNIU\b/', strtoupper(Str::ascii(implode("\n", $texts))))) ? $r : null;
     }
 
     /** « 30.07.78 » / « 30/07/1978 » → 1978-07-30 */
