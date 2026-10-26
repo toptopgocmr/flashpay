@@ -272,6 +272,10 @@ class IdDocumentCheck
         $doc = ($dl ? $numbered('5', '/\b[A-Z0-9][A-Z0-9 -]{4,20}\b/') : null)
             ?? $field('/DOCUMENT|\bN[O0°]\.?\s|NUMERO|TITRE|PERMIS N/', '/\b[A-Z]{0,3}\d{5,12}[A-Z]?\b/');
 
+        if (! $surname && ! $given && ! $dob && ! $niu) {
+            return null; // rien de lisible : pièce illisible
+        }
+
         return [
             'format' => $kind,
             'country' => $kind === 'NIU' || str_contains($all, 'CONGO') ? 'COG' : null,

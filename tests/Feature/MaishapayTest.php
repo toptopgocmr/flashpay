@@ -148,6 +148,10 @@ class MaishapayTest extends TestCase
         $card = collect($this->sent)->first(fn ($r) => str_ends_with($r->url(), 'store/card'));
         $this->assertSame(['CARD', 'MASTERCARD'], [$card['paymentChannel']['channel'], $card['paymentChannel']['provider']]);
         $this->assertStringContainsString('/api/card-checkout/', $card['paymentChannel']['callbackUrl']);
+        // MaishaPay ajoute ses frais carte au payeur sur sa page : ils ne sont pas demandés une 2e fois
+        $collect = (int) data_get($tx->meta, 'fee_breakdown.collect', 0);
+        $this->assertGreaterThan(0, $collect);
+        $this->assertSame((int) $tx->amount + (int) $tx->fee - $collect, (int) $card['order']['amount']);
 
         // Retour du client sur la page OfficePay : statut relu → wallet crédité
         $req = RemitRequest::where('method', 'checkout')->firstOrFail();
@@ -189,16 +193,43 @@ class MaishapayTest extends TestCase
         $this->assertSame(2, RemitRequest::where('reference', $tx->reference)->count());
     }
 
+    public function test_mobile_money_collect_not_validated_fails_then_reopens_if_validated_late(): void
+    {
+        $admin = $this->admin();
+        $this->actingAs($admin, 'sanctum')->postJson('/api/admin/corridors/CG', ['partner' => 'maishapay'])->assertOk();
+        $u = $this->user('242061112277');
+        $tx = app(\App\Services\Peex\PeexFlowService::class)->deposit($u, '+242061112277', 1000);
+        $this->assertSame('awaiting_source', $tx->stage);
+
+        // Pas de validation sur le téléphone : échec au bout du délai, lu par l'app
+        $this->travel(3)->minutes();
+        $this->actingAs($u, 'sanctum')->getJson("/api/pay/transactions/{$tx->id}/status")->assertOk()->assertJsonPath('status', 'failed');
+
+        // MaishaPay confirme plus tard : l'argent est pris → opération rouverte, wallet crédité
+        $this->status[$this->idOf($tx->reference . '-C')] = 'SUCCESS';
+        Cache::flush();
+        Artisan::call('remit:sync');
+        $this->assertSame('successful', $tx->fresh()->status);
+        $this->assertSame(1000, (int) $u->wallet->fresh()->balance);
+    }
+
     public function test_card_payment_left_pending_is_cancelled_then_reopened_if_paid_late(): void
     {
         $u = $this->user('242069990055');
         \App\Models\LinkedAccount::create(['user_id' => $u->id, 'type' => 'card', 'card_brand' => 'Visa', 'card_last4' => '4242', 'account_holder' => 'JEAN TEST', 'is_default' => true, 'country' => 'CG']);
         $tx = app(\App\Services\Peex\PeexFlowService::class)->cardDeposit($u->fresh(), 2000);
+        // L'app affiche le compte à rebours de la page de paiement
+        $this->actingAs($u, 'sanctum')->getJson("/api/pay/transactions/{$tx->id}/status")->assertOk()
+            ->assertJsonPath('validation_timeout_seconds', 300)->assertJsonPath('validation_seconds_left', fn ($v) => $v > 290);
         $this->travel(3)->minutes();
         Artisan::call('flashpay:maintenance');
+        $this->assertSame('awaiting_card', $tx->fresh()->stage);
+        // Délai dépassé : la lecture du statut par l'app conclut sans attendre le planificateur
+        $this->travel(3)->minutes();
+        $this->actingAs($u, 'sanctum')->getJson("/api/pay/transactions/{$tx->id}/status")->assertOk()->assertJsonPath('status', 'failed');
         $tx = $tx->fresh();
         $this->assertSame('failed', $tx->status);
-        $this->assertStringContainsString('2 minutes', $tx->failure_reason);
+        $this->assertStringContainsString('5 minutes', $tx->failure_reason);
 
         // MaishaPay confirme finalement le paiement : opération rouverte, wallet crédité
         $req = RemitRequest::where('method', 'checkout')->firstOrFail();

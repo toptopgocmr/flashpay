@@ -275,6 +275,8 @@ class CashNetworkService
                 if ($agentWallet->country && $agentWallet->country !== $v->country) {
                     throw new CashNetworkException('Ce bon doit être retiré dans un autre pays.');
                 }
+                // Sécurité : l'expéditeur a confirmé ce retrait dans son application
+                $this->assertSenderApproved($v, $agentUser);
 
                 // L'agent a remis les espèces : son float électronique est reconstitué
                 $this->wallets->credit($agentWallet, $v->amount);
@@ -346,6 +348,116 @@ class CashNetworkService
             }
         });
         return $n;
+    }
+
+    // =================================================== Confirmation de l'expéditeur (retrait cash)
+
+    /** Minutes pendant lesquelles une demande puis une confirmation restent valables. */
+    public const CONFIRM_TTL_MINUTES = 15;
+
+    public static function senderConfirmationRequired(): bool
+    {
+        return (bool) config('security.cash_out_sender_confirmation', true);
+    }
+
+    /**
+     * L'agent a saisi le code. Retrait pour une autre personne : il saisit aussi le nom et le
+     * téléphone du bénéficiaire (lus sur sa pièce), vérifiés ici. L'expéditeur reçoit ensuite
+     * une demande de confirmation dans l'application ; sans son accord, pas de paiement.
+     */
+    public function requestSenderConfirmation(string $code, User $agentUser, ?string $name = null, ?string $phone = null): WithdrawalVoucher
+    {
+        $v = DB::transaction(function () use ($code, $agentUser, $name, $phone) {
+            $v = WithdrawalVoucher::where('code_hash', WithdrawalVoucher::hash($code))->lockForUpdate()->first();
+            if (! $v || $v->channel !== 'cash_pickup' || ! $v->isRedeemable()) {
+                throw new CashNetworkException('Code de retrait invalide, déjà utilisé ou expiré.');
+            }
+            $agent = $agentUser->agent;
+            if (! $agent || $agent->validation_status !== 'approved') {
+                throw new CashNetworkException('Agent non validé.', 403);
+            }
+            if ($agentUser->wallet?->country && $agentUser->wallet->country !== $v->country) {
+                throw new CashNetworkException('Ce bon doit être retiré dans un autre pays.');
+            }
+            if ((int) $v->failed_attempts >= 5) {
+                throw new CashNetworkException('Trop d\'essais erronés sur ce retrait : il est bloqué. Le client peut l\'annuler et en créer un nouveau.', 423);
+            }
+
+            if ($v->isThirdParty()) {
+                if (trim((string) $name) === '' || trim((string) $phone) === '') {
+                    throw new CashNetworkException('Retrait pour une autre personne : saisissez le nom et le numéro de téléphone du bénéficiaire.');
+                }
+                $okName = app(\App\Services\Compliance\IdDocumentCheck::class)->sameName((string) $name, (string) $v->beneficiary_name, '', true);
+                $expected = \App\Support\Phone::candidates((string) $v->beneficiary_phone);
+                $okPhone = $v->beneficiary_phone === null || array_intersect(\App\Support\Phone::candidates((string) $phone), $expected) !== [];
+                if (! $okName || ! $okPhone) {
+                    $v->increment('failed_attempts');
+                    throw new CashNetworkException(match (true) {
+                        ! $okName && ! $okPhone => 'Le nom et le téléphone du bénéficiaire ne correspondent pas à ce retrait.',
+                        ! $okName => 'Le nom du bénéficiaire ne correspond pas à ce retrait (vérifiez sa pièce d\'identité).',
+                        default => 'Le téléphone du bénéficiaire ne correspond pas à ce retrait.',
+                    });
+                }
+            }
+
+            // Déjà confirmé pour cet agent et encore valable : rien à redemander
+            if ($v->confirmation_status === 'approved' && (int) $v->confirmation_agent_user_id === $agentUser->id
+                && $v->confirmed_at?->gt(now()->subMinutes(self::CONFIRM_TTL_MINUTES))) {
+                return $v;
+            }
+            $v->update(['confirmation_status' => 'awaiting_sender', 'confirmation_agent_user_id' => $agentUser->id,
+                'confirmation_requested_at' => now(), 'confirmed_at' => null]);
+
+            return $v->fresh();
+        });
+
+        if ($v->confirmation_status === 'awaiting_sender') {
+            $who = $v->isThirdParty() ? $v->beneficiary_name : 'vous';
+            $amount = number_format($v->amount, 0, ',', ' ') . ' ' . $v->currency;
+            $agentLabel = $agentUser->full_name . ($agentUser->agent?->agent_code ? ' (' . $agentUser->agent->agent_code . ')' : '');
+            app(\App\Services\Notifications\NotificationService::class)->toUser($v->owner, 'cash_out_confirm', 'Confirmez votre retrait',
+                "L'agent {$agentLabel} s'apprête à remettre {$amount} à {$who}. Ouvrez OfficePay pour confirmer ou refuser. Si vous n'êtes pas à l'origine de ce retrait, refusez.",
+                ['severity' => 'warning', 'data' => ['voucher_id' => $v->id, 'action' => 'cash_out_confirm'],
+                    'sms' => "OfficePay: retrait de {$amount} en cours chez l'agent {$agentLabel}. Confirmez ou refusez dans l'application."]);
+        }
+
+        return $v;
+    }
+
+    /** Réponse de l'expéditeur (après PIN) : autorise ou refuse le paiement par l'agent. */
+    public function senderConfirm(WithdrawalVoucher $voucher, User $user, bool $approve): WithdrawalVoucher
+    {
+        return DB::transaction(function () use ($voucher, $user, $approve) {
+            $v = WithdrawalVoucher::whereKey($voucher->id)->lockForUpdate()->first();
+            if ((int) $v->user_id !== $user->id) {
+                throw new CashNetworkException('Ce retrait ne vous appartient pas.', 403);
+            }
+            if ($v->confirmation_status !== 'awaiting_sender' || ! $v->isRedeemable()
+                || ! $v->confirmation_requested_at?->gt(now()->subMinutes(self::CONFIRM_TTL_MINUTES))) {
+                throw new CashNetworkException('Aucune demande de retrait en attente de votre confirmation (déjà traitée ou expirée).');
+            }
+            $v->update(['confirmation_status' => $approve ? 'approved' : 'rejected', 'confirmed_at' => now()]);
+            \App\Support\Audit::log($approve ? 'cash_out.sender_approved' : 'cash_out.sender_rejected', $v, ['agent_user_id' => $v->confirmation_agent_user_id], $user->id);
+
+            return $v->fresh();
+        });
+    }
+
+    /** Le paiement par l'agent exige l'accord de l'expéditeur, donné pour CET agent et encore valable. */
+    protected function assertSenderApproved(WithdrawalVoucher $v, User $agentUser): void
+    {
+        if (! self::senderConfirmationRequired()) {
+            return;
+        }
+        $fresh = $v->confirmed_at?->gt(now()->subMinutes(self::CONFIRM_TTL_MINUTES));
+        if ($v->confirmation_status === 'approved' && (int) $v->confirmation_agent_user_id === $agentUser->id && $fresh) {
+            return;
+        }
+        throw new CashNetworkException(match (true) {
+            $v->confirmation_status === 'rejected' => 'L\'expéditeur a refusé ce retrait : ne remettez pas les espèces.',
+            $v->confirmation_status === 'awaiting_sender' && (int) $v->confirmation_agent_user_id === $agentUser->id => 'En attente de la confirmation de l\'expéditeur dans son application.',
+            default => 'Demandez d\'abord la confirmation de l\'expéditeur.',
+        }, 409);
     }
 
     // =================================================== Helpers

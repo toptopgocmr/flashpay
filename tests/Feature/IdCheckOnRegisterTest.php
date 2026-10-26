@@ -103,4 +103,26 @@ class IdCheckOnRegisterTest extends TestCase
         // Une lettre mal lue (hologramme) est tolérée
         $this->postJson('/api/auth/register/verify-id', $base + ['id_text_front' => str_replace('KANI', 'KANl', $recto)])->assertOk();
     }
+
+    public function test_driving_licence_and_residence_card_and_exact_reasons(): void
+    {
+        $permis = "REPUBLIQUE DU CONGO\nPERMIS DE CONDUIRE\n1. NGASSAKI ZONI\n2. BASILE MARIUS\n3. 12.05.1980 BRAZZAVILLE\n4a. 10.01.2022\n4b. 10.01.2032\n5. PC-2022-004517\n9. B";
+        $base = ['phone' => '242061112255', 'full_name' => 'Basile Marius Ngassaki Zoni', 'date_of_birth' => '1980-05-12'];
+        $this->postJson('/api/auth/register/verify-id', $base + ['document_type' => 'driving_licence', 'id_text_front' => $permis])
+            ->assertOk()->assertJsonPath('document.type', 'driving_licence');
+
+        $res = "REPUBLIQUE DU CONGO\nCARTE DE RESIDENT\nNom / Surname\nDIALLO\nPrénoms / Given names\nAMADOU\nDate de naissance\n04/11/1990\nNationalité\nSEN\nValable jusqu'au\n01/06/2029\nN° R0045871";
+        $r = ['phone' => '242061112266', 'full_name' => 'Amadou Diallo', 'date_of_birth' => '1990-11-04'];
+        $this->postJson('/api/auth/register/verify-id', $r + ['document_type' => 'residence_card', 'id_text_front' => $res])
+            ->assertOk()->assertJsonPath('document.type', 'residence_card');
+
+        // Motif exact : ce qui a été lu est renvoyé, avec un titre précis
+        $this->postJson('/api/auth/register/verify-id', array_merge($r, ['date_of_birth' => '1990-11-05']) + ['document_type' => 'residence_card', 'id_text_front' => $res])
+            ->assertStatus(422)->assertJsonPath('code', 'id_mismatch')->assertJsonPath('read.date_of_birth', '04/11/1990')
+            ->assertJsonPath('read.name', 'AMADOU DIALLO');
+        $this->postJson('/api/auth/register/verify-id', $r + ['document_type' => 'driving_licence', 'id_text_front' => 'photo floue'])
+            ->assertStatus(422)->assertJsonPath('code', 'id_unreadable')->assertJsonPath('title', 'Pièce illisible');
+        $this->postJson('/api/auth/register/verify-id', $r + ['document_type' => 'residence_card', 'id_text_front' => str_replace('01/06/2029', '01/06/2021', $res)])
+            ->assertStatus(422)->assertJsonPath('code', 'id_expired');
+    }
 }

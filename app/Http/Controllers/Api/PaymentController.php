@@ -206,8 +206,10 @@ class PaymentController extends Controller
                 }
             }
             $transaction->refresh();
-            // Délai de validation dépassé : on conclut sans attendre le planificateur
+            // Délai de validation dépassé (téléphone ou page carte) : on conclut sans attendre le planificateur
             app(\App\Services\Peex\PendingTimeoutService::class)->expireIfStale($transaction);
+            $transaction->refresh();
+            app(\App\Services\Payments\CardPaymentService::class)->expireIfAbandoned($transaction);
             $transaction->refresh();
         }
 
@@ -331,9 +333,12 @@ class PaymentController extends Controller
                 default => $tx->failure_reason ?: 'Opération échouée.',
             },
             // Compte à rebours « Validez sur le téléphone » (secondes restantes)
-            'validation_expires_at' => ($d = \App\Services\Peex\PendingTimeoutService::deadline($tx))?->toIso8601String(),
+            // (« Validez sur le téléphone » ou page de paiement carte / crypto)
+            'validation_expires_at' => ($d = \App\Services\Peex\PendingTimeoutService::deadline($tx) ?? \App\Services\Payments\CardPaymentService::deadline($tx))?->toIso8601String(),
             'validation_seconds_left' => $d ? (int) max(0, now()->diffInSeconds($d, false)) : null,
-            'validation_timeout_seconds' => \App\Services\Peex\PendingTimeoutService::timeoutSeconds(),
+            'validation_timeout_seconds' => $tx->stage === 'awaiting_card'
+                ? \App\Services\Payments\CardPaymentService::timeoutMinutes() * 60
+                : \App\Services\Peex\PendingTimeoutService::timeoutSeconds(),
             'created_at' => $tx->created_at,
             'completed_at' => $tx->completed_at,
         ];

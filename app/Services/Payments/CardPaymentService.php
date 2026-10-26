@@ -96,12 +96,18 @@ class CardPaymentService
                 $user = $tx->initiator;
                 $names = preg_split('/\s+/', trim((string) ($user?->full_name ?: 'Client OfficePay'))) ?: ['Client'];
                 $client = app(\App\Services\Maishapay\MaishapayClient::class);
+                // MaishaPay ajoute lui-même ses frais au payeur sur sa page : on ne les demande pas deux fois
+                $charge = (int) $tx->amount + (int) $tx->fee;
+                $collectFee = (int) data_get($tx->meta, 'fee_breakdown.collect', 0);
+                if ($collectFee > 0 && $collectFee < $charge && \App\Support\PartnerFees::payerBorne($crypto ? 'maishapay_crypto' : 'maishapay_card')) {
+                    $charge -= $collectFee;
+                }
                 $res = $crypto ? $client->collectCrypto($reference, [
-                    'amount' => (int) $tx->amount + (int) $tx->fee, 'currency' => $tx->currency, 'asset' => $tx->meta['crypto_asset'] ?? null,
+                    'amount' => $charge, 'currency' => $tx->currency, 'asset' => $tx->meta['crypto_asset'] ?? null,
                     'first_name' => array_shift($names), 'last_name' => implode(' ', $names) ?: 'OfficePay',
                     'phone' => $user?->phone, 'email' => $user?->email, 'return_url' => $ourUrl,
                 ]) : $client->collectCard($reference, [
-                    'amount' => (int) $tx->amount + (int) $tx->fee, 'currency' => $tx->currency, 'brand' => $tx->meta['card_brand'] ?? null,
+                    'amount' => $charge, 'currency' => $tx->currency, 'brand' => $tx->meta['card_brand'] ?? null,
                     'first_name' => array_shift($names), 'last_name' => implode(' ', $names) ?: 'OfficePay',
                     'phone' => $user?->phone, 'email' => $user?->email, 'address' => $user ? ($user->getAttributes()['address'] ?? null) : null, 'city' => $user ? ($user->getAttributes()['city'] ?? null) : null,
                     'return_url' => $ourUrl,
@@ -211,12 +217,38 @@ class CardPaymentService
      * puis annulés après FLASHPAY_CARD_TIMEOUT_MINUTES (2 min par défaut). Un paiement confirmé
      * plus tard par la passerelle rouvre l'opération (voir complete()).
      */
-    public function expireAbandoned(?int $minutes = null): int
+    public static function timeoutMinutes(): int
     {
-        $minutes ??= max(2, (int) config('payment_methods.card_checkout_timeout_minutes', 2));
+        return max(2, (int) config('payment_methods.card_checkout_timeout_minutes', 5));
+    }
+
+    /** Échéance de la page de paiement carte / crypto (compte à rebours dans l'app). */
+    public static function deadline(Transaction $tx): ?\Illuminate\Support\Carbon
+    {
+        if ($tx->status !== 'processing' || $tx->stage !== 'awaiting_card' || ! $tx->created_at) {
+            return null;
+        }
+        return $tx->created_at->copy()->addMinutes(self::timeoutMinutes());
+    }
+
+    /** Lecture du statut par l'app : délai dépassé → statut relu chez la passerelle puis annulation, sans attendre le planificateur. */
+    public function expireIfAbandoned(Transaction $tx): Transaction
+    {
+        $d = self::deadline($tx);
+        if (! $d || $d->isFuture()) {
+            return $tx;
+        }
+        $this->expireAbandoned(null, $tx->id);
+        return $tx->fresh();
+    }
+
+    public function expireAbandoned(?int $minutes = null, ?int $onlyId = null): int
+    {
+        $minutes ??= self::timeoutMinutes();
         $n = 0;
         Transaction::where('status', 'processing')->where('stage', 'awaiting_card')
             ->where('created_at', '<', now()->subMinutes($minutes))
+            ->when($onlyId, fn ($q) => $q->whereKey($onlyId))
             ->each(function (Transaction $tx) use (&$n, $minutes) {
                 if (in_array($tx->meta['card_driver'] ?? null, ['wacepay', 'maishapay'], true)) {
                     $tx = ($tx->meta['card_driver'] ?? null) === 'maishapay' ? $this->syncMaishapay($tx) : $this->syncWacepay($tx);

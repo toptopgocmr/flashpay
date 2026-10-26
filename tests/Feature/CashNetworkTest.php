@@ -98,7 +98,19 @@ class CashNetworkTest extends TestCase
         $this->assertSame(39900, $client->wallet->fresh()->balance);
 
         $this->actingAs($agent, "sanctum");
-        $this->getJson("/api/agent/vouchers/{$code}")->assertOk()->assertJsonPath('amount', 10000)->assertJsonPath('code', null);
+        $this->getJson("/api/agent/vouchers/{$code}")->assertOk()->assertJsonPath('amount', 10000)->assertJsonPath('code', null)
+            ->assertJsonPath('third_party', false);
+        // Sans l'accord de l'expéditeur : pas de paiement
+        $this->postJson('/api/agent/vouchers/redeem', ['code' => $code])->assertStatus(409);
+        $this->postJson('/api/agent/vouchers/confirm-request', ['code' => $code])->assertStatus(202)->assertJsonPath('confirmation_status', 'awaiting_sender');
+        $this->postJson('/api/agent/vouchers/redeem', ['code' => $code])->assertStatus(409);
+
+        $this->actingAs($client, "sanctum");
+        $vid = $this->getJson('/api/pay/vouchers')->assertOk()->assertJsonPath('0.confirmation_status', 'awaiting_sender')->json('0.id');
+        $this->postJson("/api/pay/vouchers/{$vid}/confirm", ['approve' => true])->assertOk()->assertJsonPath('confirmation_status', 'approved');
+
+        $this->actingAs($agent, "sanctum");
+        $this->getJson("/api/agent/vouchers/{$code}")->assertJsonPath('confirmation_status', 'approved');
         $this->postJson('/api/agent/vouchers/redeem', ['code' => $code])->assertOk();
         $this->postJson('/api/agent/vouchers/redeem', ['code' => $code])->assertStatus(422);
         $this->assertSame(10050, $agent->wallet->fresh()->balance); // montant + 50 % des frais
@@ -106,6 +118,41 @@ class CashNetworkTest extends TestCase
         // Compte d'attente des bons soldé
         $bal = LedgerEntry::where('account', 'flashpay:vouchers')->get()->sum(fn ($e) => $e->type === 'credit' ? $e->amount : -$e->amount);
         $this->assertSame(0, (int) $bal);
+    }
+
+    public function test_third_party_withdrawal_needs_name_phone_and_sender_approval(): void
+    {
+        $client = $this->mk('client', '242061111111', 50000);
+        $agent = $this->mk('agent', '242063333333', 0);
+        $other = $this->mk('agent', '242064444444', 0);
+
+        $this->actingAs($client, "sanctum");
+        $code = $this->postJson('/api/pay/vouchers', ['channel' => 'cash_pickup', 'amount' => 10000, 'country' => 'CG',
+            'beneficiary_name' => 'Kloé Makaya', 'beneficiary_phone' => '+242 06 555 44 33'])->assertCreated()->json('code');
+
+        $this->actingAs($agent, "sanctum");
+        // L'agent ne voit pas le bénéficiaire : il le saisit depuis la pièce
+        $this->getJson("/api/agent/vouchers/{$code}")->assertJsonPath('third_party', true)->assertJsonPath('beneficiary_name', null);
+        $this->postJson('/api/agent/vouchers/confirm-request', ['code' => $code])->assertStatus(422);
+        $this->postJson('/api/agent/vouchers/confirm-request', ['code' => $code, 'beneficiary_name' => 'Paul Makaya', 'beneficiary_phone' => '065554433'])->assertStatus(422);
+        $this->postJson('/api/agent/vouchers/confirm-request', ['code' => $code, 'beneficiary_name' => 'Makaya Kloe', 'beneficiary_phone' => '060000000'])->assertStatus(422);
+        $this->postJson('/api/agent/vouchers/confirm-request', ['code' => $code, 'beneficiary_name' => 'Makaya Kloe', 'beneficiary_phone' => '+242065554433'])->assertStatus(202);
+
+        // Refus de l'expéditeur : l'agent ne peut pas payer
+        $this->actingAs($client, "sanctum");
+        $vid = $this->getJson('/api/pay/vouchers')->json('0.id');
+        $this->postJson("/api/pay/vouchers/{$vid}/confirm", ['approve' => false])->assertOk()->assertJsonPath('confirmation_status', 'rejected');
+        $this->actingAs($agent, "sanctum");
+        $this->postJson('/api/agent/vouchers/redeem', ['code' => $code])->assertStatus(409);
+
+        // Nouvelle demande, accord : seul l'agent qui a demandé peut payer
+        $this->postJson('/api/agent/vouchers/confirm-request', ['code' => $code, 'beneficiary_name' => 'Kloe Makaya', 'beneficiary_phone' => '065554433'])->assertStatus(202);
+        $this->actingAs($client, "sanctum");
+        $this->postJson("/api/pay/vouchers/{$vid}/confirm", ['approve' => true])->assertOk();
+        $this->actingAs($other, "sanctum");
+        $this->postJson('/api/agent/vouchers/redeem', ['code' => $code])->assertStatus(409);
+        $this->actingAs($agent, "sanctum");
+        $this->postJson('/api/agent/vouchers/redeem', ['code' => $code])->assertOk()->assertJsonPath('beneficiary_name', 'Kloé Makaya');
     }
 
     public function test_voucher_cancel_and_expiry_refund(): void

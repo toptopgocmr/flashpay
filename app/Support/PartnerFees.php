@@ -55,6 +55,8 @@ class PartnerFees
         // PEEX production : 2,5 % constatés sur la collecte Congo (réponse « fees » de PEEX, 16/10/2026)
         'peex_collect' => ['pct' => 2.5, 'fixed' => 0, 'countries' => []],
         'digitwace_collect' => ['pct' => 3.5, 'fixed' => 0, 'countries' => []],
+        // MaishaPay carte : 4,5 % ajoutés au payeur sur la page de paiement (207 → 216,32 constaté le 23/10/2026)
+        'maishapay_card' => ['pct' => 4.5, 'fixed' => 0, 'countries' => []],
         'digitwace_payout' => ['pct' => 0, 'fixed' => 0, 'countries' => [
             'CG' => ['pct' => 0, 'fixed' => 1500],
             'CM' => ['pct' => 0, 'fixed' => 1500],
@@ -64,6 +66,19 @@ class PartnerFees
             'CD' => ['pct' => 1.75, 'fixed' => 0],
         ]],
     ];
+
+    /**
+     * Frais facturés par le partenaire AU PAYEUR, en plus du montant demandé (WacePay collecte,
+     * MaishaPay carte / crypto) : calcul simple (pas « brut ») et montant envoyé = total − ces frais.
+     */
+    public static function payerBorne(?string $key): bool
+    {
+        return match ($key) {
+            'digitwace_collect' => config('flashpay.digitwace.collect_fee_bearer', 'payer') === 'payer',
+            'maishapay_card', 'maishapay_crypto' => config('flashpay.maishapay.card_fee_bearer', 'payer') === 'payer',
+            default => false,
+        };
+    }
 
     protected const FEE_KEYS = ['fees', 'fee', 'fee_amount', 'feeamount', 'fees_amount', 'feesamount', 'transaction_fee', 'transactionfee',
         'transactionfees', 'transaction_fees', 'total_fees', 'totalfees', 'totalfee', 'commission', 'charges', 'charge', 'frais', 'partner_fee'];

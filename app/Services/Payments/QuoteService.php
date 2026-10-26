@@ -296,7 +296,7 @@ class QuoteService
         if ($collectKey) {
             // WacePay (payeur) : commission = % du montant demandé, ajoutée par WacePay au débit ;
             // autres partenaires : déduite de ce que OfficePay reçoit → calcul « brut » (gross-up).
-            $payerBorne = $collectKey === 'digitwace_collect' && config('flashpay.digitwace.collect_fee_bearer', 'payer') === 'payer';
+            $payerBorne = \App\Support\PartnerFees::payerBorne($collectKey);
             $out['collect'] = \App\Support\PartnerFees::quoteFee($collectKey, $amount + $flashpayFee + $out['payout'], $src['country'] ?? null, $rates, gross: ! $payerBorne);
             $p = explode('_', $collectKey)[0];
             $out['collect_partner'] = $names[$p] ?? ucfirst($p);

@@ -67,8 +67,11 @@ class RemitStatusHandler
             }
             if ($req->method === 'deposit') {
                 // Collecte pawaPay (passerelle nationale) : le paiement du client
+                // Validée APRÈS l'expiration du délai : l'argent est pris, on rouvre et on mène l'opération à terme
                 return tap($req->fresh(), fn () => $status === 'successful'
-                    ? $this->switch->onSourceConfirmed($tx)
+                    ? ($tx->fresh()->status === 'failed'
+                        ? app(\App\Services\Peex\PendingTimeoutService::class)->reopenAfterLateSuccess($tx)
+                        : $this->switch->onSourceConfirmed($tx))
                     : $this->switch->onSourceFailed($tx, $name . ' : ' . $reason));
             }
             $status === 'successful'

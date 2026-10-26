@@ -31,6 +31,8 @@ return [
     ))),
     // Confirmation par le client (OTP) d'un dépôt agent saisi par numéro (§3.1.3)
     'cash_in_client_confirmation' => (bool) env('FLASHPAY_CASHIN_CONFIRM', true),
+    // Retrait cash : l'expéditeur confirme dans l'application avant que l'agent remette les espèces
+    'cash_out_sender_confirmation' => (bool) env('FLASHPAY_CASHOUT_CONFIRM', true),
     // E-commerce : clés de production seulement après la recette sandbox (ou validation manuelle)
     'require_sandbox_validation' => (bool) env('FLASHPAY_REQUIRE_SANDBOX_VALIDATION', true),
     // Remboursement en boutique : délai max (jours) après le paiement (§13.2)

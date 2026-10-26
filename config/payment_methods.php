@@ -33,7 +33,7 @@ return [
     'card_driver' => env('FLASHPAY_CARD_DRIVER', filter_var(env('PEEX_SANDBOX', true), FILTER_VALIDATE_BOOLEAN) ? 'sandbox' : 'none'),
     'card_countries' => $list('FLASHPAY_CARD_COUNTRIES', '*'),
     // Page de paiement carte / crypto non finalisée : annulée après ce délai (statut relu avant)
-    'card_checkout_timeout_minutes' => (int) env('FLASHPAY_CARD_TIMEOUT_MINUTES', 2),
+    'card_checkout_timeout_minutes' => (int) env('FLASHPAY_CARD_TIMEOUT_MINUTES', 5),
 
     // Crypto-monnaies (Bitcoin, Ethereum, USDT…) via MaishaPay « Crypto Money » : recharge du wallet.
     // Désactivé par défaut : l'API crypto MaishaPay n'est pas encore publiée et la COBAC (mai 2022)

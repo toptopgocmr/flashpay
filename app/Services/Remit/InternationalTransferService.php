@@ -269,7 +269,7 @@ class InternationalTransferService
             ? (['wacepay' => 'digitwace_card', 'maishapay' => 'maishapay_card'][config('payment_methods.card_driver')] ?? 'card')
             : ($src['collect_partner'] ?? 'peex') . '_collect';
         try {
-            $payerBorne = $key === 'digitwace_collect' && config('flashpay.digitwace.collect_fee_bearer', 'payer') === 'payer';
+            $payerBorne = \App\Support\PartnerFees::payerBorne($key);
             return \App\Support\PartnerFees::quoteFee($key, $gross, $src['country'], \App\Support\PartnerFees::rates(), gross: ! $payerBorne);
         } catch (\Throwable) {
             return 0;

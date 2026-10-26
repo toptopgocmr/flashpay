@@ -43,12 +43,18 @@ class CardCheckoutController extends Controller
         if (($tx->meta['card_driver'] ?? null) !== 'maishapay' || $page === '' || $tx->stage !== 'awaiting_card') {
             return redirect('/api/card-checkout/' . $token);
         }
+        $form = null;
         try {
-            $res = \Illuminate\Support\Facades\Http::timeout(20)->withHeaders(['Accept' => 'text/html'])->get($page);
+            // En-têtes de navigateur : certaines pages renvoient un contenu différent à un client « inconnu »
+            $res = \Illuminate\Support\Facades\Http::timeout(20)->withHeaders([
+                'Accept' => 'text/html,application/xhtml+xml', 'Accept-Language' => 'fr-FR,fr;q=0.9',
+                'User-Agent' => 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36',
+            ])->get($page);
             $form = $res->successful() ? self::cybersourceForm((string) $res->body()) : null;
+            \Illuminate\Support\Facades\Log::info('MaishaPay carte : page relais', ['reference' => $tx->reference, 'http' => $res->status(),
+                'cybersource_form' => (bool) $form, 'body_start' => $form ? null : mb_substr(strip_tags((string) $res->body()), 0, 300)]);
         } catch (\Throwable $e) {
-            $form = null;
-            \Illuminate\Support\Facades\Log::warning('MaishaPay : page carte illisible, redirection directe', ['reference' => $tx->reference, 'error' => $e->getMessage()]);
+            \Illuminate\Support\Facades\Log::warning('MaishaPay carte : page illisible, redirection directe', ['reference' => $tx->reference, 'error' => $e->getMessage()]);
         }
         if (! $form) {
             return redirect()->away($page);

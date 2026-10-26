@@ -194,6 +194,9 @@ return [
     */
     'maishapay' => [
         'enabled' => (bool) env('MAISHAPAY_ENABLED', false),
+        // Carte / crypto : MaishaPay ajoute ses frais AU PAYEUR sur sa page (ex. 207 → 216,32, soit 4,5 %).
+        // « payer » : ces frais sont affichés dans le devis mais retirés du montant envoyé à MaishaPay.
+        'card_fee_bearer' => env('MAISHAPAY_CARD_FEE_BEARER', 'payer'),
         'base_url' => env('MAISHAPAY_BASE_URL', 'https://marchand.maishapay.online/api'),
         'public_key' => env('MAISHAPAY_PUBLIC_KEY', ''),
         'secret_key' => env('MAISHAPAY_SECRET_KEY', ''),

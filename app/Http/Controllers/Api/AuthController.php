@@ -142,6 +142,7 @@ class AuthController extends Controller
             'phone' => 'required|string|unique:users,phone',
             'full_name' => 'required|string|max:150',
             'date_of_birth' => 'required|date|before:today',
+            'document_type' => 'nullable|in:' . implode(',', array_keys(\App\Services\Compliance\IdDocumentCheck::TYPES)),
             'id_text_front' => 'nullable|string|max:20000',
             'id_text_back' => 'nullable|string|max:20000',
             'id_card' => 'nullable|file|image|max:8192',
@@ -154,10 +155,13 @@ class AuthController extends Controller
                 $texts[] = $t;
             }
         }
-        $r = $check->verify($texts, $v['full_name'], $v['date_of_birth']);
+        $r = $check->verify($texts, $v['full_name'], $v['date_of_birth'], $v['document_type'] ?? null);
         if (! $r['ok']) {
-            \Illuminate\Support\Facades\Log::info('Inscription : pièce refusée', ['phone' => substr($v['phone'], 0, 6) . '…', 'reasons' => $r['reasons']]);
-            return response()->json(['message' => $r['reasons'][0], 'reasons' => $r['reasons'], 'code' => 'id_mismatch'], 422);
+            \Illuminate\Support\Facades\Log::info('Inscription : pièce refusée', ['phone' => substr($v['phone'], 0, 6) . '…', 'type' => $v['document_type'] ?? null,
+                'code' => $r['code'], 'reasons' => $r['reasons'], 'read' => $r['read'] ? array_intersect_key($r['read'], ['type' => 1, 'expiry' => 1]) : null]);
+            // Motif exact : titre (illisible / différent / expiré), raisons détaillées, et ce qui a été lu sur la pièce
+            return response()->json(['message' => $r['title'] . ' : ' . $r['reasons'][0], 'title' => $r['title'], 'reasons' => $r['reasons'],
+                'code' => $r['code'], 'read' => $r['read']], 422);
         }
         $token = Str::random(40);
         \Illuminate\Support\Facades\Cache::put('idcheck:' . $token, [

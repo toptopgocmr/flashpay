@@ -203,6 +203,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/vouchers', [CashController::class, 'vouchers']);
         Route::post('/vouchers', [CashController::class, 'createVoucher'])->middleware(['cap:withdraw,settlement', 'one_op', 'pin', 'idempotent']);
         Route::post('/vouchers/{voucher}/cancel', [CashController::class, 'cancelVoucher'])->middleware('pin');
+        Route::post('/vouchers/{voucher}/confirm', [CashController::class, 'confirmVoucher'])->middleware(['throttle:20,1', 'pin']);
         // « Activer l'international » : KYC de l'expéditeur collecté une fois
         Route::get('/international/profile', [\App\Http\Controllers\Api\RemitProfileController::class, 'show']);
         Route::put('/international/profile', [\App\Http\Controllers\Api\RemitProfileController::class, 'update'])->middleware('throttle:30,1,remit-profile');
@@ -300,6 +301,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/dashboard', [AgentController::class, 'dashboard']);
         Route::post('/cash-in', [CashController::class, 'agentCashIn'])->middleware(['cap:cash_in', 'pin', 'idempotent']);
         Route::get('/vouchers/{code}', [CashController::class, 'agentVoucher'])->middleware(['throttle:20,1', 'cap:cash_out']);
+        Route::post('/vouchers/confirm-request', [CashController::class, 'agentRequestConfirmation'])->middleware(['throttle:20,1', 'cap:cash_out']);
         Route::post('/vouchers/redeem', [CashController::class, 'agentRedeem'])->middleware(['throttle:20,1', 'cap:cash_out', 'pin']);
         Route::post('/cash-out', [AgentController::class, 'cashOut'])->middleware(['cap:cash_out', 'one_op', 'pin']);
         Route::get('/history', [AgentController::class, 'history']);

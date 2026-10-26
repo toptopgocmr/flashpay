@@ -82,6 +82,16 @@ class CashController extends Controller
         ], 201);
     }
 
+    /** Expéditeur : confirme (ou refuse) le retrait que l'agent s'apprête à payer. */
+    public function confirmVoucher(Request $request, WithdrawalVoucher $voucher)
+    {
+        $v = $request->validate(['approve' => 'required|boolean']);
+        $voucher = $this->cash->senderConfirm($voucher, $request->user(), (bool) $v['approve']);
+
+        return response()->json($this->voucherPayload($voucher, true) + ['message' => $voucher->confirmation_status === 'approved'
+            ? 'Retrait confirmé : l\'agent peut remettre les espèces.' : 'Retrait refusé : l\'agent ne remettra pas les espèces.']);
+    }
+
     public function cancelVoucher(Request $request, WithdrawalVoucher $voucher)
     {
         abort_unless($voucher->user_id === $request->user()->id, 403);
@@ -135,7 +145,27 @@ class CashController extends Controller
 
     public function agentVoucher(Request $request, string $code)
     {
-        return response()->json($this->voucherPayload($this->cash->findPendingVoucher($code, 'cash_pickup'), false));
+        $v = $this->cash->findPendingVoucher($code, 'cash_pickup');
+
+        return response()->json($this->agentPayload($v, $request->user()));
+    }
+
+    /**
+     * Agent : demande la confirmation de l'expéditeur. Retrait pour une autre personne :
+     * nom et téléphone du bénéficiaire obligatoires (vérifiés).
+     */
+    public function agentRequestConfirmation(Request $request)
+    {
+        $v = $request->validate([
+            'code' => 'required|string|max:20',
+            'beneficiary_name' => 'nullable|string|max:120',
+            'beneficiary_phone' => 'nullable|string|max:25',
+        ]);
+        $voucher = $this->cash->requestSenderConfirmation($v['code'], $request->user(), $v['beneficiary_name'] ?? null, $v['beneficiary_phone'] ?? null);
+
+        return response()->json($this->agentPayload($voucher, $request->user()) + ['message' => $voucher->confirmation_status === 'approved'
+            ? 'Retrait confirmé par l\'expéditeur.' : 'Demande envoyée : l\'expéditeur doit confirmer dans son application.'],
+            $voucher->confirmation_status === 'approved' ? 200 : 202);
     }
 
     public function agentRedeem(Request $request)
@@ -188,6 +218,21 @@ class CashController extends Controller
         });
     }
 
+    /** Vue agent : le bénéficiaire d'un retrait pour un tiers n'est pas affiché (l'agent le saisit depuis la pièce). */
+    protected function agentPayload(WithdrawalVoucher $v, \App\Models\User $agentUser): array
+    {
+        $third = $v->isThirdParty();
+        $mine = (int) $v->confirmation_agent_user_id === $agentUser->id;
+
+        return array_merge($this->voucherPayload($v, false), [
+            'beneficiary_name' => $third ? null : $v->beneficiary_name,
+            'third_party' => $third,
+            'sender_confirmation_required' => CashNetworkService::senderConfirmationRequired(),
+            // Statut de la confirmation pour CET agent : awaiting_sender | approved | rejected | null
+            'confirmation_status' => $mine ? $v->confirmation_status : null,
+        ]);
+    }
+
     protected function voucherPayload(WithdrawalVoucher $v, bool $withCode): array
     {
         return [
@@ -199,11 +244,21 @@ class CashController extends Controller
             'currency' => $v->currency,
             'status' => $v->status,
             'beneficiary_name' => $v->beneficiary_name,
+            'beneficiary_phone' => $withCode ? $v->beneficiary_phone : null,
             'expires_at' => $v->expires_at,
+            'confirmation_status' => $v->confirmation_status,
+            // Demande en cours : qui veut payer (affiché à l'expéditeur pour qu'il décide)
+            'confirmation_agent' => $withCode && $v->confirmation_status === 'awaiting_sender' ? $this->agentLabel($v->confirmation_agent_user_id) : null,
             'redeemed_at' => $v->redeemed_at,
             // Le code n'est renvoyé qu'à son propriétaire, et seulement tant qu'il est utilisable
             'code' => $withCode && $v->status === 'pending' ? $v->code_encrypted : null,
             'qr' => $withCode && $v->status === 'pending' ? "flashpay://cashout?c={$v->code_encrypted}" : null,
         ];
+    }
+
+    protected function agentLabel(?int $userId): ?string
+    {
+        $u = $userId ? \App\Models\User::with('agent')->find($userId) : null;
+        return $u ? trim($u->full_name . ($u->agent?->agent_code ? ' · ' . $u->agent->agent_code : '')) : null;
     }
 }
