@@ -328,8 +328,16 @@ class SwitchService
         };
     }
 
-    public function onDestinationConfirmed(Transaction $tx): Transaction
+    public function onDestinationConfirmed(Transaction $tx, ?string $rail = null): Transaction
     {
+        if ($this->staleLeg($tx, $rail)) {
+            // Versement confirmé par un partenaire ABANDONNÉ après bascule : double versement possible → support
+            Log::critical('Versement confirmé par un ancien partenaire après bascule : à vérifier (double versement possible)',
+                ['reference' => $tx->reference, 'partner' => $rail, 'current' => $tx->destination_rail]);
+            $tx->forceFill(['meta' => array_merge($tx->fresh()->meta ?? [], ['late_payout_success' => [
+                'partner' => $this->partnerLabel($rail), 'at' => now()->toIso8601String()]])])->save();
+            return $tx->fresh();
+        }
         return $this->withLock($tx, 'awaiting_destination', function (Transaction $tx) {
             [$out, $outCur] = $this->outAmount($tx);
             $this->ledgerService->recordDoubleEntry($tx, 'flashpay:suspense', "{$tx->destination_rail}:{$tx->destination_account}", $out, $outCur);
@@ -337,13 +345,25 @@ class SwitchService
         });
     }
 
-    public function onDestinationFailed(Transaction $tx, string $reason): Transaction
+    public function onDestinationFailed(Transaction $tx, string $reason, ?string $rail = null): Transaction
     {
+        if ($this->staleLeg($tx, $rail)) {
+            // Échec d'un partenaire déjà abandonné (bascule faite) : il ne concerne plus le versement en cours.
+            // L'appliquer rembourserait le client pendant que le nouveau partenaire verse encore.
+            Log::info('Échec d\'un ancien partenaire ignoré (bascule déjà faite)', ['reference' => $tx->reference, 'partner' => $rail, 'current' => $tx->destination_rail]);
+            return $tx->fresh();
+        }
         return $this->withLock($tx, 'awaiting_destination', fn (Transaction $tx) => $this->failover($tx, $reason)
             ?? $this->failAndRefund($tx, (str_starts_with($reason, $this->partnerLabel($tx->destination_rail)) ? '' : $this->partnerLabel($tx->destination_rail) . ' : ') . $reason));
     }
 
     // ------------------------------------------------------------ Helpers
+
+    /** Statut venant d'un partenaire qui n'est plus celui du versement en cours (bascule faite depuis). */
+    protected function staleLeg(Transaction $tx, ?string $rail): bool
+    {
+        return $rail !== null && $tx->destination_rail !== null && $rail !== $tx->destination_rail;
+    }
 
     /** Exécute $fn seulement si la transaction est bien à l'étape attendue (idempotence callback/polling). */
     protected function withLock(Transaction $tx, string $expectedStage, callable $fn): Transaction
@@ -362,7 +382,16 @@ class SwitchService
         }
 
         $locked->stage = $expectedStage;
-        return $fn($locked);
+        try {
+            return $fn($locked);
+        } catch (\Throwable $e) {
+            // Erreur pendant le traitement : on remet l'étape pour qu'une vérification suivante
+            // puisse reprendre (sinon l'opération reste « en attente » pour toujours)
+            Transaction::whereKey($locked->id)->where('status', 'processing')->where('stage', $expectedStage . ':handling')
+                ->update(['stage' => $expectedStage]);
+            Log::error('Traitement interrompu, étape rétablie', ['reference' => $locked->reference, 'stage' => $expectedStage, 'error' => $e->getMessage()]);
+            throw $e;
+        }
     }
 
     protected function complete(Transaction $tx): Transaction

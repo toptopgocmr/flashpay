@@ -334,11 +334,27 @@ class MaishapayClient
         if ($res->successful()) {
             return $json;
         }
-        $msg = (string) (data_get($json, 'message') ?? data_get($json, 'error') ?? data_get($json, 'data.message') ?? $res->reason());
+        $msg = self::errorText($json) ?? $res->reason();
         $raw = self::statusOf($json);
         // 4xx avec statut FAILED / DECLINED = refus certain ; 4xx sans statut = données refusées (rien exécuté)
         throw new RemitException('MaishaPay (HTTP ' . $res->status() . ') : ' . mb_substr($msg, 0, 200), $raw, $res->status(), $json,
             self::mapStatus($raw) === 'failed' || ($res->status() >= 400 && $res->status() < 500 && ! in_array($res->status(), [408, 409, 429], true)));
+    }
+
+    /**
+     * Message d'erreur lisible : message / error, ou « title » + détail de « errors »
+     * (ex. 403 « Insufficient Balance » : « Solde insuffisant. Disponible: 0… »).
+     */
+    public static function errorText(array $json): ?string
+    {
+        $m = data_get($json, 'message') ?? data_get($json, 'error') ?? data_get($json, 'data.message');
+        if (is_string($m) && trim($m) !== '') {
+            return trim($m);
+        }
+        $title = data_get($json, 'title');
+        $details = collect((array) (data_get($json, 'errors') ?? []))->flatten()->filter(fn ($v) => is_scalar($v) && (string) $v !== '')->implode(' ; ');
+        $text = trim(implode(' : ', array_filter([is_string($title) ? $title : null, $details ?: null])));
+        return $text !== '' ? $text : null;
     }
 
     /** Signature d'un webhook (X-MaishaPay-Signature : sha256=HMAC-SHA256 du corps brut). */

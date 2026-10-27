@@ -135,7 +135,7 @@ class PeexStatusHandler
                 ? ($tx->status === 'failed' ? app(PendingTimeoutService::class)->reopenAfterLateSuccess($tx) : $this->switch->onSourceConfirmed($tx))
                 : $this->switch->onSourceFailed($tx, $reason),
             'R' => $ok ? $this->switch->onRefundConfirmed($tx) : $this->switch->onRefundFailed($tx, $reason),
-            default => $ok ? $this->switch->onDestinationConfirmed($tx) : $this->switch->onDestinationFailed($tx, $reason),
+            default => $ok ? $this->switch->onDestinationConfirmed($tx, 'peex') : $this->switch->onDestinationFailed($tx, $reason, 'peex'),
         };
 
         return $req->fresh();

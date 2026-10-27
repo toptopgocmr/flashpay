@@ -138,8 +138,8 @@ class DigitwaceStatusHandler
                 : $this->switch->onRefundFailed($tx, 'WacePay : ' . $reason);
         } elseif ($tx) {
             $status === 'successful'
-                ? $this->switch->onDestinationConfirmed($tx)
-                : $this->switch->onDestinationFailed($tx, 'WacePay : ' . $reason);
+                ? $this->switch->onDestinationConfirmed($tx, 'digitwace')
+                : $this->switch->onDestinationFailed($tx, 'WacePay : ' . $reason, 'digitwace');
         }
         return $req->fresh();
     }

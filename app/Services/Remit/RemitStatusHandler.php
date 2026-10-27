@@ -75,8 +75,8 @@ class RemitStatusHandler
                     : $this->switch->onSourceFailed($tx, $name . ' : ' . $reason));
             }
             $status === 'successful'
-                ? $this->switch->onDestinationConfirmed($tx)
-                : $this->switch->onDestinationFailed($tx, $name . ' : ' . $reason);
+                ? $this->switch->onDestinationConfirmed($tx, $req->partner)
+                : $this->switch->onDestinationFailed($tx, $name . ' : ' . $reason, $req->partner);
         }
         return $req->fresh();
     }
