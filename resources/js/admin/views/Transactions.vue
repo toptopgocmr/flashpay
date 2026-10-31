@@ -78,6 +78,10 @@
           <svg viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1h-2M6 14h12v7H6z"/></svg>
           Reçus<template v-if="selected.size"> ({{ selected.size }})</template>
         </button>
+        <button class="wp-btn" title="Annuler toutes les opérations en attente (rejet + remboursement selon les réponses des partenaires)" :disabled="resolving" @click="resolvePending">
+          <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8 8l8 8M16 8l-8 8"/></svg>
+          {{ resolving ? 'Traitement…' : 'Annuler les en attente' }}
+        </button>
         <ExportButton class="wp-btn primary" filename="transactions" :columns="EXP_COLS" :fetch="expFetch" />
       </div>
     </section>
@@ -333,6 +337,30 @@ try { regionNames = new Intl.DisplayNames(['fr'], { type: 'region' }) } catch { 
 const countryLabel = (iso) => { try { return `${regionNames?.of(iso) || iso} (${iso})` } catch { return iso } }
 
 // Remboursement par le partenaire qui a collecté (PEEX, WacePay, PawaPay) sur le compte débité
+const resolving = ref(false)
+const RESOLVE_LABEL = { 'à annuler': 'annulées (aucun débit)', 'à rejeter': 'rejetées + expéditeur remboursé', 'à rembourser': 'remboursées sur le wallet',
+  'à valider': 'réussies (confirmées par le partenaire)', 'en attente': 'laissées en attente (versement encore ouvert chez un partenaire)',
+  'à vérifier': 'à vérifier (bénéficiaire déjà crédité)', 'ignorée': 'ignorées (retrait / règlement en attente)', erreur: 'en erreur' }
+async function resolvePending() {
+  resolving.value = true
+  try {
+    const { data: sim } = await api.post('/admin/transactions/resolve-pending', { dry_run: true, all: true })
+    if (!sim.data.length) { toast('Aucune opération en attente.', 'ok'); return }
+    const lines = Object.entries(sim.summary).map(([k, n]) => `${n} ${RESOLVE_LABEL[k] || k}`).join(' · ')
+    const ok = await confirmBox(`${sim.data.length} opération(s) en attente : ${lines}. Les réponses des partenaires sont relues avant chaque décision ; un versement encore ouvert chez un partenaire n'est jamais annulé (pas de double versement).`,
+      { title: 'Annuler les opérations en attente', confirmLabel: 'Appliquer', danger: true })
+    if (!ok) return
+    const { data } = await api.post('/admin/transactions/resolve-pending', { dry_run: false, all: true })
+    const done = Object.entries(data.summary).map(([k, n]) => `${k} : ${n}`).join(' · ')
+    toast(`Opérations en attente traitées — ${done}`, data.summary?.erreur ? 'err' : 'ok', 10000)
+    await load(meta.value?.current_page || 1)
+  } catch (e) {
+    toast(e?.response?.data?.message || 'Traitement impossible.', 'err', 8000)
+  } finally {
+    resolving.value = false
+  }
+}
+
 const refunding = ref(false)
 async function refundSource(t) {
   const r = t.refund_source

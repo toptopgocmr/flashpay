@@ -49,6 +49,25 @@ class AdminRefundController extends Controller
      * sur le compte débité ; wallet OfficePay pour une source wallet / carte, ou en repli.
      * Uniquement si le payeur a été débité et que le bénéficiaire n'a pas été crédité.
      */
+    /**
+     * Opérations « En attente » : simulation (dry_run) puis exécution.
+     * all=false : seulement les opérations figées (versement refusé / sans réponse, remboursement, traitement interrompu).
+     * all=true  : annule aussi les collectes et paiements carte en attente (rien n'a été débité).
+     * Un versement encore ouvert chez un partenaire est attendu, sauf include_open (opérations de plus de 24 h).
+     */
+    public function resolvePending(Request $request, \App\Services\Payments\PendingResolver $resolver)
+    {
+        $v = $request->validate(['dry_run' => 'boolean', 'all' => 'boolean', 'include_open' => 'boolean', 'references' => 'array|max:200', 'references.*' => 'string|max:40']);
+        $dry = (bool) ($v['dry_run'] ?? true);
+        $rows = $resolver->candidates(empty($v['references']) ? 2 : 0, (array) ($v['references'] ?? []), 300)
+            ->map(fn ($tx) => $resolver->resolve($tx, (bool) ($v['all'] ?? false), $dry, (bool) ($v['include_open'] ?? false)))->values();
+        if (! $dry) {
+            \App\Support\Audit::log('transactions.resolve_pending', null, ['all' => (bool) ($v['all'] ?? false), 'include_open' => (bool) ($v['include_open'] ?? false),
+                'summary' => $rows->countBy('action')->all(), 'references' => $rows->pluck('reference')->all()], $request->user()->id);
+        }
+        return response()->json(['dry_run' => $dry, 'summary' => $rows->countBy('action'), 'data' => $rows]);
+    }
+
     public function refundSource(Request $request, Transaction $transaction, \App\Services\SwitchService $switch)
     {
         $v = $request->validate(['reason' => 'required|string|max:190']);

@@ -19,6 +19,10 @@ Schedule::command('digitwace:sync coverage')->dailyAt('03:10')->withoutOverlappi
 // Transferts internationaux (WacePay remittance, TerraPay, PawaPay) : statuts en attente.
 Schedule::command('remit:sync')->everyMinute()->withoutOverlapping()->appendOutputTo($scheduleOut);
 
+// Opérations restées « En attente » sans partenaire qui les traite : réussite, ou rejet + remboursement
+// selon les réponses des partenaires (jamais de double versement : un versement ouvert est attendu).
+Schedule::command('transactions:resolve-pending --force')->everyFiveMinutes()->withoutOverlapping()->appendOutputTo($scheduleOut);
+
 // Remboursement des bons de retrait expirés (cash pickup / GAB).
 Schedule::command('vouchers:expire')->everyTenMinutes()->withoutOverlapping()->appendOutputTo($scheduleOut);
 

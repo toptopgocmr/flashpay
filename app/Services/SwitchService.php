@@ -580,14 +580,67 @@ class SwitchService
     /** Versement au bénéficiaire encore en cours chez un partenaire : on attend son statut final (jamais de double paiement). */
     protected function payoutInFlight(Transaction $tx): ?string
     {
-        if ($tx->status === 'processing' && $tx->stage === 'awaiting_destination') {
-            return 'Versement au bénéficiaire encore en cours chez ' . $this->partnerLabel($tx->destination_rail) . ' : attendez son statut final (ou « Vérifier le statut »).';
+        $open = $this->openPayoutPartner($tx);
+        if ($tx->status === 'processing' && str_starts_with((string) $tx->stage, 'awaiting_destination')
+            && ($open || $tx->updated_at?->gt(now()->subMinutes(10)))) {
+            // Bloqué seulement si une demande est encore ouverte chez un partenaire (ou envoi très récent).
+            // Toutes les demandes closes en échec : le remboursement est possible (plus d'opération figée).
+            return 'Versement au bénéficiaire encore en cours chez ' . ($open ?: $this->partnerLabel($tx->destination_rail)) . ' : attendez son statut final (ou « Vérifier le statut »).';
         }
-        $open = \App\Models\DigitwaceRequest::where('transaction_id', $tx->id)->where('operation', 'payout')->whereNull('finalized_at')->whereNotIn('status', ['failed'])->exists()
-            || \App\Models\RemitRequest::where('transaction_id', $tx->id)->whereNotIn('method', ['deposit', 'refund'])->whereNull('finalized_at')->whereNotIn('status', ['failed'])->exists()
-            || \App\Models\PeexRequest::where('transaction_id', $tx->id)->whereNull('finalized_at')->get()
-                ->contains(fn ($r) => PeexConnector::legOf((string) $r->track_id) === 'D' && \App\Models\PeexRequest::normalize($r->status) !== 'failed');
-        return $open ? 'Un versement au bénéficiaire est encore ouvert chez un partenaire : vérifiez son statut avant de rembourser.' : null;
+        return $open ? 'Un versement au bénéficiaire est encore ouvert chez ' . $open . ' : vérifiez son statut avant de rembourser.' : null;
+    }
+
+    /** Partenaire chez qui une demande de versement est encore ouverte (ni finalisée ni en échec), sinon null. */
+    public function openPayoutPartner(Transaction $tx): ?string
+    {
+        if (\App\Models\DigitwaceRequest::where('transaction_id', $tx->id)->where('operation', 'payout')->whereNull('finalized_at')->whereNotIn('status', ['failed'])->exists()) {
+            return $this->partnerLabel('digitwace');
+        }
+        if ($r = \App\Models\RemitRequest::where('transaction_id', $tx->id)->whereNotIn('method', ['deposit', 'refund'])->whereNull('finalized_at')->whereNotIn('status', ['failed'])->first()) {
+            return $this->partnerLabel($r->partner);
+        }
+        $peex = \App\Models\PeexRequest::where('transaction_id', $tx->id)->whereNull('finalized_at')->get()
+            ->contains(fn ($r) => PeexConnector::legOf((string) $r->track_id) === 'D' && \App\Models\PeexRequest::normalize($r->status) !== 'failed');
+        return $peex ? 'PEEX' : null;
+    }
+
+    /** Remboursement encore ouvert chez le partenaire qui a collecté ? */
+    public function openRefundPartner(Transaction $tx): ?string
+    {
+        if (\App\Models\RemitRequest::where('transaction_id', $tx->id)->where('method', 'refund')->whereNull('finalized_at')->whereNotIn('status', ['failed'])->exists()) {
+            return $this->partnerLabel($tx->source_rail);
+        }
+        $peex = \App\Models\PeexRequest::where('transaction_id', $tx->id)->whereNull('finalized_at')->get()
+            ->contains(fn ($r) => PeexConnector::legOf((string) $r->track_id) === 'R' && \App\Models\PeexRequest::normalize($r->status) !== 'failed');
+        return $peex ? 'PEEX' : null;
+    }
+
+    /** Le partenaire ACTUEL du versement a-t-il confirmé le paiement au bénéficiaire ? */
+    public function payoutPaidByCurrentPartner(Transaction $tx): bool
+    {
+        return match ($tx->destination_rail) {
+            'peex' => \App\Models\PeexRequest::where('transaction_id', $tx->id)->get()
+                ->contains(fn ($r) => PeexConnector::legOf((string) $r->track_id) === 'D' && \App\Models\PeexRequest::normalize($r->status) === 'successful'),
+            'digitwace' => \App\Models\DigitwaceRequest::where('transaction_id', $tx->id)->where('operation', 'payout')->where('status', 'successful')->exists(),
+            null, 'wallet' => false,
+            default => \App\Models\RemitRequest::where('transaction_id', $tx->id)->where('partner', $tx->destination_rail)
+                ->whereNotIn('method', ['deposit', 'refund'])->where('status', 'successful')->exists(),
+        };
+    }
+
+    /** Bénéficiaire crédité (grand livre ou partenaire) — public pour la résolution des opérations bloquées. */
+    public function beneficiaryCredited(Transaction $tx): bool
+    {
+        return $this->creditedDestination($tx);
+    }
+
+    /**
+     * Annule un versement resté en attente alors qu'aucun partenaire ne le traite plus
+     * (toutes les demandes refusées / closes) : expéditeur remboursé (montant + frais).
+     */
+    public function cancelPayout(Transaction $tx, string $reason): Transaction
+    {
+        return $this->withLock($tx, 'awaiting_destination', fn (Transaction $tx) => $this->failAndRefund($tx, $reason));
     }
 
     /** Bénéficiaire crédité : écriture de crédit vers le compte / wallet du bénéficiaire, ou versement réussi chez un partenaire. */
