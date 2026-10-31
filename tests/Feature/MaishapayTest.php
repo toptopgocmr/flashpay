@@ -250,6 +250,20 @@ class MaishapayTest extends TestCase
         $this->assertSame(0, (int) $u->wallet->fresh()->balance);
     }
 
+    public function test_maintenance_cancels_abandoned_card_payments_even_when_one_is_broken(): void
+    {
+        $u = $this->user('242069990057');
+        \App\Models\LinkedAccount::create(['user_id' => $u->id, 'type' => 'card', 'card_brand' => 'Visa', 'card_last4' => '4242', 'account_holder' => 'JEAN TEST', 'is_default' => true, 'country' => 'CG']);
+        $broken = app(\App\Services\Peex\PeexFlowService::class)->cardDeposit($u->fresh(), 100);
+        $ok = app(\App\Services\Peex\PeexFlowService::class)->cardDeposit($u->fresh(), 200);
+        // Référence de la page perdue : avant, « Paiement introuvable » faisait échouer toute la tâche chaque minute
+        \Illuminate\Support\Facades\DB::table('transactions')->where('id', $broken->id)->update(['source_external_ref' => null]);
+        $this->travel(8)->days();
+        $this->assertSame(0, Artisan::call('flashpay:maintenance'));
+        $this->assertSame(['failed', 'failed'], [$broken->fresh()->status, $ok->fresh()->status]);
+        $this->assertSame(0, (int) $u->wallet->fresh()->balance);
+    }
+
     public function test_crypto_deposit_hidden_until_enabled_then_credits_wallet(): void
     {
         $u = $this->user('242069990066');

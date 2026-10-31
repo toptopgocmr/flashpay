@@ -167,7 +167,12 @@ class CardPaymentService
     /** Résultat de la passerelle (idempotent : un 2e appel ne fait rien). */
     public function complete(string $token, bool $ok, ?string $maskedCard = null, ?string $reason = null): Transaction
     {
-        $tx = $this->pending($token);
+        return $this->completeTx($this->pending($token), $ok, $maskedCard, $reason);
+    }
+
+    /** Même chose à partir de la transaction (jeton absent ou modifié : plus de « Paiement introuvable »). */
+    public function completeTx(Transaction $tx, bool $ok, ?string $maskedCard = null, ?string $reason = null): Transaction
+    {
 
         $claimed = Transaction::whereKey($tx->id)
             ->where('status', 'processing')->where('stage', 'awaiting_card')
@@ -249,17 +254,37 @@ class CardPaymentService
         Transaction::where('status', 'processing')->where('stage', 'awaiting_card')
             ->where('created_at', '<', now()->subMinutes($minutes))
             ->when($onlyId, fn ($q) => $q->whereKey($onlyId))
-            ->each(function (Transaction $tx) use (&$n, $minutes) {
-                if (in_array($tx->meta['card_driver'] ?? null, ['wacepay', 'maishapay'], true)) {
-                    $tx = ($tx->meta['card_driver'] ?? null) === 'maishapay' ? $this->syncMaishapay($tx) : $this->syncWacepay($tx);
-                    if ($tx->stage !== 'awaiting_card') {
-                        return;
+            ->get()->each(function (Transaction $tx) use (&$n, $minutes) {
+                $reason = ($tx->source_rail === 'crypto' ? 'Paiement crypto' : 'Paiement par carte')
+                    . " non finalisé dans les {$minutes} minutes : opération annulée, aucun montant n'a été débité";
+                // Une opération en erreur ne bloque plus les suivantes (avant : toute la tâche échouait)
+                try {
+                    if (in_array($tx->meta['card_driver'] ?? null, ['wacepay', 'maishapay'], true)) {
+                        try {
+                            $tx = ($tx->meta['card_driver'] ?? null) === 'maishapay' ? $this->syncMaishapay($tx) : $this->syncWacepay($tx);
+                        } catch (\Throwable $e) {
+                            \Illuminate\Support\Facades\Log::warning('Carte : relecture passerelle impossible avant annulation', ['reference' => $tx->reference, 'error' => $e->getMessage()]);
+                            $tx = $tx->fresh();
+                        }
+                        if ($tx->status !== 'processing' || $tx->stage !== 'awaiting_card') {
+                            return;
+                        }
+                    }
+                    $tx->forceFill(['meta' => array_merge($tx->meta ?? [], ['card_expired' => true])])->saveQuietly();
+                    $this->completeTx($tx->fresh(), false, null, $reason);
+                    $n++;
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error('Carte : annulation du paiement abandonné en erreur', ['reference' => $tx->reference, 'error' => $e->getMessage()]);
+                    // Rien n'a été débité (page jamais validée) : l'opération est close quoi qu'il arrive.
+                    // Un paiement confirmé plus tard par la passerelle rouvre l'opération (card_expired).
+                    $done = Transaction::whereKey($tx->id)->where('status', 'processing')
+                        ->whereIn('stage', ['awaiting_card', 'awaiting_source', 'awaiting_source:handling'])
+                        ->update(['status' => 'failed', 'stage' => null, 'failure_reason' => mb_substr($reason, 0, 250)]);
+                    $n += $done;
+                    if (! $done) {
+                        throw $e;
                     }
                 }
-                $tx->forceFill(['meta' => array_merge($tx->meta ?? [], ['card_expired' => true])])->saveQuietly();
-                $this->complete($tx->source_external_ref, false, null, ($tx->source_rail === 'crypto' ? 'Paiement crypto' : 'Paiement par carte')
-                    . " non finalisé dans les {$minutes} minutes : opération annulée, aucun montant n'a été débité");
-                $n++;
             });
         return $n;
     }

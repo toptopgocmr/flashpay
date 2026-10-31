@@ -13,9 +13,20 @@ class ExpireVouchersCommand extends Command
 
     public function handle(CashNetworkService $cash): int
     {
-        $n = $cash->expireVouchers();
-        $c = app(\App\Services\Payments\CardPaymentService::class)->expireAbandoned();
+        $failed = false;
+        $run = function (callable $fn, string $what) use (&$failed) {
+            try {
+                return $fn();
+            } catch (\Throwable $e) {
+                $failed = true;
+                \Illuminate\Support\Facades\Log::error('vouchers:expire : ' . $what, ['error' => $e->getMessage(), 'at' => $e->getFile() . ':' . $e->getLine()]);
+                $this->error($what . ' : ' . $e->getMessage() . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')');
+                return 'ERREUR';
+            }
+        };
+        $n = $run(fn () => $cash->expireVouchers(), 'bons de retrait');
+        $c = $run(fn () => app(\App\Services\Payments\CardPaymentService::class)->expireAbandoned(), 'paiements carte');
         $this->info("{$n} bon(s) expiré(s) remboursé(s), {$c} paiement(s) carte abandonné(s) annulé(s).");
-        return self::SUCCESS;
+        return $failed ? self::FAILURE : self::SUCCESS;
     }
 }

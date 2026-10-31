@@ -18,10 +18,28 @@ class FlashpayMaintenanceCommand extends Command
 
     public function handle(PaymentRequestService $requests, PaymentIntentService $intents, GiftService $gifts, WebhookService $webhooks, PendingTimeoutService $timeouts): int
     {
-        $this->info(sprintf(
-            '%d paiement(s) carte non finalisé(s), %d validation(s) mobile money expirée(s), %d demande(s) expirée(s), %d intent(s) expiré(s), %d cadeau(x) clôturé(s), %d webhook(s) relancé(s).',
-            app(\App\Services\Payments\CardPaymentService::class)->expireAbandoned(), $timeouts->expireDue(), $requests->expireDue(), $intents->expireDue(), $gifts->expireDue(), $webhooks->retryDue(),
-        ));
-        return self::SUCCESS;
+        // Chaque étape est indépendante : une erreur n'empêche plus les autres de tourner
+        $steps = [
+            'paiement(s) carte non finalisé(s)' => fn () => app(\App\Services\Payments\CardPaymentService::class)->expireAbandoned(),
+            'validation(s) mobile money expirée(s)' => fn () => $timeouts->expireDue(),
+            'demande(s) expirée(s)' => fn () => $requests->expireDue(),
+            'intent(s) expiré(s)' => fn () => $intents->expireDue(),
+            'cadeau(x) clôturé(s)' => fn () => $gifts->expireDue(),
+            'webhook(s) relancé(s)' => fn () => $webhooks->retryDue(),
+        ];
+        $parts = [];
+        $failed = false;
+        foreach ($steps as $label => $fn) {
+            try {
+                $parts[] = $fn() . ' ' . $label;
+            } catch (\Throwable $e) {
+                $failed = true;
+                $parts[] = 'ERREUR ' . $label;
+                \Illuminate\Support\Facades\Log::error('flashpay:maintenance : ' . $label, ['error' => $e->getMessage(), 'at' => $e->getFile() . ':' . $e->getLine()]);
+                $this->error($label . ' : ' . $e->getMessage() . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')');
+            }
+        }
+        $this->info(implode(', ', $parts) . '.');
+        return $failed ? self::FAILURE : self::SUCCESS;
     }
 }
