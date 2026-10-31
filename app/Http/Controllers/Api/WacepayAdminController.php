@@ -249,6 +249,23 @@ class WacepayAdminController extends Controller
                 'response' => $r->last_callback ?? $r->response_payload, 'callback' => null];
         }
         $transaction->refresh();
+
+        // Toujours en attente après relecture : décision appliquée tout de suite (sans attendre le planificateur)
+        //  - page carte / crypto abandonnée au-delà du délai → annulée (rien débité) ;
+        //  - opération figée depuis plus de 10 min → réussie, ou rejetée + remboursée selon les réponses
+        //    des partenaires (un versement encore ouvert chez un partenaire reste attendu).
+        if ($transaction->status === 'processing') {
+            try {
+                if ($transaction->stage === 'awaiting_card') {
+                    app(\App\Services\Payments\CardPaymentService::class)->expireIfAbandoned($transaction);
+                } elseif ($transaction->updated_at?->lt(now()->subMinutes(10))) {
+                    app(\App\Services\Payments\PendingResolver::class)->resolve($transaction);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Vérifier le statut : décision impossible', ['reference' => $transaction->reference, 'error' => $e->getMessage()]);
+            }
+            $transaction->refresh();
+        }
         Audit::log('transaction.check_status', $transaction, ['status' => $transaction->status], request()->user()?->id);
 
         return response()->json(['status' => $transaction->status, 'stage' => $transaction->stage, 'failure_reason' => $transaction->failure_reason, 'requests' => $out]);

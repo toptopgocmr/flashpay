@@ -239,6 +239,17 @@ class MaishapayTest extends TestCase
         $this->assertSame(2000, (int) $u->wallet->fresh()->balance);
     }
 
+    public function test_admin_check_status_cancels_card_payment_abandoned_for_days(): void
+    {
+        $u = $this->user('242069990056');
+        \App\Models\LinkedAccount::create(['user_id' => $u->id, 'type' => 'card', 'card_brand' => 'Visa', 'card_last4' => '4242', 'account_holder' => 'JEAN TEST', 'is_default' => true, 'country' => 'CG']);
+        $tx = app(\App\Services\Peex\PeexFlowService::class)->cardDeposit($u->fresh(), 200);
+        // Planificateur absent : la page carte reste « PENDING » chez MaishaPay pendant des jours
+        $this->travel(8)->days();
+        $this->actingAs($this->admin(), 'sanctum')->postJson("/api/admin/transactions/{$tx->id}/check-status")->assertOk()->assertJsonPath('status', 'failed');
+        $this->assertSame(0, (int) $u->wallet->fresh()->balance);
+    }
+
     public function test_crypto_deposit_hidden_until_enabled_then_credits_wallet(): void
     {
         $u = $this->user('242069990066');
