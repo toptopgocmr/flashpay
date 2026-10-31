@@ -36,7 +36,8 @@ const BRANDS = [
   ['terrapay', /terra\s*pay/i, '#00a19a', 'TP', 'png'],
   ['maishapay', /maisha\s*pay/i, '#16a34a', 'MP', 'png'],
   ['fincra', /fincra/i, '#6d28d9', 'FC', 'png'],
-  ['flashpay', /flash\s*pay|wallet|interne/i, '#ffffff', 'FP', 'svg'],
+  // Trésorerie / remboursement OfficePay : logo OfficePay (plus de pictogramme générique)
+  ['flashpay', /flash\s*pay|office\s*pay|wallet|interne|tr[eé]sorerie|treasury|rembours/i, '#ffffff', 'FP', 'svg'],
 ]
 
 // Moyens sans marque (espèces, agent, marchand, banque, carte non identifiée) : pictogramme
@@ -51,8 +52,6 @@ const ICONS = [
     path: '<path d="M3 9.5L12 4l9 5.5"/><path d="M5 10v7M9.5 10v7M14.5 10v7M19 10v7"/><path d="M3 20h18"/>' },
   { re: /carte|\bcard\b/i, bg: '#ede9fe', fg: '#5b21b6',
     path: '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 10h19M6 15h4"/>' },
-  { re: /tr[eé]sorerie|treasury/i, bg: '#f1f5f9', fg: '#334155',
-    path: '<path d="M4 7h16v12H4z"/><path d="M8 7V5h8v2M4 11h16"/>' },
 ]
 
 const brand = computed(() => BRANDS.find(([, re]) => re.test(props.name || '')))
