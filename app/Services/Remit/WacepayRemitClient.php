@@ -68,7 +68,16 @@ class WacepayRemitClient
         $country = strtoupper($country);
         $currency = strtoupper($currency);
         return Cache::remember("wacepay_remit:services:{$country}:{$currency}", now()->addHours(6), function () use ($country, $currency) {
-            $json = $this->send('post', 'transaction/payouts/services', ['payoutCountry' => $country, 'payoutCurrency' => $currency]);
+            // Chemin de la spec v2.0.0, puis variante de la doc Digitwace (« transaction/payoutservice »)
+            $body = ['payoutCountry' => $country, 'payoutCurrency' => $currency];
+            try {
+                $json = $this->send('post', 'transaction/payouts/services', $body);
+            } catch (RemitException $e) {
+                if (! in_array($e->httpStatus, [404, 405], true)) {
+                    throw $e;
+                }
+                $json = $this->send('post', 'transaction/payoutservice', $body);
+            }
             return collect((array) (data_get($json, 'data') ?? []))->filter(fn ($s) => is_array($s))->map(function ($s) {
                 $svc = ['code' => (string) data_get($s, 'ServiceCode', ''), 'name' => trim((string) data_get($s, 'ServiceName', ''))];
                 return $svc + ['method' => self::methodOf($svc)];
@@ -384,7 +393,7 @@ class WacepayRemitClient
     public function send(string $method, string $path, array $body = [], bool $auth = true, bool $retried = false): array
     {
         if (! $this->enabled()) {
-            throw new RemitException('WacePay remittance non configuré (WACEPAY_REMIT_ENABLED, WACEPAY_REMIT_EMAIL, WACEPAY_REMIT_PASSWORD).', null, null, [], true);
+            throw new RemitException('Remittance Digitwace non configurée (WACEPAY_REMIT_ENABLED, WACEPAY_REMIT_EMAIL, WACEPAY_REMIT_PASSWORD).', null, null, [], true);
         }
         $url = rtrim((string) $this->cfg('base_url'), '/') . '/' . ltrim($path, '/');
         $req = Http::acceptJson()->asJson()->timeout((int) $this->cfg('timeout', 40));
@@ -394,7 +403,7 @@ class WacepayRemitClient
         try {
             $res = $method === 'get' ? $req->get($url) : $req->post($url, $body);
         } catch (ConnectionException $e) {
-            throw new RemitException('WacePay injoignable : ' . $e->getMessage());
+            throw new RemitException('Digitwace (WacePay) injoignable : ' . $e->getMessage());
         }
         $json = (array) ($res->json() ?? []);
         $code = $this->code($json);
@@ -414,7 +423,7 @@ class WacepayRemitClient
         if (is_array($e = data_get($json, 'errors'))) {
             $msg .= ' — ' . collect($e)->flatten()->filter(fn ($v) => is_scalar($v))->implode(' ');
         }
-        Log::warning('WacePay remittance : requête refusée', ['path' => $path, 'http' => $res->status(), 'code' => $code]);
+        Log::warning('Digitwace (WacePay) remittance : requête refusée', ['path' => $path, 'http' => $res->status(), 'code' => $code, 'message' => mb_substr($msg, 0, 300)]);
         throw new RemitException('WacePay' . ($code ? " ({$code})" : '') . ' : ' . trim($msg), $code, $res->status(), $json);
     }
 }

@@ -334,11 +334,23 @@ class InternationalTransferService
                 }
                 $methods = array_filter($out);
                 if (! $methods) {
-                    $message = "WacePay ne propose aucun mode de réception vers {$c['name']} ({$c['currency']}).";
+                    $message = "Digitwace ne propose aucun mode de réception vers {$c['name']} ({$c['currency']}).";
                 }
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('WacePay : services de versement illisibles', ['country' => $iso, 'error' => mb_substr($e->getMessage(), 0, 200)]);
-                $message = "Transferts vers {$c['name']} momentanément indisponibles (le partenaire ne répond pas). Réessayez plus tard.";
+                \Illuminate\Support\Facades\Log::warning('Digitwace remittance : services de versement illisibles', ['country' => $iso, 'error' => mb_substr($e->getMessage(), 0, 300)]);
+                $blocking = ! $this->wace->enabled()
+                    || ($e instanceof RemitException && in_array($e->httpStatus, [401, 403], true));
+                if ($blocking) {
+                    // Configuration / accès refusé chez Digitwace : on affiche la vraie raison
+                    $message = "Transferts vers {$c['name']} indisponibles : " . ($e instanceof RemitException ? $this->friendly($e) : $e->getMessage());
+                } else {
+                    // Liste illisible (chemin, réseau) : on n'empêche pas le devis. Le service est
+                    // résolu par son nom (PayerCode) lors des vérifications faites AVANT tout débit.
+                    $methods = [
+                        'wallet' => [['code' => '', 'name' => 'MOBILE MONEY']],
+                        'bank' => [['code' => '', 'name' => 'BANKS DEPOSIT']],
+                    ];
+                }
             }
         }
         $available = [];
@@ -894,7 +906,7 @@ class InternationalTransferService
             '3001' => 'Pour une entreprise, le type de pièce doit être le RCCM.', '3003' => 'Type de pièce d\'identité non accepté.',
             '6001' => 'Pays du bénéficiaire non disponible.', '6002' => 'Ville du bénéficiaire inconnue.', '6008' => 'Le nom du bénéficiaire ne correspond pas au titulaire du compte.',
         ];
-        return $map[$e->partnerCode ?? ''] ?? preg_replace('/^(WacePay|TerraPay)\s*(\(\w+\))?\s*:\s*/', '', $e->getMessage());
+        return $map[$e->partnerCode ?? ''] ?? preg_replace('/^(Digitwace \(WacePay\)|WacePay|TerraPay)\s*(\(\w+\))?\s*:\s*/', '', $e->getMessage());
     }
 
     protected function walletOf(User $user): ?Wallet

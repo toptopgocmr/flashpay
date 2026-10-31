@@ -66,7 +66,7 @@ class RemitCountries
 
     /** Partenaires de remittance : nom et moyens de réception. */
     public const PARTNERS = [
-        'wacepay_remit' => ['name' => 'WacePay', 'methods' => ['wallet', 'bank', 'cash']],
+        'wacepay_remit' => ['name' => 'Digitwace', 'methods' => ['wallet', 'bank', 'cash']],
         'terrapay' => ['name' => 'TerraPay', 'methods' => ['wallet', 'bank']],
         'pawapay' => ['name' => 'PawaPay', 'methods' => ['wallet']],
         'fincra_remit' => ['name' => 'Fincra', 'methods' => ['wallet', 'bank']],

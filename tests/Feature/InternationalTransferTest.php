@@ -50,6 +50,7 @@ class InternationalTransferTest extends TestCase
                     : Http::response(['status' => 1002, 'message' => 'bad'], 401),
                 str_ends_with($u, '/account/balance') => Http::response(['status' => 2000, 'data' => ['Balance' => '9000000.000', 'Currency' => 'XAF']]),
                 str_ends_with($u, '/transaction/payouts/services') && $this->waceServices === ['down'] => Http::response(['message' => 'Server Error'], 500),
+                str_ends_with($u, '/transaction/payouts/services') && $this->waceServices === ['ip'] => Http::response(['status' => 4001, 'message' => 'Your IP is not whitelisted'], 403),
                 str_ends_with($u, '/transaction/payouts/services') && $this->waceServices !== null => Http::response(['status' => 2000, 'data' => $this->waceServices]),
                 str_ends_with($u, '/transaction/payouts/services') => Http::response(['status' => 2000, 'data' => [
                     ['ServiceCode' => 'B', 'ServiceName' => 'BANKS DEPOSIT'], ['ServiceCode' => 'OM', 'ServiceName' => 'ORANGE MONEY'], ['ServiceCode' => 'CP', 'ServiceName' => 'CASH PICKUP'],
@@ -495,12 +496,21 @@ class InternationalTransferTest extends TestCase
         $q = $this->postJson('/api/pay/international/quote', ['amount' => 10000, 'country' => 'SN', 'method' => 'bank', 'business_type' => 'p2p'])->assertOk();
         $this->assertFalse($q->json('available'));
 
-        // Le partenaire ne répond pas : 200 avec tout grisé et un message (plus d'« Erreur interne du serveur »)
+        // Liste des services Digitwace illisible (erreur serveur) : le devis n'est plus bloqué,
+        // mobile money et banque restent proposés, le service est résolu avant tout débit
         $this->waceServices = ['down'];
         Cache::flush();
         $s = $this->getJson('/api/pay/international/services?country=ML')->assertOk();
+        $this->assertSame(['wallet' => true, 'bank' => true, 'cash' => false], $s->json('available'));
+
+        // Accès refusé par Digitwace (IP non autorisée) : la vraie raison est affichée
+        $this->waceServices = ['ip'];
+        Cache::flush();
+        $s = $this->getJson('/api/pay/international/services?country=ML')->assertOk();
         $this->assertSame(['wallet' => false, 'bank' => false, 'cash' => false], $s->json('available'));
-        $this->assertStringContainsString('indisponibles', (string) $s->json('message'));
+        $this->assertStringContainsString('IP is not whitelisted', (string) $s->json('message'));
+        $this->waceServices = ['down'];
+        Cache::flush();
         // Banques : saisie libre au lieu de « aucun PayerCode »
         $this->postJson('/api/pay/international/banks', ['country' => 'ML'])->assertOk()->assertJsonPath('free_text', true);
 
