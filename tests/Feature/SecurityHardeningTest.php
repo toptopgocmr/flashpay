@@ -69,6 +69,17 @@ class SecurityHardeningTest extends TestCase
         $this->postJson('/api/auth/login', ['phone' => '242060000000', 'password' => 'ChangeMoi123!', 'profile' => 'super_admin'])->assertStatus(403)->assertJsonPath('code', 'default_password');
     }
 
+    public function test_default_admin_password_replaced_from_env_variable(): void
+    {
+        $login = fn ($pwd) => $this->postJson('/api/auth/login', ['phone' => '242060000000', 'password' => $pwd, 'profile' => 'super_admin']);
+        config(['security.admin_new_password' => 'court1']);
+        $login('ChangeMoi123!')->assertStatus(403)->assertJsonPath('code', 'default_password');
+        config(['security.admin_new_password' => 'NouveauMotDePasse2026']);
+        $login('ChangeMoi123!')->assertStatus(403)->assertJsonPath('code', 'default_password_replaced');
+        $login('ChangeMoi123!')->assertStatus(401);
+        $login('NouveauMotDePasse2026')->assertOk();
+    }
+
     public function test_forged_peex_success_callback_is_not_applied(): void
     {
         $u = $this->client();

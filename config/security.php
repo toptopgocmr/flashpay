@@ -12,6 +12,8 @@ return [
     // Connexion : verrouillage du compte après N codes erronés (toutes adresses IP confondues)
     'login_max_attempts' => (int) env('FLASHPAY_LOGIN_MAX_ATTEMPTS', 5),
     'login_lock_minutes' => (int) env('FLASHPAY_LOGIN_LOCK_MINUTES', 15),
+    // Nouveau mot de passe console appliqué à la connexion d'un compte qui a encore le mot de passe par défaut (puis retirer la variable)
+    'admin_new_password' => (string) env('OFFICEPAY_ADMIN_NEW_PASSWORD', ''),
     'pin_lock_minutes' => 30,
     'otp_ttl_minutes' => 5,
     'otp_max_attempts' => 5,

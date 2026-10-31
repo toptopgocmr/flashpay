@@ -228,7 +228,19 @@ class AuthController extends Controller
 
         // Console : le mot de passe par défaut du super admin (public dans le code) est refusé
         if ($user->hasAnyRole(['super_admin', 'support']) && $okPassword && Hash::check('ChangeMoi123!', $user->password)) {
-            return response()->json(['message' => 'Mot de passe par défaut interdit : changez-le avec « php artisan officepay:admin-password » sur le serveur.', 'code' => 'default_password'], 403);
+            // Remplacement sans terminal : variable Railway OFFICEPAY_ADMIN_NEW_PASSWORD (12 car. min., lettres + chiffres).
+            // Ne s'applique qu'au compte qui a encore le mot de passe par défaut ; retirer la variable ensuite.
+            $new = (string) config('security.admin_new_password', '');
+            if ($new !== '' && strlen($new) >= 12 && preg_match('/[A-Za-z]/', $new) && preg_match('/\d/', $new) && $new !== 'ChangeMoi123!') {
+                $user->forceFill(['password' => Hash::make($new)])->save();
+                $user->tokens()->delete();
+                \App\Support\Audit::log('security.admin_password_changed', $user, ['via' => 'env'], null);
+                return response()->json(['message' => 'Mot de passe par défaut remplacé par celui de la variable OFFICEPAY_ADMIN_NEW_PASSWORD : connectez-vous avec ce nouveau mot de passe, puis supprimez la variable sur Railway.', 'code' => 'default_password_replaced'], 403);
+            }
+            if ($new !== '') {
+                return response()->json(['message' => 'OFFICEPAY_ADMIN_NEW_PASSWORD trop faible : 12 caractères minimum, avec des lettres et des chiffres.', 'code' => 'default_password'], 403);
+            }
+            return response()->json(['message' => 'Mot de passe par défaut interdit : changez-le avec « php artisan officepay:admin-password » sur le serveur, ou définissez la variable OFFICEPAY_ADMIN_NEW_PASSWORD sur Railway puis reconnectez-vous.', 'code' => 'default_password'], 403);
         }
         if ($okPin) {
             $user->forceFill(['password' => Hash::make($secret)])->save();
