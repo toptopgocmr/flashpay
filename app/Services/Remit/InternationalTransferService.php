@@ -696,7 +696,14 @@ class InternationalTransferService
                 $this->wace->beneficiaryCode($remit['beneficiary'] + ['country' => $remit['country']], $code, $user->id);
                 $this->wace->payerCode($remit['country'], $remit['currency'], $remit['service']);
                 if ($remit['method'] === 'bank' && empty($remit['account']['bank_id'])) {
-                    throw new PeexException('Choisissez la banque du bénéficiaire dans la liste.');
+                    // Banque à choisir dans la liste seulement si Digitwace en fournit une pour ce pays
+                    // (France / zone SEPA : souvent aucune liste → nom de la banque + IBAN saisis).
+                    if (! empty($this->banks($remit['country'], (array) $remit['service'])['banks'])) {
+                        throw new PeexException('Choisissez la banque du bénéficiaire dans la liste.');
+                    }
+                    if (empty($remit['account']['bank_name'])) {
+                        throw new PeexException('Indiquez le nom de la banque du bénéficiaire.');
+                    }
                 }
                 if ($remit['method'] === 'cash' && empty($remit['account']['city'])) {
                     throw new PeexException('Choisissez la ville de retrait.');
@@ -815,6 +822,27 @@ class InternationalTransferService
         return array_filter($p, fn ($v) => $v !== null && $v !== '');
     }
 
+    /** Pays où le virement se fait sur IBAN (zone SEPA). */
+    public const IBAN_COUNTRIES = ['FR', 'BE', 'DE', 'ES', 'IT', 'PT', 'NL', 'LU', 'AT', 'IE', 'FI', 'GR', 'MC', 'CH', 'GB'];
+
+    /** Clé de contrôle IBAN (ISO 13616, modulo 97). */
+    public static function ibanValid(string $iban): bool
+    {
+        $iban = strtoupper(preg_replace('/\s+/', '', $iban));
+        if (! preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/', $iban)) {
+            return false;
+        }
+        $num = '';
+        foreach (str_split(substr($iban, 4) . substr($iban, 0, 4)) as $ch) {
+            $num .= ctype_alpha($ch) ? (string) (ord($ch) - 55) : $ch;
+        }
+        $mod = 0;
+        foreach (str_split($num, 7) as $part) {
+            $mod = (int) (($mod . $part) % 97);
+        }
+        return $mod === 1;
+    }
+
     protected function normalizeAccount(array $a, string $method, array $country, array $ben): array
     {
         $a = array_map(fn ($v) => is_string($v) ? trim($v) : $v, $a);
@@ -834,6 +862,19 @@ class InternationalTransferService
             $acc = strtoupper(preg_replace('/\s+/', '', (string) ($a['account'] ?? '')));
             if (strlen($acc) < 5) {
                 throw new PeexException('Numéro de compte / IBAN du bénéficiaire invalide.');
+            }
+            // Zone SEPA (France…) : IBAN obligatoire, du bon pays, clé modulo 97 vérifiée.
+            // (Les RIB UEMOA / CEMAC du type « CI008… » ne sont pas contrôlés ici.)
+            if (in_array($country['iso'], self::IBAN_COUNTRIES, true)) {
+                if (! preg_match('/^[A-Z]{2}\d{2}/', $acc)) {
+                    throw new PeexException('Indiquez l\'IBAN du bénéficiaire (ex. ' . $country['iso'] . '76 3000 …).');
+                }
+                if (substr($acc, 0, 2) !== $country['iso']) {
+                    throw new PeexException('Cet IBAN n\'est pas un compte de ' . $country['name'] . '.');
+                }
+                if (! self::ibanValid($acc)) {
+                    throw new PeexException('IBAN du bénéficiaire invalide : vérifiez les chiffres saisis.');
+                }
             }
             if (empty($a['bank_name']) && empty($a['bank_id'])) {
                 throw new PeexException('Indiquez la banque du bénéficiaire.');

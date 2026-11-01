@@ -56,6 +56,7 @@ class InternationalTransferTest extends TestCase
                     ['ServiceCode' => 'B', 'ServiceName' => 'BANKS DEPOSIT'], ['ServiceCode' => 'OM', 'ServiceName' => 'ORANGE MONEY'], ['ServiceCode' => 'CP', 'ServiceName' => 'CASH PICKUP'],
                 ]]),
                 str_ends_with($u, '/transaction/payercode') => Http::response(['status' => 2000, 'transaction' => ['PayerCode' => 'PAY-' . $req['payoutService']]]),
+                str_ends_with($u, '/transaction/bank/list') && $req['iso2'] === 'FR' => Http::response(['status' => 2000, 'data' => []]),
                 str_ends_with($u, '/transaction/bank/list') => Http::response(['status' => 2000, 'data' => [['BankName' => 'SGBCI', 'BankID' => 7, 'BankCode' => 'CI008']]]),
                 str_ends_with($u, '/sender/create') => Http::response(['messages' => 'ok', 'sender' => ['Code' => 'S-' . ($req['type'] ?? '?')], 'stauts' => 2000]),
                 str_ends_with($u, '/beneficiary/create') => Http::response(['messages' => 'ok', 'beneficiary' => ['Code' => 'B-' . ($req['type'] ?? '?')], 'status' => 201]),
@@ -298,6 +299,36 @@ class InternationalTransferTest extends TestCase
         $tx->refresh();
         $this->assertSame('reversed', $tx->status);
         $this->assertSame(500000, (int) $c->wallet->fresh()->balance); // montant + frais remboursés
+    }
+
+    public function test_france_bank_via_digitwace_without_bank_list_requires_valid_iban(): void
+    {
+        config(['flashpay.remit.partners' => ['*' => 'wacepay_remit']]);
+        $c = $this->client();
+        $this->actingAs($c, 'sanctum');
+        $service = ['code' => 'B', 'name' => 'BANKS DEPOSIT'];
+
+        // Digitwace ne fournit pas de liste de banques pour la France : saisie libre
+        $banks = $this->postJson('/api/pay/international/banks', ['country' => 'FR', 'service' => $service])->assertOk();
+        $this->assertTrue($banks->json('free_text'));
+
+        $send = fn (string $account) => $this->postJson('/api/pay/international/send', [
+            'amount' => 100000, 'country' => 'FR', 'method' => 'bank', 'business_type' => 'p2p', 'service' => $service,
+            'sender' => $this->sender(),
+            'beneficiary' => ['first_name' => 'Marie', 'last_name' => 'Dupont', 'phone' => '+33612345678', 'city' => 'Paris'],
+            'account' => ['account' => $account, 'bank_name' => 'BNP Paribas', 'swift' => 'bnpafrpp'],
+        ]);
+        $send('12345678901')->assertStatus(422)->assertJsonFragment(['message' => "Indiquez l'IBAN du bénéficiaire (ex. FR76 3000 …)."]);
+        $send('FR76 3000 6000 0112 3456 7890 188')->assertStatus(422)->assertJsonFragment(['message' => 'IBAN du bénéficiaire invalide : vérifiez les chiffres saisis.']);
+        $send('BE68 5390 0754 7034')->assertStatus(422)->assertJsonFragment(['message' => "Cet IBAN n'est pas un compte de France."]);
+        $this->assertSame(500000, (int) $c->wallet->fresh()->balance);
+
+        $send('FR76 3000 6000 0112 3456 7890 189')->assertStatus(202);
+        $bank = collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/transaction/bank/create'));
+        $this->assertSame('FR7630006000011234567890189', $bank['bankAccount']);
+        $this->assertSame('BNP Paribas', $bank['bankName']);
+        $this->assertSame('BNPAFRPP', $bank['bankSwCode']);
+        $this->assertSame('PAY-B', $bank['payerCode']);
     }
 
     public function test_terrapay_wallet_checks_account_then_sends_with_reverse_quote(): void
