@@ -51,7 +51,33 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21h4"/></svg>
         <span v-if="badges.notifications" class="bell-count">{{ badges.notifications }}</span>
       </router-link>
-      <span v-for="e in envs" :key="e.key" class="env-pill" :class="!e.enabled ? 'off' : (e.sandbox ? 'sandbox' : 'live')" :title="e.enabled ? 'Environnement ' + e.name : e.name + ' : clés API à saisir sur Railway'"><ProviderLogo :name="e.name" :size="18" class="env-logo" />{{ e.name }}<template v-if="e.enabled"> · {{ e.sandbox ? 'SANDBOX' : 'PROD' }}</template></span>
+      <!-- Partenaires : regroupés dans une liste (au lieu d'un badge par partenaire) -->
+      <div class="dropdown partners-dd">
+        <button class="nav-btn" :class="{ open: partnersOpen }" title="Partenaires et environnements" @click="toggle('partners')">
+          <span class="pd-dot" :class="partnersSummary.cls"></span>
+          <span class="hide-sm">Partenaires</span>
+          <span class="pd-count">{{ partnersSummary.active }}/{{ envs.length }}</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4.5l3 3 3-3"/></svg>
+        </button>
+        <div class="dropdown-menu partners-menu" v-if="partnersOpen">
+          <div class="head">
+            <strong>Partenaires</strong>
+            <span>{{ partnersSummary.live }} en production · {{ partnersSummary.sandbox }} en sandbox<template v-if="partnersSummary.off"> · {{ partnersSummary.off }} non configuré(s)</template></span>
+          </div>
+          <component
+            :is="partnerLink(e) ? 'router-link' : 'div'"
+            v-for="e in envs" :key="e.key"
+            :to="partnerLink(e) || undefined"
+            class="pd-row"
+            :title="e.enabled ? 'Environnement ' + e.name : e.name + ' : clés API à saisir sur Railway'"
+            @click="closeMenus"
+          >
+            <ProviderLogo :name="e.name" :size="20" class="env-logo" />
+            <span class="pd-name">{{ e.name }}</span>
+            <span class="env-pill" :class="!e.enabled ? 'off' : (e.sandbox ? 'sandbox' : 'live')">{{ !e.enabled ? 'NON CONFIGURÉ' : (e.sandbox ? 'SANDBOX' : 'PROD') }}</span>
+          </component>
+        </div>
+      </div>
 
       <div class="dropdown">
         <button class="nav-btn" :class="{ open: userOpen }" @click="toggle('user')">
@@ -349,12 +375,24 @@ function toggleGroup(g) {
 function groupCount(g) { return g.links.reduce((a, l) => a + (l.badge ? Number(badges.value[l.badge] || 0) : 0), 0) }
 const servicesOpen = ref(false)
 const userOpen = ref(false)
+const partnersOpen = ref(false)
 const searchOpen = ref(false)
 const query = ref('')
 const cursor = ref(0)
 const searchInput = ref(null)
 const sandbox = ref(true)
 const envs = ref([{ key: 'peex', name: 'PEEX', sandbox: true }])
+
+// Liste « Partenaires » de la barre du haut
+const PARTNER_PAGES = { peex: '/peex', digitwace: '/wacepay', wacepay_remit: '/wacepay', pawapay: '/pawapay', maishapay: '/maishapay', fincra: '/fincra' }
+function partnerLink(e) { return PARTNER_PAGES[e.key] || null }
+const partnersSummary = computed(() => {
+  const list = envs.value || []
+  const on = list.filter((e) => e.enabled !== false)
+  const live = on.filter((e) => !e.sandbox).length
+  const sandbox = on.length - live
+  return { active: on.length, live, sandbox, off: list.length - on.length, cls: live ? 'live' : (on.length ? 'sandbox' : 'off') }
+})
 
 const userName = computed(() => (auth.user?.full_name || 'Admin').split(' ')[0])
 const roleLabel = computed(() => (auth.user?.roles || []).includes('super_admin') ? 'Super Admin' : 'Support')
@@ -374,9 +412,9 @@ function isActive(to) {
   return to === '/' ? route.path === '/' : (route.path === to || route.path.startsWith(to + '/'))
 }
 function toggle(which) {
-  const s = which === 'services'
-  servicesOpen.value = s ? !servicesOpen.value : false
-  userOpen.value = s ? false : !userOpen.value
+  servicesOpen.value = which === 'services' ? !servicesOpen.value : false
+  userOpen.value = which === 'user' ? !userOpen.value : false
+  partnersOpen.value = which === 'partners' ? !partnersOpen.value : false
 }
 // --- Rail d'icônes (menu réduit) : sous-menu flottant de la rubrique survolée
 const flyout = ref(null)
@@ -404,6 +442,7 @@ function closeMenus() {
   flyout.value = null
   servicesOpen.value = false
   userOpen.value = false
+  partnersOpen.value = false
   searchOpen.value = false
 }
 function onNav() {
@@ -519,6 +558,17 @@ onBeforeUnmount(() => {
 .fp-toast.critical { border-left-color: var(--err); }
 .fp-toast.success { border-left-color: var(--ok); }
 @keyframes fpToast { from { transform: translateY(-10px); opacity: 0; } to { transform: none; opacity: 1; } }
+.partners-dd { margin-left: 4px; }
+.partners-dd .pd-dot { width: 9px; height: 9px; border-radius: 50%; background: #9ca3af; display: inline-block; }
+.partners-dd .pd-dot.live { background: #10b981; }
+.partners-dd .pd-dot.sandbox { background: var(--accent, #ea7a1a); }
+.partners-dd .pd-count { font-size: 11px; font-weight: 700; opacity: .85; }
+.partners-menu { min-width: 300px; }
+.partners-menu .pd-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; color: var(--text); }
+.partners-menu a.pd-row:hover { background: var(--surface-2); }
+.partners-menu .pd-name { flex: 1; font-weight: 600; font-size: 13px; }
+.partners-menu .env-pill { margin-left: 0; display: inline-block !important; font-size: 10px; }
+.partners-menu .env-pill.off { background: var(--surface-2, #f1f5f9); color: var(--text-2, #6b7280); }
 .env-pill { display: inline-flex; align-items: center; gap: 6px; }
 .env-pill .env-logo { box-shadow: none; border-radius: 5px; }
 </style>
