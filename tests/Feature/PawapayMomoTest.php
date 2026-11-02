@@ -17,6 +17,8 @@ class PawapayMomoTest extends TestCase
     protected string $depositStatus = 'PROCESSING';
     protected string $payoutStatus = 'PROCESSING';
     protected float $balance = 1000000;
+    /** Soldes successifs renvoyés par /v2/wallet-balances (vide = $balance) ; 'down' = erreur 500 */
+    protected array $balances = [];
 
     protected function setUp(): void
     {
@@ -52,7 +54,8 @@ class PawapayMomoTest extends TestCase
                     ['country' => 'CMR', 'providers' => [['provider' => 'MTN_MOMO_CMR', 'displayName' => 'MTN', 'currencies' => [['currency' => 'XAF', 'operationTypes' => [
                         'DEPOSIT' => ['status' => 'CLOSED'], 'PAYOUT' => ['status' => 'OPERATIONAL']]]]]]],
                 ]]),
-                $path === '/v2/wallet-balances' => Http::response(['balances' => [['country' => 'COG', 'currency' => 'XAF', 'balance' => (string) $this->balance]]]),
+                $path === '/v2/wallet-balances' && ($this->balances[0] ?? null) === 'down' => Http::response(['message' => 'Server Error'], 500),
+                $path === '/v2/wallet-balances' => Http::response(['balances' => [['country' => 'COG', 'currency' => 'XAF', 'balance' => (string) ($this->balances ? array_shift($this->balances) : $this->balance)]]]),
                 default => Http::response(['message' => 'not found'], 404),
             };
         });
@@ -170,5 +173,44 @@ class PawapayMomoTest extends TestCase
         $this->assertFalse($q['available']);
         $this->assertContains('payout_unavailable', $q['problem_codes'] ?? []);
         $this->assertFalse(collect($this->sent)->contains(fn ($q) => str_ends_with($q->url(), '/v2/payouts')));
+    }
+
+    public function test_payout_refused_without_debit_when_pawapay_account_not_funded(): void
+    {
+        $this->actingAs($this->admin(), 'sanctum')->postJson('/api/admin/corridors/CG', ['partner' => 'pawapay'])->assertOk();
+        $u = $this->client('242069990003', 50000);
+        $flows = app(\App\Services\Peex\PeexFlowService::class);
+
+        // Solde illisible chez pawaPay : refus immédiat (jamais d'opération en attente)
+        $this->balances = ['down'];
+        try {
+            $flows->payout($u, '+242051112233', 2000);
+            $this->fail('Versement accepté alors que le solde pawaPay est illisible');
+        } catch (\Throwable $e) {
+            $this->assertStringContainsString('momentanément indisponible', $e->getMessage());
+        }
+        $this->assertSame(50000, (int) $u->wallet->fresh()->balance);
+        $this->assertSame(0, \App\Models\Transaction::where('status', 'processing')->count());
+        $this->assertFalse(collect($this->sent)->contains(fn ($q) => $q->method() === 'POST' && str_ends_with($q->url(), '/v2/payouts')));
+
+        // Réglage souple : solde illisible toléré
+        config(['flashpay.payouts.require_balance' => false]);
+        $this->assertNull(app(\App\Services\Payments\PayoutFunds::class)->problem('pawapay_momo', 'XAF', 2000, 'CG'));
+    }
+
+    public function test_account_drained_before_payout_rejects_and_refunds_instead_of_queueing(): void
+    {
+        $this->actingAs($this->admin(), 'sanctum')->postJson('/api/admin/corridors/CG', ['partner' => 'pawapay'])->assertOk();
+        config(['flashpay.failover.enabled' => false]);
+        $u = $this->client('242069990004', 50000);
+        // Devis et débit : solde suffisant ; au moment d'envoyer le versement : compte vidé
+        $this->balances = [1000000, 1000000, 500]; // devis, débit, puis envoi du versement
+        $out = app(\App\Services\Peex\PeexFlowService::class)->payout($u, '+242051112233', 2000);
+
+        $this->assertNotSame('processing', $out->status);          // pas de file d'attente
+        $this->assertContains($out->status, ['reversed', 'failed']);
+        $this->assertSame(50000, (int) $u->wallet->fresh()->balance); // montant + frais rendus
+        $this->assertStringContainsString('Solde du partenaire de versement insuffisant', (string) $out->failure_reason);
+        $this->assertFalse(collect($this->sent)->contains(fn ($q) => $q->method() === 'POST' && str_ends_with($q->url(), '/v2/payouts')));
     }
 }

@@ -271,6 +271,14 @@ class SwitchService
                 return $this->complete($tx);
             }
 
+            // Juste avant le versement : compte OfficePay assez crédité chez ce partenaire ? Sinon refus certain
+            // (rien n'est envoyé) → autre partenaire, ou opération rejetée et payeur remboursé. Jamais de file d'attente.
+            if (in_array($tx->destination_rail, \App\Services\Payments\PayoutFailover::RAILS, true)
+                && ($p = app(\App\Services\Payments\PayoutFunds::class)->problem($tx->destination_rail, $outCur, $out, $tx->meta['destination_country'] ?? null, $tx->id))) {
+                $why = $this->partnerLabel($tx->destination_rail) . ' : ' . $p;
+                return $this->failover($tx, $why) ?? $this->failAndRefund($tx, $why);
+            }
+
             $result = $this->connectorFor($tx->destination_rail)
                 ->disburse($tx->destination_account, $out, $outCur, $tx->reference);
             $tx->update(['destination_external_ref' => $result['external_ref']]);

@@ -153,6 +153,15 @@ return [
         'pass_partner_fees' => (bool) env('FLASHPAY_PASS_PARTNER_FEES', true),
     ],
 
+    /*
+    | Versements : le compte OfficePay chez le partenaire (WacePay, PawaPay, Fincra ; PEEX quand son solde
+    | est exposé) doit couvrir le montant, relu avant le débit ET avant l'envoi. true = solde illisible
+    | → opération refusée aussi (jamais de mise en file d'attente chez un partenaire non provisionné).
+    */
+    'payouts' => [
+        'require_balance' => (bool) env('FLASHPAY_PAYOUT_REQUIRE_BALANCE', true),
+    ],
+
     'failover' => [
         'enabled' => (bool) env('FLASHPAY_FAILOVER', true),
         'order' => array_values(array_filter(array_map('trim', explode(',', (string) env('FLASHPAY_FAILOVER_ORDER', 'peex,pawapay_momo,digitwace,maishapay,fincra'))))),

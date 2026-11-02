@@ -929,7 +929,10 @@ class InternationalTransferService
         try {
             $b = Cache::remember('wacepay_remit:balance', 60, fn () => $this->wace->balance());
         } catch (\Throwable) {
-            return null; // solde inconnu : ne bloque pas
+            // Solde illisible : refusé si FLASHPAY_PAYOUT_REQUIRE_BALANCE (défaut), jamais mis en attente
+            return config('flashpay.payouts.require_balance', true)
+                ? 'Transferts internationaux momentanément indisponibles (solde du partenaire non vérifiable). Réessayez plus tard.'
+                : null;
         }
         if (strtoupper($b['currency']) === strtoupper($currency) && $b['balance'] < $amount) {
             return 'Transferts internationaux momentanément suspendus (réapprovisionnement en cours). Réessayez plus tard ou envoyez un montant plus petit.';

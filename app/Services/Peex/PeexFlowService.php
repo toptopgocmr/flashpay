@@ -389,21 +389,9 @@ class PeexFlowService
             throw new PeexException($p);
         }
         $payoutRail = $dst['type'] === 'wallet' ? 'wallet' : $this->payoutRailFor($dst);
-        if ($dst['type'] === 'mobile' && $payoutRail === 'digitwace' && config('flashpay.digitwace.check_balance', true)) {
-            $need = (int) $q['gross_destination_amount'];
-            $avail = app(\App\Services\Digitwace\WacepayBalanceService::class)->availableFor($q['receive_currency']);
-            if ($avail !== null && $avail < $need) {
-                throw new PeexException('Service de versement momentanément indisponible vers ce pays (solde partenaire insuffisant). Réessayez plus tard.');
-            }
-        }
-        if ($dst['type'] === 'mobile' && $payoutRail === 'pawapay_momo' && config('flashpay.pawapay.check_balance', true)) {
-            \Illuminate\Support\Facades\Cache::forget('pawapay:balances');
-            $avail = app(\App\Services\Remit\PawapayClient::class)->availableFor($q['receive_currency'], $dst['country'] ?? null);
-            if ($avail !== null && $avail < (int) $q['gross_destination_amount']) {
-                throw new PeexException('Service de versement momentanément indisponible vers ce pays (solde partenaire insuffisant). Réessayez plus tard.');
-            }
-        }
-        if ($dst['type'] === 'mobile' && $payoutRail === 'peex' && ($p = $guard->checkPayout($dst['country'], (int) $q['gross_destination_amount'], fresh: true))) {
+        // Compte OfficePay chez le partenaire de versement assez crédité ? Sinon refus immédiat, rien n'est débité
+        // (jamais d'opération mise en file d'attente chez un partenaire non provisionné).
+        if ($dst['type'] === 'mobile' && ($p = app(\App\Services\Payments\PayoutFunds::class)->problem($payoutRail, $q['receive_currency'], (int) $q['gross_destination_amount'], $dst['country'] ?? null))) {
             throw new PeexException($p);
         }
 
