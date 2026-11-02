@@ -35,7 +35,16 @@
         <div class="gw-card-h">
           <div class="t"><h3>IP du serveur OfficePay</h3><p>À faire autoriser chez chaque partenaire (liste blanche d'IP). Un refus « restricted » ou « IP not whitelisted » vient de là.</p></div>
         </div>
-        <div class="gw-card-b"><GwField :value="d.server_ip || 'inconnue'" /></div>
+        <div class="gw-card-b">
+          <GwField :value="d.server_ip || 'inconnue'" />
+          <div class="rd-actions">
+            <button class="btn-normal sm" :disabled="egress.loading" @click="checkEgress">{{ egress.loading ? 'Relevé…' : 'Relever les IP de sortie réelles' }}</button>
+            <span v-if="egress.ips" class="small" :class="egress.ips.length > 1 ? 't-err' : 'muted'">
+              {{ egress.ips.length ? egress.ips.join(' · ') : 'aucune réponse' }}
+              <template v-if="egress.ips.length > 1"> — le serveur sort par plusieurs IP : activez une IP de sortie fixe sur Railway (Settings › Networking) ou faites autoriser toutes ces IP.</template>
+            </span>
+          </div>
+        </div>
       </div>
 
       <!-- Un bloc par partenaire -->
@@ -173,6 +182,7 @@ const testing = reactive({})
 const testRes = reactive({})
 const refreshing = reactive({})
 const showAll = reactive({})
+const egress = reactive({ loading: false, ips: null })
 const METHODS = { wallet: 'Mobile money', bank: 'Compte bancaire', cash: 'Retrait cash' }
 const STATUS = { new: 'Nouveau', pending: 'En cours', successful: 'Réussi', failed: 'Échoué' }
 const STATUS_CLS = { pending: 'info', new: 'info', successful: 'ok', failed: 'err' }
@@ -207,6 +217,16 @@ async function test(p) {
     testRes[p.key] = { ok: false, message: e.response?.data?.message || e.message }
   } finally {
     testing[p.key] = false
+  }
+}
+async function checkEgress() {
+  egress.loading = true
+  try {
+    egress.ips = (await api.get('/admin/remit/egress-ips')).data.ips
+  } catch (e) {
+    showToast(e.response?.data?.message || e.message, 'err')
+  } finally {
+    egress.loading = false
   }
 }
 async function refresh(r) {

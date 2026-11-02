@@ -144,8 +144,39 @@ class RemitDashboardController extends Controller
             Cache::forget('remit:dashboard:balances');
             return response()->json(['ok' => true, 'ms' => (int) round((microtime(true) - $t) * 1000), 'message' => "{$name} : {$msg}"]);
         } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'ms' => (int) round((microtime(true) - $t) * 1000), 'message' => "{$name} : " . mb_substr($e->getMessage(), 0, 300)]);
+            $msg = "{$name} : " . mb_substr($e->getMessage(), 0, 300);
+            $ips = null;
+            // Accès refusé par liste blanche d'IP : on relève les IP de sortie réelles du serveur
+            if (preg_match('/4001|restricted|whitelist|not allowed|forbidden/i', $e->getMessage())) {
+                $ips = self::egressIps();
+                $msg .= ' — Accès refusé par la liste blanche d\'IP du partenaire. IP de sortie relevées maintenant : '
+                    . ($ips ? implode(', ', $ips) : 'inconnues')
+                    . (count($ips) > 1 ? ' (plusieurs IP : activez une IP de sortie fixe sur Railway, ou faites autoriser toutes ces IP).' : ' (à faire autoriser par le partenaire).');
+            }
+            return response()->json(['ok' => false, 'ms' => (int) round((microtime(true) - $t) * 1000), 'message' => $msg, 'egress_ips' => $ips]);
         }
+    }
+
+    /** IP de sortie réellement utilisées (plusieurs relevés, sans cache) — utile quand Railway change d'IP. */
+    public static function egressIps(int $samples = 5): array
+    {
+        $ips = [];
+        foreach (array_slice(['https://api.ipify.org', 'https://api64.ipify.org', 'https://ifconfig.me/ip', 'https://icanhazip.com', 'https://api.ipify.org'], 0, $samples) as $url) {
+            try {
+                $ip = trim(\Illuminate\Support\Facades\Http::timeout(4)->withHeaders(['Connection' => 'close'])->get($url)->body());
+                if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                    $ips[$ip] = true;
+                }
+            } catch (\Throwable) {
+            }
+        }
+        return array_keys($ips);
+    }
+
+    /** Console : relevé des IP de sortie du serveur. */
+    public function egress()
+    {
+        return response()->json(['ips' => self::egressIps(), 'cached' => WacepayBalanceService::serverIp()]);
     }
 
     /** Relit le statut d'une opération chez le partenaire. */

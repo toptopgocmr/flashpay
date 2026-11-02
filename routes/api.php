@@ -431,6 +431,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         // Tableau de bord Remittance : soldes, configuration, activité et opérations de tous les partenaires
         Route::get('/remit/dashboard', [\App\Http\Controllers\Api\RemitDashboardController::class, 'index'])->middleware('throttle:30,1,remit-dashboard');
         Route::post('/remit/test/{partner}', [\App\Http\Controllers\Api\RemitDashboardController::class, 'test'])->where('partner', '[a-z_]+')->middleware('throttle:10,1,remit-test');
+        Route::get('/remit/egress-ips', [\App\Http\Controllers\Api\RemitDashboardController::class, 'egress'])->middleware('throttle:10,1,remit-egress');
         Route::post('/remit/requests/{remitRequest}/refresh', [\App\Http\Controllers\Api\RemitDashboardController::class, 'refresh'])->whereNumber('remitRequest');
         Route::post('/remit/countries/{iso}', [\App\Http\Controllers\Api\RemitAdminController::class, 'updateCountry'])->where('iso', '[A-Za-z]{2}');
         Route::post('/remit/countries/{iso}/backups', [\App\Http\Controllers\Api\RemitAdminController::class, 'updateBackups'])->where('iso', '[A-Za-z]{2}');
