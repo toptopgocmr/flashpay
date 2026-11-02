@@ -375,6 +375,43 @@ class InternationalTransferTest extends TestCase
         $this->assertSame('successful', $tx->fresh()->status);
     }
 
+    public function test_remittance_dashboard_shows_balances_config_activity_and_tests_partners(): void
+    {
+        $admin = User::create(['full_name' => 'Super', 'phone' => '242069990124', 'password' => bcrypt('x'), 'status' => 'active']);
+        $admin->assignRole('super_admin');
+        $this->actingAs($admin, 'sanctum');
+        RemitRequest::create(['partner' => 'wacepay_remit', 'reference' => 'RD1', 'partner_ref' => 'WPPX9', 'method' => 'bank', 'status' => 'successful']);
+        RemitRequest::create(['partner' => 'wacepay_remit', 'reference' => 'RD2', 'method' => 'wallet', 'status' => 'failed', 'message' => 'You are restricted to access the site.']);
+
+        $d = $this->getJson('/api/admin/remit/dashboard?refresh=1')->assertOk();
+        $this->assertSame(['wacepay_remit', 'terrapay', 'pawapay', 'fincra_remit'], collect($d->json('partners'))->pluck('key')->all());
+        $wace = collect($d->json('partners'))->firstWhere('key', 'wacepay_remit');
+        $this->assertSame('Digitwace', $wace['name']);
+        $this->assertTrue($wace['ready']);
+        $this->assertSame('sandbox', $wace['mode']);
+        $this->assertEquals(9000000, $wace['balance']['accounts'][0]['balance']);
+        $this->assertSame(['total' => 2, 'successful' => 1, 'failed' => 1, 'pending' => 0], array_intersect_key($wace['stats'], array_flip(['total', 'successful', 'failed', 'pending'])));
+        $cfg = collect($wace['config'])->keyBy('env');
+        $this->assertSame('Présent', $cfg['WACEPAY_REMIT_PASSWORD']['value']);   // secret jamais affiché
+        $this->assertSame('p••@wace.test', $cfg['WACEPAY_REMIT_EMAIL']['value']); // e-mail masqué
+        $this->assertStringNotContainsString('pwd', json_encode($d->json()));
+        $pawa = collect($d->json('partners'))->firstWhere('key', 'pawapay');
+        $this->assertSame('CMR', $pawa['balance']['accounts'][0]['country']);
+        $terra = collect($d->json('partners'))->firstWhere('key', 'terrapay');
+        $this->assertTrue($terra['balance']['unsupported']);
+        $fincra = collect($d->json('partners'))->firstWhere('key', 'fincra_remit');
+        $this->assertFalse($fincra['configured']);
+        $this->assertContains('FINCRA_SECRET_KEY', collect($fincra['config'])->where('required', true)->where('present', false)->pluck('env')->all());
+        $this->assertSame(2, $d->json('kpi.operations'));
+        $this->assertSame('You are restricted to access the site.', collect($d->json('recent'))->firstWhere('reference', 'RD2')['message']);
+
+        $this->postJson('/api/admin/remit/test/wacepay_remit')->assertOk()->assertJson(['ok' => true])
+            ->assertJsonFragment(['message' => 'Digitwace : Connexion OK — solde 9 000 000 XAF.']);
+        $f = $this->postJson('/api/admin/remit/test/fincra_remit')->assertOk()->assertJson(['ok' => false]);
+        $this->assertStringContainsString('FINCRA_SECRET_KEY', $f->json('message'));
+        $this->postJson('/api/admin/remit/test/peex')->assertNotFound();
+    }
+
     public function test_admin_assigns_pawapay_to_cameroon_and_client_sends_via_pawapay(): void
     {
         $admin = User::create(['full_name' => 'Super', 'phone' => '242069990123', 'password' => bcrypt('x'), 'status' => 'active']);

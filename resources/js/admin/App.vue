@@ -256,6 +256,7 @@ const groups = [
     { to: '/reconciliation', label: 'Réconciliation', desc: 'Ledger, soldes, orphelines PEEX', icon: 'scale' },
   ] },
   { name: 'Intégrations', icon: 'gateway', links: [
+    { to: '/remittance', label: 'Remittance', desc: 'Transferts internationaux : soldes, configuration et opérations de tous les partenaires', icon: 'globe' },
     { to: '/peex', label: 'Passerelle PEEX', desc: 'Collecte, décaissement, tests sandbox', icon: 'gateway', logo: 'PEEX' },
     { to: '/wacepay', label: 'Passerelle WacePay', desc: 'API Digitwace : clés, IP, services, tests', icon: 'gateway', logo: 'WacePay' },
     { to: '/pawapay', label: 'Passerelle PawaPay', desc: 'Collecte, versement, couverture, tests', icon: 'gateway', logo: 'PawaPay' },
@@ -384,7 +385,7 @@ const sandbox = ref(true)
 const envs = ref([{ key: 'peex', name: 'PEEX', sandbox: true }])
 
 // Liste « Partenaires » de la barre du haut
-const PARTNER_PAGES = { peex: '/peex', digitwace: '/wacepay', wacepay_remit: '/wacepay', pawapay: '/pawapay', maishapay: '/maishapay', fincra: '/fincra' }
+const PARTNER_PAGES = { peex: '/peex', digitwace: '/wacepay', wacepay_remit: '/remittance', terrapay: '/remittance', pawapay: '/pawapay', maishapay: '/maishapay', fincra: '/fincra' }
 function partnerLink(e) { return PARTNER_PAGES[e.key] || null }
 const partnersSummary = computed(() => {
   const list = envs.value || []
