@@ -138,6 +138,8 @@ return [
         'check_balance' => (bool) env('WACEPAY_REMIT_CHECK_BALANCE', true),
         'default_civility' => env('WACEPAY_REMIT_DEFAULT_CIVILITY', 'Single'),
         'default_address' => env('WACEPAY_REMIT_DEFAULT_ADDRESS', 'Brazzaville'),
+        // Code postal envoyé quand le client n'en a pas (Congo : pas de code postal) — champ « zipcode » obligatoire chez WacePay
+        'default_zipcode' => env('WACEPAY_REMIT_DEFAULT_ZIPCODE', '00000'),
     ],
 
     /*

@@ -36,6 +36,35 @@ class InternationalTransferController extends Controller
         return $this->wrap(fn () => $this->service->banks(strtoupper($v['country']), (array) ($v['service'] ?? [])));
     }
 
+    /**
+     * Nom de la banque déduit du BIC / SWIFT ou de l'IBAN (pré-remplissage du formulaire « Compte bancaire »).
+     * { iban?, swift?, country?, service? } → { bank_name, swift, bank_id?, country, source, iban_valid? }
+     */
+    public function bankLookup(Request $request)
+    {
+        $v = $request->validate(['iban' => 'nullable|string|max:40', 'swift' => 'nullable|string|max:16', 'country' => 'nullable|string|size:2',
+            'service' => 'nullable|array', 'service.code' => 'nullable|string|max:40', 'service.name' => 'nullable|string|max:80']);
+        $r = app(\App\Services\Remit\BankDirectory::class)->lookup($v['iban'] ?? null, $v['swift'] ?? null);
+        $iban = strtoupper(preg_replace('/\s+/', '', (string) ($v['iban'] ?? '')));
+        if ($iban !== '' && preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/', $iban)) {
+            $r['iban_valid'] = \App\Services\Remit\InternationalTransferService::ibanValid($iban);
+        }
+        // Banque correspondante dans la liste du partenaire, si elle existe (bank_id exigé par certains partenaires)
+        $country = strtoupper((string) ($v['country'] ?? $r['country'] ?? ''));
+        if ($country !== '' && ($r['swift'] || $r['bank_name'])) {
+            try {
+                $list = (array) ($this->service->banks($country, (array) ($v['service'] ?? []))['banks'] ?? []);
+                if ($b = \App\Services\Remit\BankDirectory::matchPartnerList($list, $r['swift'], $r['bank_name'])) {
+                    $r['bank_id'] = $b['id'] ?? null;
+                    $r['bank_name'] = $b['name'] ?? $r['bank_name'];
+                    $r['source'] = 'partner';
+                }
+            } catch (\Throwable) {
+            }
+        }
+        return response()->json($r);
+    }
+
     public function cashPoints(Request $request)
     {
         $v = $request->validate(['country' => 'required|string|size:2', 'service' => 'nullable|array', 'service.code' => 'nullable|string|max:40', 'service.name' => 'nullable|string|max:80']);

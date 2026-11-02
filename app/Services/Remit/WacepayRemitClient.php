@@ -214,7 +214,22 @@ class WacepayRemitClient
             'regiterBusinessDate' => $type === 'B' ? ($s['registered_at'] ?? null) : null,
             'dateExpireId' => $s['id_expiry'] ?? null,
             'pep' => (int) (bool) ($s['pep'] ?? false),
-        ], fn ($v) => $v !== null && $v !== '');
+        ], fn ($v) => $v !== null && $v !== '') + $this->addressExtras($s, $type === 'B' ? ($s['business_description'] ?? $s['business_name'] ?? null) : null);
+    }
+
+    /**
+     * Champs exigés par WacePay (« must be present ») pour l'expéditeur et le bénéficiaire :
+     * state (région / quartier), zipcode (code postal) et comment. Toujours envoyés, jamais vides.
+     */
+    protected function addressExtras(array $p, ?string $comment = null): array
+    {
+        $zip = preg_replace('/\s+/', '', (string) ($p['postal_code'] ?? $p['zipcode'] ?? ''));
+        return [
+            'state' => (string) ($p['state'] ?? $p['district'] ?? $p['city'] ?? $this->cfg('default_address', 'Brazzaville')),
+            // Pas de code postal au Congo (ni dans beaucoup de pays) : valeur neutre
+            'zipcode' => $zip !== '' ? $zip : (string) $this->cfg('default_zipcode', '00000'),
+            'comment' => mb_substr((string) ($comment ?: ($p['comment'] ?? 'OfficePay')), 0, 160),
+        ];
     }
 
     public function beneficiaryBody(array $b, string $senderCode): array
@@ -238,7 +253,7 @@ class WacepayRemitClient
             'dob' => $type === 'B' ? ($b['registered_at'] ?? null) : ($b['date_of_birth'] ?? null),
             'expire_date' => $type === 'B' ? ($b['registration_expiry'] ?? null) : null,
             'sender_code' => $senderCode,
-        ], fn ($v) => $v !== null && $v !== '');
+        ], fn ($v) => $v !== null && $v !== '') + $this->addressExtras($b);
     }
 
     /** Code expéditeur (créé une fois, réutilisé tant que les données d'identité ne changent pas). */

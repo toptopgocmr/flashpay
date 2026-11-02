@@ -215,6 +215,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
             Route::get('/services', 'services')->middleware('throttle:30,1,remit-services');
             Route::post('/banks', 'banks')->middleware('throttle:30,1,remit-banks');
             Route::post('/cash-points', 'cashPoints')->middleware('throttle:30,1,remit-cash');
+            Route::post('/bank-lookup', 'bankLookup')->middleware('throttle:60,1,remit-bank-lookup');
             Route::get('/lists', 'lists');
             Route::post('/quote', 'quote')->middleware('throttle:60,1,remit-quote');
             Route::post('/send', 'send')->middleware(['cap:send', 'one_op', 'pin', 'idempotent']);

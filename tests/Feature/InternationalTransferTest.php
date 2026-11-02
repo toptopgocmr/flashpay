@@ -331,6 +331,42 @@ class InternationalTransferTest extends TestCase
         $this->assertSame('PAY-B', $bank['payerCode']);
     }
 
+    public function test_bank_name_found_from_iban_or_swift_and_wacepay_required_fields_sent(): void
+    {
+        config(['flashpay.remit.partners' => ['*' => 'wacepay_remit']]);
+        $c = $this->client();
+        $this->actingAs($c, 'sanctum');
+        $service = ['code' => 'B', 'name' => 'BANKS DEPOSIT'];
+
+        // IBAN Nickel → nom et BIC déduits
+        $this->postJson('/api/pay/international/bank-lookup', ['iban' => 'FR76 1659 8000 0113 9161 2000 178', 'country' => 'FR', 'service' => $service])->assertOk()
+            ->assertJson(['bank_name' => 'Nickel (Financière des Paiements Électroniques)', 'swift' => 'FPELFR21', 'iban_valid' => true, 'source' => 'iban']);
+        // BIC seul
+        $this->postJson('/api/pay/international/bank-lookup', ['swift' => 'bnpa fr pp xxx'])->assertOk()
+            ->assertJson(['bank_name' => 'BNP Paribas', 'swift' => 'BNPAFRPPXXX', 'country' => 'FR']);
+        // Côte d'Ivoire : banque retrouvée dans la liste du partenaire (bank_id)
+        $this->postJson('/api/pay/international/bank-lookup', ['swift' => 'SGCICIAB', 'country' => 'CI', 'service' => $service])->assertOk()
+            ->assertJson(['bank_name' => 'SGBCI', 'bank_id' => 7, 'source' => 'partner']);
+        // Inconnu : pas d'invention
+        $this->assertNull($this->postJson('/api/pay/international/bank-lookup', ['swift' => 'ZZZZFRPP'])->json('bank_name'));
+
+        // Envoi France : WacePay exige state, zipcode et comment (expéditeur et bénéficiaire)
+        $this->postJson('/api/pay/international/send', [
+            'amount' => 100000, 'country' => 'FR', 'method' => 'bank', 'business_type' => 'p2p', 'service' => $service,
+            'sender' => $this->sender(),
+            'beneficiary' => ['first_name' => 'Marie', 'last_name' => 'Dupont', 'phone' => '+33612345678', 'city' => 'Paris'],
+            'account' => ['account' => 'FR7616598000011391612000178', 'bank_name' => 'Nickel (Financière des Paiements Électroniques)', 'swift' => 'FPELFR21'],
+        ])->assertStatus(202);
+        foreach (['/sender/create', '/beneficiary/create'] as $path) {
+            $req = collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), $path));
+            foreach (['state', 'zipcode', 'comment'] as $k) {
+                $this->assertNotSame('', (string) ($req[$k] ?? ''), "{$path} : champ {$k} absent");
+            }
+        }
+        $this->assertSame('Paris', collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/beneficiary/create'))['state']);
+        $this->assertSame('00000', collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/sender/create'))['zipcode']);
+    }
+
     public function test_terrapay_wallet_checks_account_then_sends_with_reverse_quote(): void
     {
         $c = $this->client();
