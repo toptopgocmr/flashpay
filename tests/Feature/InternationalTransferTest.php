@@ -58,6 +58,7 @@ class InternationalTransferTest extends TestCase
                 str_ends_with($u, '/transaction/payercode') => Http::response(['status' => 2000, 'transaction' => ['PayerCode' => 'PAY-' . $req['payoutService']]]),
                 str_ends_with($u, '/transaction/bank/list') && $req['iso2'] === 'FR' => Http::response(['status' => 2000, 'data' => []]),
                 str_ends_with($u, '/transaction/bank/list') => Http::response(['status' => 2000, 'data' => [['BankName' => 'SGBCI', 'BankID' => 7, 'BankCode' => 'CI008']]]),
+                str_ends_with($u, '/sender/create') && in_array($req['idType'] ?? null, $this->rejectIdTypes, true) => Http::response(['status' => 3003, 'message' => 'This Id type does not exist or is disabled. Please contact  support'], 404),
                 str_ends_with($u, '/sender/create') => Http::response(['messages' => 'ok', 'sender' => ['Code' => 'S-' . ($req['type'] ?? '?')], 'stauts' => 2000]),
                 str_ends_with($u, '/beneficiary/create') => Http::response(['messages' => 'ok', 'beneficiary' => ['Code' => 'B-' . ($req['type'] ?? '?')], 'status' => 201]),
                 str_ends_with($u, '/transaction/wallet/create') => Http::response(['message' => 'ok', 'transaction' => ['reference' => 'WPPX1', 'feeds' => 350], 'status' => 201]),
@@ -85,6 +86,34 @@ class InternationalTransferTest extends TestCase
                 default => Http::response(['message' => 'not found ' . $u], 404),
             };
         });
+    }
+
+    /** Types de pièce refusés par le faux WacePay (code 3003). */
+    protected array $rejectIdTypes = [];
+
+    public function test_wacepay_type_de_piece_refuse_essaie_une_autre_ecriture_et_la_retient(): void
+    {
+        $client = app(\App\Services\Remit\WacepayRemitClient::class);
+        $this->rejectIdTypes = ['CNI', 'ID'];
+        $sender = ['type' => 'P', 'first_name' => 'Awa', 'last_name' => 'Test', 'id_type' => 'CNI', 'id_number' => 'C1', 'phone' => '242060000000'];
+        $this->assertSame('S-P', $client->senderCode($sender, null));
+        $tried = collect($this->sent)->filter(fn ($q) => str_ends_with($q->url(), '/sender/create'))->map(fn ($q) => $q['idType'])->values()->all();
+        $this->assertSame(['CNI', 'ID', 'IDCARD'], $tried);
+        // Retenu pour les envois suivants
+        $this->assertSame('IDCARD', $client->idTypeCandidates('CNI')[0]);
+
+        // Code imposé par réglage
+        config(['flashpay.wacepay_remit.id_types' => 'PP=PASSPORT']);
+        $this->assertSame(['PASSPORT'], $client->idTypeCandidates('PP'));
+
+        // Toutes les écritures refusées : erreur 3003 conservée
+        $this->rejectIdTypes = ['PASSPORT'];
+        try {
+            $client->senderCode(['type' => 'P', 'first_name' => 'Awa', 'last_name' => 'Test', 'id_type' => 'PP', 'id_number' => 'P9'], null);
+            $this->fail('3003 attendu');
+        } catch (\App\Services\Remit\RemitException $e) {
+            $this->assertSame('3003', $e->partnerCode);
+        }
     }
 
     protected function client(int $balance = 500000): User

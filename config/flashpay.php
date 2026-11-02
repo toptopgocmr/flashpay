@@ -140,6 +140,8 @@ return [
         'default_address' => env('WACEPAY_REMIT_DEFAULT_ADDRESS', 'Brazzaville'),
         // Code postal envoyé quand le client n'en a pas (Congo : pas de code postal) — champ « zipcode » obligatoire chez WacePay
         'default_zipcode' => env('WACEPAY_REMIT_DEFAULT_ZIPCODE', '00000'),
+        // Code WacePay imposé par type de pièce FlashPay, ex. « CNI=IDCARD,PP=PASSPORT » (vide = essai automatique)
+        'id_types' => env('WACEPAY_REMIT_ID_TYPES', ''),
     ],
 
     /*

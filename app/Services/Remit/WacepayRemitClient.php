@@ -259,20 +259,77 @@ class WacepayRemitClient
     /** Code expéditeur (créé une fois, réutilisé tant que les données d'identité ne changent pas). */
     public function senderCode(array $s, ?int $userId = null): string
     {
-        $body = $this->senderBody($s);
-        return $this->party('sender', $body, $userId, function () use ($body) {
+        return $this->withIdType('sender', $this->senderBody($s), $userId, function (array $body) {
             $json = $this->send('post', 'sender/create', $body);
-            return (string) (data_get($json, 'sender.Code') ?? data_get($json, 'data.Code') ?? '');
+            return (string) (data_get($json, 'sender.Code') ?? data_get($json, 'data.Code') ?? data_get($json, 'data.senderCode') ?? '');
         });
     }
 
     public function beneficiaryCode(array $b, string $senderCode, ?int $userId = null): string
     {
-        $body = $this->beneficiaryBody($b, $senderCode);
-        return $this->party('beneficiary', $body, $userId, function () use ($body) {
+        return $this->withIdType('beneficiary', $this->beneficiaryBody($b, $senderCode), $userId, function (array $body) {
             $json = $this->send('post', 'beneficiary/create', $body);
             return (string) (data_get($json, 'beneficiary.Code') ?? data_get($json, 'data.Code') ?? '');
         });
+    }
+
+    /**
+     * Écritures possibles de chaque type de pièce chez WacePay. Le code FlashPay est essayé
+     * en premier ; si WacePay répond 3003 (« Id type does not exist or is disabled »), on essaie
+     * les autres écritures, et celle qui passe est retenue (cache) pour les envois suivants.
+     * WACEPAY_REMIT_ID_TYPES (« CNI=IDCARD,PP=PASSPORT ») impose le code à utiliser.
+     */
+    public const ID_TYPE_ALIASES = [
+        'CNI' => ['CNI', 'ID', 'IDCARD', 'ID_CARD', 'NATIONAL_ID', 'NID', 'CI'],
+        'PP' => ['PP', 'PASSPORT', 'Passport', 'PASSEPORT', 'PSP'],
+        'PC' => ['PC', 'DRIVING_LICENSE', 'DRIVER_LICENSE', 'DL', 'PERMIS'],
+        'CS' => ['CS', 'RESIDENCE_PERMIT', 'RP', 'CARTE_SEJOUR'],
+    ];
+
+    /** Codes à essayer, dans l'ordre, pour un type de pièce FlashPay. */
+    public function idTypeCandidates(?string $type): array
+    {
+        $type = strtoupper(trim((string) $type));
+        if ($type === '' || $type === 'RCCM') {
+            return [$type];
+        }
+        $forced = collect(explode(',', (string) $this->cfg('id_types', '')))
+            ->mapWithKeys(function ($pair) {
+                [$k, $v] = array_pad(explode('=', $pair, 2), 2, '');
+                return trim($k) !== '' && trim($v) !== '' ? [strtoupper(trim($k)) => trim($v)] : [];
+            });
+        if ($forced->has($type)) {
+            return [$forced[$type]];
+        }
+        $known = Cache::get('wacepay_remit:idtype:' . $type);
+        $list = self::ID_TYPE_ALIASES[$type] ?? [$type];
+        return array_values(array_unique(array_filter([$known, ...$list])));
+    }
+
+    protected function withIdType(string $kind, array $body, ?int $userId, callable $create): string
+    {
+        $ours = $body['idType'] ?? null;
+        $candidates = $this->idTypeCandidates($ours);
+        $last = null;
+        foreach ($candidates as $code) {
+            if ($ours !== null && $code !== '') {
+                $body['idType'] = $code;
+            }
+            try {
+                $result = $this->party($kind, $body, $userId, fn () => $create($body));
+                if ($ours !== null && count($candidates) > 1) {
+                    Cache::forever('wacepay_remit:idtype:' . strtoupper((string) $ours), $code);
+                }
+                return $result;
+            } catch (RemitException $e) {
+                if ($e->partnerCode !== '3003') {
+                    throw $e;
+                }
+                $last = $e;
+                Log::info('WacePay : type de pièce refusé, essai suivant', ['kind' => $kind, 'ours' => $ours, 'tried' => $code]);
+            }
+        }
+        throw $last ?? new RemitException('WacePay : type de pièce refusé.', '3003', null, [], true);
     }
 
     protected function party(string $kind, array $body, ?int $userId, callable $create): string

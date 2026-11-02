@@ -947,7 +947,7 @@ class InternationalTransferService
             '1017' => 'Banque inconnue ou indisponible.', '2001' => 'Devise non disponible pour ce pays.', '2003' => 'Pays non disponible.',
             '2008' => 'Service de réception indisponible pour ce pays.', '2010' => 'Taux de change non configuré chez le partenaire.',
             '2011' => 'Frais non configurés chez le partenaire pour ce montant.', '2015' => 'Service de réception indisponible.',
-            '3001' => 'Pour une entreprise, le type de pièce doit être le RCCM.', '3003' => 'Type de pièce d\'identité non accepté.',
+            '3001' => 'Pour une entreprise, le type de pièce doit être le RCCM.', '3003' => 'Le partenaire n\'accepte pas ce type de pièce d\'identité. Modifiez votre pièce (Transfert international › Expéditeur › Modifier) et choisissez de préférence le passeport.',
             '6001' => 'Pays du bénéficiaire non disponible.', '6002' => 'Ville du bénéficiaire inconnue.', '6008' => 'Le nom du bénéficiaire ne correspond pas au titulaire du compte.',
         ];
         return $map[$e->partnerCode ?? ''] ?? preg_replace('/^(Digitwace \(WacePay\)|WacePay|TerraPay)\s*(\(\w+\))?\s*:\s*/', '', $e->getMessage());
