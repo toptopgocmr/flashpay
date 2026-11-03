@@ -137,7 +137,11 @@ class AdminDashboardController extends Controller
         ];
         $t->beneficiary = [
             'name' => $m['merchant_name'] ?? $dst?->full_name ?? $m['beneficiary_name'] ?? $m['client_name'] ?? ($t->destination_rail === 'treasury' ? 'OfficePay (trésorerie)' : null),
-            'account' => ($t->destination_rail === 'bank' ? $t->destination_account : \App\Support\Phone::display($t->destination_account ?? $dst?->phone)) ?? ($m['bank_name'] ?? null),
+            'account' => ($bank = \App\Support\TransactionPresenter::bankAccount($t))
+                ? ($bank['iban'] ?? $bank['bank'])
+                : (\App\Support\Phone::display($t->destination_account ?? $dst?->phone) ?? ($m['bank_name'] ?? null)),
+            'bank' => $bank['bank'] ?? null,
+            'bank_logo' => $bank['logo'] ?? null,
         ];
         $t->unsetRelations();
         return $t;

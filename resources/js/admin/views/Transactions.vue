@@ -169,7 +169,7 @@
           <div class="wp-sec">
             <h4>Bénéficiaire</h4>
             <div class="kv"><span>Nom</span><b>{{ detail.beneficiary?.name || '—' }}</b></div>
-            <div class="kv"><span>Compte</span><b>{{ phone(detail.beneficiary?.account) || '—' }}</b></div>
+            <div class="kv"><span>Compte</span><b class="pv-row"><img v-if="detail.beneficiary?.bank_logo" :src="detail.beneficiary.bank_logo" alt="" style="width:18px;height:18px;border-radius:4px;object-fit:contain" />{{ detail.beneficiary?.bank ? detail.beneficiary.account : (phone(detail.beneficiary?.account) || '—') }}</b></div>
             <div class="kv"><span>Service</span><b class="pv-row"><template v-if="detail.gateway?.out.operator"><ProviderLogo :name="detail.gateway.out.operator" />{{ detail.gateway.out.operator }}</template><template v-else>—</template><template v-if="detail.gateway?.out.partner"><span class="sep">·</span><ProviderLogo :name="detail.gateway.out.partner" />{{ detail.gateway.out.partner }}</template></b></div>
             <div class="kv" v-if="countryOut(detail)"><span>Pays de réception</span><b class="pv-row"><Flag :iso="countryOut(detail)" :size="14" />{{ countryLabel(countryOut(detail)) }}</b></div>
           </div>

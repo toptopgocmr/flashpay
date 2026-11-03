@@ -27,7 +27,7 @@ class WacepayRemitConnector extends RemitConnector
         $fromCountry = strtoupper((string) ($remit['sender']['country'] ?? config('flashpay.remit.from_country', 'CG')));
         $country = strtoupper((string) $remit['country']);
         $payCurrency = strtoupper((string) ($remit['currency'] ?? $currencyOut));
-        $why = self::why($remit);
+        $why = self::why($remit) + ['sender_code_transaction' => (string) $tx->reference];
 
         $sender = $c->senderCode($remit['sender'], $tx->initiated_by);
         $beneficiary = $c->beneficiaryCode($remit['beneficiary'] + ['country' => $country], $sender, $tx->initiated_by);

@@ -16,6 +16,15 @@ class RemitBeneficiaryController extends Controller
 
     public function index(Request $request)
     {
+        // Bénéficiaires des transferts déjà envoyés : ajoutés au carnet s'ils n'y sont pas
+        // (au plus une fois toutes les 10 min par client)
+        if (\Illuminate\Support\Facades\Cache::add('remit-book-import:' . $request->user()->id, 1, now()->addMinutes(10))) {
+            try {
+                $this->book->importHistory($request->user());
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
         $q = RemitBeneficiary::where('user_id', $request->user()->id);
         if ($c = strtoupper((string) $request->query('country'))) {
             $q->where('country', $c);

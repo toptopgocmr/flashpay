@@ -370,6 +370,17 @@ class InternationalTransferTest extends TestCase
         $this->assertSame('France', $rows['Pays de réception']);
         $this->assertNotEmpty($rows["Pays d'envoi"]);
         $this->assertSame('FR', $view['destination_country']);
+        $this->assertSame($tx->reference, $bank['sender_code_transaction']);
+
+        // Bénéficiaires déjà payés : proposés au choix du pays, y compris ceux d'avant le carnet
+        \App\Models\RemitBeneficiary::query()->delete();
+        Cache::flush();
+        $list = $this->getJson('/api/pay/international/beneficiaries?country=FR')->assertOk()->json('beneficiaries');
+        $this->assertCount(1, $list);
+        $this->assertSame('Marie Dupont', $list[0]['label']);
+        $this->assertSame('FR7630006000011234567890189', $list[0]['account']['account']);
+        $this->assertSame('P99887766', $list[0]['beneficiary']['id_number']);
+        $this->assertCount(0, $this->getJson('/api/pay/international/beneficiaries?country=SN')->assertOk()->json('beneficiaries'));
     }
 
     public function test_bank_name_found_from_iban_or_swift_and_wacepay_required_fields_sent(): void

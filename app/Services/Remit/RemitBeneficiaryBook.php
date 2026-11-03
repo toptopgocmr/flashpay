@@ -24,12 +24,7 @@ class RemitBeneficiaryBook
         $method = (string) $v['method'];
         $service = isset($v['service']) && is_array($v['service']) ? $this->only($v['service'], ['code', 'name']) : null;
 
-        $key = match ($method) {
-            'bank' => strtoupper(preg_replace('/\s+/', '', (string) ($acc['account'] ?? ''))),
-            'cash' => mb_strtolower(trim(($ben['first_name'] ?? '') . ' ' . ($ben['last_name'] ?? '') . ' ' . ($ben['business_name'] ?? '') . ' ' . ($ben['phone'] ?? ''))),
-            default => preg_replace('/\D/', '', (string) ($acc['msisdn'] ?? '')),
-        };
-        $fingerprint = hash('sha256', implode('|', [$country, $method, $key ?: json_encode($ben)]));
+        $fingerprint = $this->fingerprint($v);
 
         $b = RemitBeneficiary::firstOrNew(['user_id' => $user->id, 'fingerprint' => $fingerprint]);
         $old = (array) ($b->data ?? []);
@@ -53,9 +48,50 @@ class RemitBeneficiaryBook
         return $b;
     }
 
+    /**
+     * Ajoute au carnet les bénéficiaires des transferts internationaux déjà envoyés
+     * (opérations antérieures au carnet, ou envoyées sans l'enregistrer). Ne modifie
+     * jamais une fiche existante (libellé, favori).
+     */
+    public function importHistory(User $user, int $limit = 100): int
+    {
+        $added = 0;
+        $txs = \App\Models\Transaction::where('type', 'international_transfer')->where('initiated_by', $user->id)
+            ->latest('id')->limit($limit)->get();
+        foreach ($txs->reverse() as $tx) {
+            $r = (array) ($tx->meta['remit'] ?? []);
+            if (empty($r['country']) || empty($r['method']) || empty($r['beneficiary'])) {
+                continue;
+            }
+            $v = ['country' => $r['country'], 'method' => $r['method'], 'business_type' => strtolower((string) ($tx->meta['business_type'] ?? $r['business_type'] ?? 'p2p')),
+                'service' => $r['service'] ?? null, 'beneficiary' => (array) $r['beneficiary'], 'account' => (array) ($r['account'] ?? []), 'why' => (array) ($r['why'] ?? [])];
+            if (RemitBeneficiary::where('user_id', $user->id)->where('fingerprint', $this->fingerprint($v))->exists()) {
+                continue;
+            }
+            $b = $this->remember($user, $v);
+            $b->forceFill(['uses' => 1, 'last_used_at' => $tx->created_at])->save();
+            $added++;
+        }
+        return $added;
+    }
+
     public function touch(RemitBeneficiary $b): void
     {
         $b->forceFill(['uses' => (int) $b->uses + 1, 'last_used_at' => now()])->save();
+    }
+
+    /** Empreinte d'un bénéficiaire : pays + mode + compte (IBAN, numéro) ou identité. */
+    public function fingerprint(array $v): string
+    {
+        $ben = $this->only((array) ($v['beneficiary'] ?? []), self::BENEFICIARY_KEYS);
+        $acc = $this->only((array) ($v['account'] ?? []), self::ACCOUNT_KEYS);
+        $method = (string) $v['method'];
+        $key = match ($method) {
+            'bank' => strtoupper(preg_replace('/\s+/', '', (string) ($acc['account'] ?? ''))),
+            'cash' => mb_strtolower(trim(($ben['first_name'] ?? '') . ' ' . ($ben['last_name'] ?? '') . ' ' . ($ben['business_name'] ?? '') . ' ' . ($ben['phone'] ?? ''))),
+            default => preg_replace('/\D/', '', (string) ($acc['msisdn'] ?? '')),
+        };
+        return hash('sha256', implode('|', [strtoupper((string) $v['country']), $method, $key ?: json_encode($ben)]));
     }
 
     protected function only(array $in, array $keys): array

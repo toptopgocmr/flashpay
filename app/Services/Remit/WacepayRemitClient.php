@@ -373,6 +373,7 @@ class WacepayRemitClient
             'payerCode' => $payerCode, 'amountToPaid' => (string) $amount, 'senderCode' => $senderCode, 'beneficiaryCode' => $beneficiaryCode,
             'fromCurrency' => $fromCurrency, 'mobileReceiveNumber' => ltrim($msisdn, '+'), 'fromCountry' => $fromCountry,
             'originFund' => $why['origin_fund'], 'reason' => $why['reason'], 'relation' => $why['relation'],
+            'sender_code_transaction' => (string) ($why['sender_code_transaction'] ?? ''),
         ];
         return $this->created($this->send('post', 'transaction/wallet/create', $body), $body);
     }
@@ -384,6 +385,8 @@ class WacepayRemitClient
             'fromCountry' => $fromCountry, 'comment' => mb_substr($comment, 0, 160), 'bankAccount' => $bank['account'], 'bankName' => $bank['name'],
             'bankId' => (int) ($bank['id'] ?? 0), 'bankBranch' => $bank['branch'] ?? $bank['name'], 'bankSwCode' => $bank['swift'] ?? '',
             'originFund' => $why['origin_fund'], 'reason' => $why['reason'], 'relation' => $why['relation'], 'fromCurrency' => $fromCurrency,
+            // Référence OfficePay de l'opération (exigée par WacePay : « sender code transaction must be present »)
+            'sender_code_transaction' => (string) ($why['sender_code_transaction'] ?? ''),
         ];
         return $this->created($this->send('post', 'transaction/bank/create', $body), $body);
     }
@@ -396,6 +399,7 @@ class WacepayRemitClient
             'senderCode' => $p['sender_code'], 'beneficiaryCode' => $p['beneficiary_code'], 'fromCurrency' => $p['from_currency'],
             'mobileTopup' => $p['mobile'], 'fromCountry' => $p['from_country'],
             'originFund' => $why['origin_fund'], 'reason' => $why['reason'], 'relation' => $why['relation'],
+            'sender_code_transaction' => (string) ($why['sender_code_transaction'] ?? ''),
         ];
         return $this->created($this->send('post', 'transaction/cash/create', $body), $body);
     }
