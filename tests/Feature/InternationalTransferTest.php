@@ -393,6 +393,11 @@ class InternationalTransferTest extends TestCase
             }
         }
         $this->assertSame('Paris', collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/beneficiary/create'))['state']);
+        // WacePay : identité du bénéficiaire toujours présente (snake_case), vide si non saisie
+        $ben = collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/beneficiary/create'))->data();
+        foreach (['id_number', 'id_type', 'dob', 'expire_date'] as $k) {
+            $this->assertArrayHasKey($k, $ben, "beneficiary/create : champ {$k} absent");
+        }
         $this->assertSame('00000', collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/sender/create'))['zipcode']);
     }
 

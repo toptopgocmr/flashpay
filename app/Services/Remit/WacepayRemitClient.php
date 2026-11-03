@@ -253,7 +253,22 @@ class WacepayRemitClient
             'dob' => $type === 'B' ? ($b['registered_at'] ?? null) : ($b['date_of_birth'] ?? null),
             'expire_date' => $type === 'B' ? ($b['registration_expiry'] ?? null) : null,
             'sender_code' => $senderCode,
-        ], fn ($v) => $v !== null && $v !== '') + $this->addressExtras($b);
+        ], fn ($v) => $v !== null && $v !== '') + $this->beneficiaryIdentity($b, $type) + $this->addressExtras($b);
+    }
+
+    /**
+     * Identité du bénéficiaire sous les noms exigés par WacePay pour /beneficiary/create
+     * (« The id number / id type / dob / expire date field must be present ») : toujours envoyés,
+     * vides quand le client ne les a pas saisis (le bénéficiaire n'est identifié qu'au versement).
+     */
+    protected function beneficiaryIdentity(array $b, string $type): array
+    {
+        $date = fn ($v) => $v ? substr((string) $v, 0, 10) : '';
+        return $type === 'B'
+            ? ['id_number' => (string) ($b['registration_number'] ?? ''), 'id_type' => 'RCCM',
+                'dob' => $date($b['registered_at'] ?? null), 'expire_date' => $date($b['registration_expiry'] ?? null)]
+            : ['id_number' => (string) ($b['id_number'] ?? ''), 'id_type' => (string) ($b['id_type'] ?? ''),
+                'dob' => $date($b['date_of_birth'] ?? null), 'expire_date' => $date($b['id_expiry'] ?? null)];
     }
 
     /** Code expéditeur (créé une fois, réutilisé tant que les données d'identité ne changent pas). */
@@ -314,6 +329,9 @@ class WacepayRemitClient
         foreach ($candidates as $code) {
             if ($ours !== null && $code !== '') {
                 $body['idType'] = $code;
+                if (($body['id_type'] ?? '') !== '') {
+                    $body['id_type'] = $code; // même code sous le nom attendu par /beneficiary/create
+                }
             }
             try {
                 $result = $this->party($kind, $body, $userId, fn () => $create($body));
