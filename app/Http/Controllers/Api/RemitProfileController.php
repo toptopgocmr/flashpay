@@ -17,10 +17,24 @@ class RemitProfileController extends Controller
     {
     }
 
+    /**
+     * Listes clé → valeur vides envoyées en objet JSON « {} » et non « [] » : l'app les lit comme des
+     * objets (profil complet = « missing » vide → page blanche dans les anciennes versions de l'app).
+     */
+    protected function objects(array $st): array
+    {
+        foreach (['missing', 'documents', 'data'] as $k) {
+            if (array_key_exists($k, $st) && is_array($st[$k]) && $st[$k] === []) {
+                $st[$k] = new \stdClass();
+            }
+        }
+        return $st;
+    }
+
     public function show(Request $request)
     {
         $v = $request->validate(['country' => 'nullable|string|size:2']);
-        return response()->json($this->profiles->status($request->user(), $v['country'] ?? null) + [
+        return response()->json($this->objects($this->profiles->status($request->user(), $v['country'] ?? null)) + [
             'id_types' => \App\Services\Remit\InternationalTransferService::ID_TYPES,
             'civilities' => \App\Services\Remit\RemitProfileService::CIVILITIES,
             'postal_code_countries' => array_values((array) config('flashpay.remit.postal_code_countries', [])),
@@ -58,7 +72,7 @@ class RemitProfileController extends Controller
             'id_expiry.after' => 'Cette pièce d\'identité est expirée : enregistrez une pièce en cours de validité.',
         ]);
         $this->profiles->save($request->user(), $v);
-        return response()->json(['message' => 'Profil international enregistré.'] + $this->profiles->status($request->user()));
+        return response()->json(['message' => 'Profil international enregistré.'] + $this->objects($this->profiles->status($request->user())));
     }
 
     public function sendEmailCode(Request $request)
@@ -70,6 +84,6 @@ class RemitProfileController extends Controller
     {
         $v = $request->validate(['code' => 'required|string|size:6']);
         $this->profiles->verifyEmail($request->user(), $v['code']);
-        return response()->json(['message' => 'E-mail vérifié.'] + $this->profiles->status($request->user()));
+        return response()->json(['message' => 'E-mail vérifié.'] + $this->objects($this->profiles->status($request->user())));
     }
 }

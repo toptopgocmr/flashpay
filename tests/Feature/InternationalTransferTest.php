@@ -401,6 +401,16 @@ class InternationalTransferTest extends TestCase
         $this->assertSame('00000', collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/sender/create'))['zipcode']);
     }
 
+    public function test_complete_profile_returns_empty_lists_as_json_objects_for_the_app(): void
+    {
+        $c = $this->client();
+        $r = $this->actingAs($c, 'sanctum')->getJson('/api/pay/international/profile')->assertOk();
+        $this->assertTrue($r->json('complete'));
+        // « missing » vide = objet JSON (une liste « [] » faisait planter l'écran « Modifier » de l'app)
+        $this->assertStringContainsString('"missing":{}', $r->getContent());
+        $this->assertStringNotContainsString('"missing":[]', $this->putJson('/api/pay/international/profile', ['occupation' => 'Commerçant'])->assertOk()->getContent());
+    }
+
     public function test_terrapay_wallet_checks_account_then_sends_with_reverse_quote(): void
     {
         $c = $this->client();
