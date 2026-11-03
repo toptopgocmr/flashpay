@@ -285,7 +285,8 @@ class PaymentController extends Controller
             ? \App\Support\TransactionPresenter::present($tx, \App\Support\TransactionPresenter::walletIdsOf($viewer), (int) $viewer->id)
             : \App\Support\TransactionPresenter::present($tx);
 
-        return \Illuminate\Support\Arr::only($journal, ['label', 'direction', 'flow', 'channel', 'sender_name', 'sender_phone', 'beneficiary_name', 'beneficiary_phone', 'details']) + [
+        return \Illuminate\Support\Arr::only($journal, ['label', 'direction', 'flow', 'channel', 'sender_name', 'sender_phone', 'beneficiary_name', 'beneficiary_phone',
+            'beneficiary_bank', 'beneficiary_logo', 'beneficiary_operator', 'source_country', 'destination_country', 'details']) + [
             'id' => $tx->id,
             'reference' => $tx->reference,
             'type' => $tx->type,

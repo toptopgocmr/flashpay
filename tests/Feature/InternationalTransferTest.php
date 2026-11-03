@@ -354,7 +354,10 @@ class InternationalTransferTest extends TestCase
         $send('BE68 5390 0754 7034')->assertStatus(422)->assertJsonFragment(['message' => "Cet IBAN n'est pas un compte de France."]);
         $this->assertSame(500000, (int) $c->wallet->fresh()->balance);
 
-        $send('FR76 3000 6000 0112 3456 7890 189')->assertStatus(202);
+        $sent = $send('FR76 3000 6000 0112 3456 7890 189')->assertStatus(202);
+        // Écran de suivi de l'app : logo officiel de la banque (pas l'icône générique)
+        $this->assertSame('BNP Paribas', $sent->json('beneficiary_bank'));
+        $this->assertStringContainsString('bnpparibas.com', (string) $sent->json('beneficiary_logo'));
         $bank = collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/transaction/bank/create'));
         $this->assertSame('FR7630006000011234567890189', $bank['bankAccount']);
         $this->assertSame('BNP Paribas', $bank['bankName']);
