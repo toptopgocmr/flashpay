@@ -692,7 +692,7 @@ class InternationalTransferTest extends TestCase
         $this->assertTrue(collect($this->getJson('/api/pay/international/options')->json('countries'))->firstWhere('iso', 'CI')['beneficiary_id']);
         $send = fn (array $ben) => $this->postJson('/api/pay/international/send', ['amount' => 20000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p', 'service' => ['code' => 'OM', 'name' => 'ORANGE MONEY'],
             'beneficiary' => $ben + ['first_name' => 'Awa', 'last_name' => 'Koné'], 'account' => ['msisdn' => '0707070707']]);
-        $send([])->assertStatus(422)->assertJsonFragment(['message' => "Pour Côte d'Ivoire, indiquez le type et le numéro de pièce d'identité du bénéficiaire (exigés par le partenaire)."]);
+        $send([])->assertStatus(422)->assertJsonFragment(['message' => "Pour Côte d'Ivoire, indiquez le type et le numéro de pièce d'identité du bénéficiaire (obligatoires pour ce pays)."]);
         $this->assertSame(500000, (int) $c->wallet->fresh()->balance);
         $send(['id_type' => 'CNI', 'id_number' => 'CI0012345'])->assertStatus(202);
         $ben = collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/beneficiary/create'))->data();

@@ -210,7 +210,7 @@ class PawapayMomoTest extends TestCase
         $this->assertNotSame('processing', $out->status);          // pas de file d'attente
         $this->assertContains($out->status, ['reversed', 'failed']);
         $this->assertSame(50000, (int) $u->wallet->fresh()->balance); // montant + frais rendus
-        $this->assertStringContainsString('Solde du partenaire de versement insuffisant', (string) $out->failure_reason);
+        $this->assertStringContainsString('Envoi vers ce pays momentanément limité', (string) $out->failure_reason);
         $this->assertFalse(collect($this->sent)->contains(fn ($q) => $q->method() === 'POST' && str_ends_with($q->url(), '/v2/payouts')));
     }
 }

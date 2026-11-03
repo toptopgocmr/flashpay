@@ -27,8 +27,8 @@ use Illuminate\Support\Facades\Log;
  */
 class PayoutFunds
 {
-    public const MESSAGE = 'Solde du partenaire de versement insuffisant : service momentanément indisponible vers ce pays. Réessayez plus tard ou envoyez un montant plus petit.';
-    public const UNKNOWN = 'Solde du partenaire de versement non vérifiable : service momentanément indisponible. Réessayez plus tard.';
+    public const MESSAGE = 'Envoi vers ce pays momentanément limité. Réessayez plus tard ou envoyez un montant plus petit.';
+    public const UNKNOWN = 'Service OfficePay momentanément indisponible. Réessayez dans quelques minutes.';
 
     /** Message bloquant, ou null si le partenaire peut verser $amount ($currency). */
     public function problem(?string $rail, string $currency, int $amount, ?string $iso = null, ?int $excludeTxId = null): ?string

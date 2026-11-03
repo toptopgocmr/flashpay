@@ -462,7 +462,7 @@ class SwitchService
         // Carte bancaire / compte bancaire (pas de remboursement par API chez le partenaire),
         // ou partenaire de collecte indisponible : montant ET frais recrédités sur le wallet OfficePay.
         if (in_array($tx->source_rail, ['card', 'bank', 'crypto', 'peex', 'digitwace', 'pawapay_momo', 'maishapay', 'fincra'], true)
-            && ($done = $this->refundToWallet($tx, $reason, in_array($tx->source_rail, ['card', 'bank', 'crypto'], true) ? 'Remboursement sur la carte / le compte bancaire / en crypto non disponible chez le partenaire' : null))) {
+            && ($done = $this->refundToWallet($tx, $reason, in_array($tx->source_rail, ['card', 'bank', 'crypto'], true) ? 'Remboursement sur la carte / le compte bancaire / en crypto non disponible' : null))) {
             return $done;
         }
 
