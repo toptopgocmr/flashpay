@@ -102,12 +102,60 @@ class TransactionPresenter
         [$sn, $sp] = self::sender($tx);
         [$bn, $bp] = self::beneficiary($tx);
 
+        $bank = self::bankAccount($tx);
+        $m = $tx->meta ?? [];
+
         return [
             'sender_name' => $sn ?: ($sp ? null : 'OfficePay'),
             'sender_phone' => $sp ? self::phone($sp) : null,
             'beneficiary_name' => $bn,
-            'beneficiary_phone' => $bp ? self::phone($bp) : null,
+            // Virement bancaire : l'IBAN (lisible), jamais transformé en numéro de téléphone
+            'beneficiary_phone' => $bank ? ($bank['iban'] ?? $bank['bank']) : ($bp ? self::phone($bp) : null),
+            'beneficiary_bank' => $bank['bank'] ?? null,
+            'beneficiary_logo' => $bank['logo'] ?? null,
+            'source_country' => $m['source_country'] ?? null,
+            'destination_country' => $m['destination_country'] ?? null,
         ];
+    }
+
+    /**
+     * Compte bancaire du bénéficiaire (virement national ou international) :
+     * banque, IBAN formaté, BIC, logo ; null si l'opération n'est pas un virement.
+     * @return ?array{bank:?string, iban:?string, swift:?string, logo:?string}
+     */
+    public static function bankAccount(Transaction $tx): ?array
+    {
+        $m = $tx->meta ?? [];
+        $remit = (array) ($m['remit'] ?? []);
+        $method = $m['payout_method'] ?? $remit['method'] ?? null;
+        if ($method !== 'bank' && $tx->destination_rail !== 'bank') {
+            return null;
+        }
+        $a = (array) ($remit['account'] ?? []);
+        $acc = $a['account'] ?? $tx->destination_account;
+        $acc = $acc && ! str_starts_with((string) $acc, 'cash:') ? (string) $acc : null;
+        $isIban = $acc && preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]{8,}$/i', preg_replace('/\s+/', '', $acc));
+        $swift = $a['swift'] ?? null;
+        $bank = $a['bank_name'] ?? $m['bank_name'] ?? null;
+        if (! $bank) {
+            $bank = app(\App\Services\Remit\BankDirectory::class)->lookup($isIban ? $acc : null, $swift)['bank_name'] ?? null;
+        }
+        return [
+            'bank' => $bank,
+            'iban' => $acc ? ($isIban ? \App\Services\Remit\BankDirectory::formatIban($acc) : $acc) : null,
+            'swift' => $swift,
+            'logo' => \App\Services\Remit\BankDirectory::logo($swift, $isIban ? $acc : null, $bank),
+        ];
+    }
+
+    /** Nom du pays (« FR » → « France »). */
+    public static function countryName(?string $iso): ?string
+    {
+        if (! $iso) {
+            return null;
+        }
+        $iso = strtoupper($iso);
+        return \App\Services\Remit\RemitCountries::ALL[$iso][0] ?? config('world_countries.' . $iso . '.name') ?? $iso;
     }
 
     /**
@@ -125,6 +173,10 @@ class TransactionPresenter
         $who = fn ($name, $phone) => trim(($name ?: '') . ($phone ? ($name ? ' · ' : '') . $phone : '')) ?: null;
         $received = (int) ($tx->destination_amount ?? $tx->amount) - (int) $tx->merchant_fee;
         $operator = fn ($op, $country) => trim(implode(' · ', array_filter([$op ? ucfirst(strtolower((string) $op)) : null, $country])));
+        $bank = self::bankAccount($tx);
+        $fromIso = $m['source_country'] ?? null;
+        $toIso = $m['destination_country'] ?? null;
+        $showCountries = $fromIso && $toIso && (($m['channel'] ?? null) === 'international' || strtoupper($fromIso) !== strtoupper($toIso));
 
         $rows = [
             ['Opération', $label ?? $tx->typeLabel()],
@@ -133,10 +185,12 @@ class TransactionPresenter
             ['Expéditeur', $who($p['sender_name'], $p['sender_phone'])],
             ['Compte débité', $tx->source_rail === 'wallet' ? 'Wallet OfficePay' : ($tx->source_rail === 'card' ? ($tx->source_account ?: self::cardLabel($m)) : ($tx->source_rail === 'bank' ? ($tx->source_account ?: 'Compte bancaire') : ($tx->source_rail === 'crypto' ? ($tx->source_account ?: trim('Crypto ' . ($m['crypto_asset'] ?? ''))) : ($tx->source_account ? self::phone($tx->source_account) . ($operator($m['source_operator'] ?? null, $m['source_country'] ?? null) ? ' (' . $operator($m['source_operator'] ?? null, $m['source_country'] ?? null) . ')' : '') : null))))],
             ['Bénéficiaire', $who($p['beneficiary_name'], $p['beneficiary_phone'])],
-            ['Compte crédité', $tx->destination_rail === 'wallet' ? 'Wallet OfficePay' : match ($tx->destination_rail) {
+            ['Compte crédité', $bank ? trim(($bank['bank'] ?? 'Compte bancaire') . ($bank['iban'] ? "\nIBAN " . $bank['iban'] : '') . (! empty($bank['swift']) ? "\nBIC " . strtoupper($bank['swift']) : '')) : ($tx->destination_rail === 'wallet' ? 'Wallet OfficePay' : match ($tx->destination_rail) {
                 'cash' => 'Retrait en espèces', 'atm' => 'Retrait au GAB', 'bank' => trim('Compte bancaire ' . ($m['bank_name'] ?? '')),
                 default => $tx->destination_account ? self::phone($tx->destination_account) . ($operator($m['destination_operator'] ?? null, $m['destination_country'] ?? null) ? ' (' . $operator($m['destination_operator'] ?? null, $m['destination_country'] ?? null) . ')' : '') : null,
-            }],
+            })],
+            ['Pays d\'envoi', $showCountries ? self::countryName($fromIso) : null],
+            ['Pays de réception', $showCountries ? self::countryName($toIso) : null],
             ['Marchand', $m['merchant_name'] ?? null],
             ['Agent', $m['agent_name'] ?? null],
             ['Montant', $money($tx->amount)],

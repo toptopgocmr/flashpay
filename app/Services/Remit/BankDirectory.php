@@ -31,6 +31,55 @@ class BankDirectory
         'ORAG' => 'Orabank', 'BOAB' => 'Bank of Africa', 'CORI' => 'Coris Bank International', 'BGFI' => 'BGFIBank', 'LCDC' => 'LCB Bank',
     ];
 
+    /** Site de l'établissement (4 lettres du BIC, ou 8) : sert à afficher son logo dans l'app. */
+    public const DOMAINS = [
+        'BNPA' => 'bnpparibas.com', 'SOGE' => 'societegenerale.fr', 'CRLY' => 'lcl.fr', 'AGRI' => 'credit-agricole.fr',
+        'CEPA' => 'caisse-epargne.fr', 'CCBP' => 'banquepopulaire.fr', 'BRED' => 'bred.fr', 'PSST' => 'labanquepostale.fr',
+        'BOUS' => 'boursobank.com', 'FPEL' => 'nickel.eu', 'FTNO' => 'fortuneo.fr', 'CCFR' => 'hsbc.fr', 'AXAB' => 'axa.fr',
+        'BFBK' => 'bforbank.com', 'CMBR' => 'cmb.fr', 'CMCIFRPP' => 'cic.fr', 'CMCI' => 'creditmutuel.fr', 'QNTO' => 'qonto.com',
+        'SMOE' => 'shine.fr', 'CRES' => 'credit-cooperatif.coop', 'CCOP' => 'credit-cooperatif.coop',
+        'REVO' => 'revolut.com', 'NTSB' => 'n26.com', 'TRWI' => 'wise.com', 'GEBA' => 'bnpparibasfortis.be', 'KRED' => 'kbc.be',
+        'BBRU' => 'ing.be', 'GKCC' => 'belfius.be', 'INGB' => 'ing.com', 'DEUT' => 'deutsche-bank.de', 'COBA' => 'commerzbank.de',
+        'BBVA' => 'bbva.com', 'CAIX' => 'caixabank.com', 'BSCH' => 'santander.com', 'UNCR' => 'unicredit.it', 'BCIT' => 'intesasanpaolo.com',
+        'BARC' => 'barclays.co.uk', 'HBUK' => 'hsbc.co.uk', 'LOYD' => 'lloydsbank.com', 'NWBK' => 'natwest.com', 'UBSW' => 'ubs.com',
+        'POFI' => 'postfinance.ch', 'BCEE' => 'spuerkeess.lu',
+        'ECOC' => 'ecobank.com', 'UNAF' => 'ubagroup.com', 'SGCI' => 'societegenerale.ci', 'SGSN' => 'societegenerale.sn',
+        'SGCM' => 'societegenerale.cm', 'BICI' => 'bicici.com', 'AFRI' => 'afrilandfirstbank.com', 'CBAO' => 'cbao.sn',
+        'ORAG' => 'orabank.net', 'BOAB' => 'bank-of-africa.net', 'CORI' => 'corisbank.com', 'BGFI' => 'bgfi.com', 'LCDC' => 'lcb-bank.com',
+    ];
+
+    /**
+     * URL du logo de la banque (BIC, sinon code banque de l'IBAN FR/MC, sinon nom), null si inconnue.
+     * L'app affiche une icône « banque » si l'image ne charge pas.
+     */
+    public static function logo(?string $bic, ?string $iban = null, ?string $name = null): ?string
+    {
+        $b = self::normalizeBic($bic);
+        $iban = strtoupper(preg_replace('/\s+/', '', (string) $iban));
+        if (! $b && in_array(substr($iban, 0, 2), ['FR', 'MC'], true)) {
+            $b = self::FR_BANK_CODES[substr($iban, 4, 5)][1] ?? null;
+        }
+        $domain = $b ? (self::DOMAINS[substr($b, 0, 8)] ?? self::DOMAINS[substr($b, 0, 4)] ?? null) : null;
+        if (! $domain && $name) {
+            $n = \Illuminate\Support\Str::lower(\Illuminate\Support\Str::ascii($name));
+            foreach (self::BIC as $code => $label) {
+                $l = \Illuminate\Support\Str::lower(\Illuminate\Support\Str::ascii(preg_replace('/\s*\(.*\)$/', '', $label)));
+                if ($l !== '' && str_contains($n, $l) && isset(self::DOMAINS[$code])) {
+                    $domain = self::DOMAINS[$code];
+                    break;
+                }
+            }
+        }
+        return $domain ? 'https://www.google.com/s2/favicons?sz=128&domain=' . $domain : null;
+    }
+
+    /** IBAN lisible : « FR76 1659 8000 0140 0004 1070 934 ». */
+    public static function formatIban(?string $iban): ?string
+    {
+        $i = strtoupper(preg_replace('/\s+/', '', (string) $iban));
+        return $i === '' ? null : trim(chunk_split($i, 4, ' '));
+    }
+
     /** France / Monaco : code banque de l'IBAN → [nom, BIC]. */
     public const FR_BANK_CODES = [
         '30004' => ['BNP Paribas', 'BNPAFRPP'], '30003' => ['Société Générale', 'SOGEFRPP'], '30002' => ['LCL (Crédit Lyonnais)', 'CRLYFRPP'],

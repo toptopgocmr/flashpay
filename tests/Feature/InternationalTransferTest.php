@@ -358,6 +358,18 @@ class InternationalTransferTest extends TestCase
         $this->assertSame('BNP Paribas', $bank['bankName']);
         $this->assertSame('BNPAFRPP', $bank['bankSwCode']);
         $this->assertSame('PAY-B', $bank['payerCode']);
+
+        // Détail de l'opération : banque + logo, IBAN lisible (pas un « numéro de téléphone »), pays d'envoi / de réception
+        $tx = \App\Models\Transaction::where('type', 'international_transfer')->latest('id')->firstOrFail();
+        $view = \App\Support\TransactionPresenter::present($tx, null);
+        $this->assertSame('FR76 3000 6000 0112 3456 7890 189', $view['beneficiary_phone']);
+        $this->assertSame('BNP Paribas', $view['beneficiary_bank']);
+        $this->assertStringContainsString('bnpparibas.com', (string) $view['beneficiary_logo']);
+        $rows = collect($view['details'])->pluck('value', 'label');
+        $this->assertSame("BNP Paribas\nIBAN FR76 3000 6000 0112 3456 7890 189\nBIC BNPAFRPP", $rows['Compte crédité']);
+        $this->assertSame('France', $rows['Pays de réception']);
+        $this->assertNotEmpty($rows["Pays d'envoi"]);
+        $this->assertSame('FR', $view['destination_country']);
     }
 
     public function test_bank_name_found_from_iban_or_swift_and_wacepay_required_fields_sent(): void
