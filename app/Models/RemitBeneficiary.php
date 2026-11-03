@@ -44,6 +44,10 @@ class RemitBeneficiary extends Model
             'beneficiary' => $d['beneficiary'] ?? [],
             'account' => $d['account'] ?? [],
             'relation' => $d['relation'] ?? null,
+            // Logo de la banque ou de l'opérateur (null : initiales dans l'app)
+            'logo' => $this->method === 'bank'
+                ? \App\Support\Logos::bank($d['account']['bank_name'] ?? null, $d['account']['swift'] ?? null, $d['account']['account'] ?? null)
+                : \App\Support\Logos::operator($d['service']['name'] ?? ($d['account']['provider'] ?? null)),
         ];
     }
 }

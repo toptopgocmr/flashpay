@@ -70,7 +70,7 @@ class BankDirectory
                 }
             }
         }
-        return $domain ? 'https://www.google.com/s2/favicons?sz=128&domain=' . $domain : null;
+        return $domain ? \App\Support\Logos::url($domain) : null;
     }
 
     /** IBAN lisible : « FR76 1659 8000 0140 0004 1070 934 ». */

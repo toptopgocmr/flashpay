@@ -112,7 +112,10 @@ class TransactionPresenter
             // Virement bancaire : l'IBAN (lisible), jamais transformé en numéro de téléphone
             'beneficiary_phone' => $bank ? ($bank['iban'] ?? $bank['bank']) : ($bp ? self::phone($bp) : null),
             'beneficiary_bank' => $bank['bank'] ?? null,
-            'beneficiary_logo' => $bank['logo'] ?? null,
+            // Banque, sinon opérateur mobile money (international : service choisi, ex. « Wave Sénégal »)
+            'beneficiary_logo' => $bank ? ($bank['logo'] ?? null)
+                : \App\Support\Logos::operator($m['destination_operator'] ?? ($m['remit']['service']['name'] ?? null)),
+            'beneficiary_operator' => $bank ? null : ($m['destination_operator'] ?? ($m['remit']['service']['name'] ?? null)),
             'source_country' => $m['source_country'] ?? null,
             'destination_country' => $m['destination_country'] ?? null,
         ];

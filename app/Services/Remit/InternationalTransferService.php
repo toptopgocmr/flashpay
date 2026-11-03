@@ -318,7 +318,7 @@ class InternationalTransferService
                 }
             }
             if (! $methods) {
-                $message = "Fincra ne verse pas encore vers {$c['name']} ({$c['currency']}).";
+                $message = "Transferts vers {$c['name']} ({$c['currency']}) pas encore disponibles.";
             }
         } elseif ($p === 'pawapay') {
             $providers = null;
@@ -328,7 +328,7 @@ class InternationalTransferService
                 // configuration pawaPay illisible : opérateur détecté depuis le numéro
             }
             if ($providers === []) {
-                $message = "PawaPay ne verse pas encore vers {$c['name']}.";
+                $message = "Transferts vers {$c['name']} pas encore disponibles.";
             } else {
                 $list = [['code' => '', 'name' => 'Mobile money (opérateur détecté automatiquement)']];
                 foreach ((array) $providers as $pr) {
@@ -344,7 +344,7 @@ class InternationalTransferService
                 }
                 $methods = array_filter($out);
                 if (! $methods) {
-                    $message = "Digitwace ne propose aucun mode de réception vers {$c['name']} ({$c['currency']}).";
+                    $message = "Aucun mode de réception disponible vers {$c['name']} ({$c['currency']}) pour le moment.";
                 }
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('Digitwace remittance : services de versement illisibles', ['country' => $iso, 'error' => mb_substr($e->getMessage(), 0, 300)]);
@@ -352,7 +352,7 @@ class InternationalTransferService
                     || ($e instanceof RemitException && in_array($e->httpStatus, [401, 403], true));
                 if ($blocking) {
                     // Configuration / accès refusé chez Digitwace : on affiche la vraie raison
-                    $message = "Transferts vers {$c['name']} indisponibles : " . ($e instanceof RemitException ? $this->friendly($e) : $e->getMessage());
+                    $message = "Transferts vers {$c['name']} momentanément indisponibles.";
                 } else {
                     // Liste illisible (chemin, réseau) : on n'empêche pas le devis. Le service est
                     // résolu par son nom (PayerCode) lors des vérifications faites AVANT tout débit.
@@ -363,13 +363,17 @@ class InternationalTransferService
                 }
             }
         }
+        // Logo de chaque opérateur / réseau (l'app affiche des initiales à défaut)
+        foreach ($methods as $m => $list) {
+            $methods[$m] = array_map(fn ($sv) => $sv + ['logo' => $m === 'bank' ? null : \App\Support\Logos::operator($sv['name'] ?? null)], $list);
+        }
         $available = [];
         $unavailable = [];
         foreach (array_keys(self::METHODS) as $m) {
             $available[$m] = in_array($m, $offered, true) && ! empty($methods[$m]);
             if (! $available[$m]) {
                 $unavailable[$m] = ! in_array($m, $offered, true)
-                    ? self::METHODS[$m] . ' : non proposé par ' . $this->partnerName($p) . '.'
+                    ? self::METHODS[$m] . " : non proposé vers {$c['name']}."
                     : ($message ?? self::METHODS[$m] . " : non disponible vers {$c['name']}.");
             }
         }
@@ -393,8 +397,16 @@ class InternationalTransferService
         return $s['available'][$method] ?? true ? null : ($s['unavailable'][$method] ?? (self::METHODS[$method] ?? $method) . " : non disponible vers {$c['name']}.");
     }
 
-    /** Banques (WacePay : liste avec BankID ; TerraPay : saisie libre + SWIFT). */
+    /** Banques du pays, chacune avec son logo (null si inconnu : l'app affiche ses initiales). */
     public function banks(string $iso, array $service): array
+    {
+        $r = $this->partnerBanks($iso, $service);
+        $r['banks'] = array_map(fn ($b) => $b + ['logo' => \App\Support\Logos::bank($b['name'] ?? null, $b['swift'] ?? null)], (array) ($r['banks'] ?? []));
+        return $r;
+    }
+
+    /** Banques (WacePay : liste avec BankID ; TerraPay : saisie libre + SWIFT). */
+    protected function partnerBanks(string $iso, array $service): array
     {
         $c = $this->country($iso);
         if ($c['partner'] === 'fincra_remit') {

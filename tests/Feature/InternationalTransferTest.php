@@ -240,6 +240,7 @@ class InternationalTransferTest extends TestCase
 
         $svc = $this->getJson('/api/pay/international/services?country=CI')->assertOk();
         $this->assertSame('ORANGE MONEY', $svc->json('methods.wallet.0.name'));
+        $this->assertStringContainsString('orange.com', (string) $svc->json('methods.wallet.0.logo'));
         $this->assertSame('B', $svc->json('methods.bank.0.code'));
 
         $q = $this->postJson('/api/pay/international/quote', ['amount' => 100000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p'])->assertOk();
@@ -289,6 +290,7 @@ class InternationalTransferTest extends TestCase
 
         $banks = $this->postJson('/api/pay/international/banks', ['country' => 'CI', 'service' => ['code' => 'B', 'name' => 'BANKS DEPOSIT']])->assertOk();
         $this->assertSame(7, $banks->json('banks.0.id'));
+        $this->assertStringContainsString('societegenerale.ci', (string) $banks->json('banks.0.logo'));
 
         // Entreprise : RCCM obligatoire
         $this->postJson('/api/pay/international/send', [
@@ -381,6 +383,26 @@ class InternationalTransferTest extends TestCase
         $this->assertSame('FR7630006000011234567890189', $list[0]['account']['account']);
         $this->assertSame('P99887766', $list[0]['beneficiary']['id_number']);
         $this->assertCount(0, $this->getJson('/api/pay/international/beneficiaries?country=SN')->assertOk()->json('beneficiaries'));
+    }
+
+    public function test_operator_and_bank_logos(): void
+    {
+        $op = fn ($n) => \App\Support\Logos::operator($n);
+        $this->assertStringContainsString('wave.com', (string) $op('WAVE SENEGAL'));
+        $this->assertStringContainsString('orange.com', (string) $op('Orange Money CI'));
+        $this->assertStringContainsString('mtn.com', (string) $op('MTN MOMO'));
+        $this->assertStringContainsString('moov-africa', (string) $op('Moov Money'));
+        $this->assertStringContainsString('yas.sn', (string) $op('FREE MONEY'));
+        $this->assertStringContainsString('togocom.tg', (string) $op('T-Money'));
+        $this->assertStringContainsString('vodacom', (string) $op('M-PESA'));
+        $this->assertNull($op('MOBILE MONEY'));
+        $this->assertNull($op('Freetown Bank')); // « free » seulement comme mot entier
+        $bank = fn ($n, $bic = null, $iban = null) => \App\Support\Logos::bank($n, $bic, $iban);
+        $this->assertStringContainsString('ubagroup.com', (string) $bank('UBA COTE D\'IVOIRE'));
+        $this->assertStringContainsString('ecobank.com', (string) $bank('ECOBANK CAMEROUN'));
+        $this->assertStringContainsString('nickel.eu', (string) $bank(null, null, 'FR7616598000014000041070934'));
+        $this->assertStringContainsString('bnpparibas.com', (string) $bank('x', 'BNPAFRPP'));
+        $this->assertNull($bank('Banque Inconnue du Village'));
     }
 
     public function test_bank_name_found_from_iban_or_swift_and_wacepay_required_fields_sent(): void
@@ -674,12 +696,12 @@ class InternationalTransferTest extends TestCase
         $s = $this->getJson('/api/pay/international/services?country=ML')->assertOk();
         $this->assertSame(['wallet' => true, 'bank' => true, 'cash' => false], $s->json('available'));
 
-        // Accès refusé par Digitwace (IP non autorisée) : la vraie raison est affichée
+        // Accès refusé par Digitwace (IP non autorisée) : message neutre pour le client (raison dans les journaux)
         $this->waceServices = ['ip'];
         Cache::flush();
         $s = $this->getJson('/api/pay/international/services?country=ML')->assertOk();
         $this->assertSame(['wallet' => false, 'bank' => false, 'cash' => false], $s->json('available'));
-        $this->assertStringContainsString('IP is not whitelisted', (string) $s->json('message'));
+        $this->assertSame('Transferts vers Mali momentanément indisponibles.', $s->json('message'));
         $this->waceServices = ['down'];
         Cache::flush();
         // Banques : saisie libre au lieu de « aucun PayerCode »

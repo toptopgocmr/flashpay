@@ -62,6 +62,7 @@ class InternationalTransferController extends Controller
             } catch (\Throwable) {
             }
         }
+        $r['logo'] = \App\Support\Logos::bank($r['bank_name'] ?? null, $r['swift'] ?? null, $iban ?: null);
         return response()->json($r);
     }
 
