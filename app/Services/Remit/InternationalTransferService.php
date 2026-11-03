@@ -34,6 +34,8 @@ class InternationalTransferService
         'b2b' => ['label' => 'Entreprise → Entreprise', 'short' => 'B2B', 'sender' => 'B', 'beneficiary' => 'B', 'hint' => 'Fournisseurs, factures, règlements'],
     ];
 
+    /** Remittance payée uniquement depuis le wallet OfficePay (rechargé avant par les canaux habituels). */
+    public const WALLET_ONLY = 'Les transferts internationaux se paient avec le solde de votre wallet OfficePay. Rechargez d\'abord votre wallet (mobile money, carte bancaire ou chez un agent), puis réessayez.';
     public const METHODS = ['wallet' => 'Mobile money', 'bank' => 'Compte bancaire', 'cash' => 'Retrait en espèces'];
     public const ID_TYPES = ['CNI' => 'Carte nationale d\'identité', 'PP' => 'Passeport', 'PC' => 'Permis de conduire', 'CS' => 'Carte de séjour'];
     public const COMPANY_TYPES = ['SARL', 'SARLU', 'SAS', 'SASU', 'SA', 'EI', 'GIE', 'ONG', 'Association'];
@@ -117,6 +119,8 @@ class InternationalTransferService
             $methods = array_values(array_unique(array_merge(...array_map(fn ($x) => RemitCountries::methodsOf($x), $this->readyChain($iso)))));
             $countries[] = $c + ['partner' => $p, 'partner_name' => $this->partnerName($p), 'methods' => $methods,
                 'beneficiary_kyc' => self::beneficiaryKycRequired($iso, $p),
+                // Digitwace (WacePay) : type et numéro de pièce du bénéficiaire exigés à sa création
+                'beneficiary_id' => self::beneficiaryIdRequired($p),
                 'postal_code_required' => in_array($iso, (array) config('flashpay.remit.postal_code_countries', []), true)];
         }
         $merchant = method_exists($user, 'merchant') ? $user->merchant : null;
@@ -171,9 +175,11 @@ class InternationalTransferService
 
         return [
             'wallet' => ['available' => (bool) $wallet, 'balance' => (int) ($wallet?->balance ?? 0), 'currency' => $wallet?->currency ?? config('flashpay.remit.from_currency', 'XAF')],
-            'mobile' => ['available' => (bool) config('flashpay.remit.allow_mobile_source', true), 'accounts' => $mobiles],
-            'card' => ['available' => $cardOn && (bool) config('flashpay.remit.allow_card_source', true), 'accounts' => $cards,
-                'reason' => $cardOn ? null : 'Paiement par carte bientôt disponible.'],
+            'mobile' => ['available' => (bool) config('flashpay.remit.allow_mobile_source', false), 'accounts' => $mobiles,
+                'reason' => config('flashpay.remit.allow_mobile_source', false) ? null : self::WALLET_ONLY],
+            'card' => ['available' => $cardOn && (bool) config('flashpay.remit.allow_card_source', false), 'accounts' => $cards,
+                'reason' => ! config('flashpay.remit.allow_card_source', false) ? self::WALLET_ONLY : ($cardOn ? null : 'Paiement par carte bientôt disponible.')],
+            'wallet_only' => ! config('flashpay.remit.allow_mobile_source', false) && ! config('flashpay.remit.allow_card_source', false),
         ];
     }
 
@@ -188,8 +194,8 @@ class InternationalTransferService
         $out = ['type' => $type, 'rail' => 'wallet', 'phone' => null, 'country' => null, 'currency' => $currency, 'label' => 'Wallet OfficePay', 'linked_id' => null, 'collect_partner' => null, 'problems' => []];
         $flow = app(\App\Services\Peex\PeexFlowService::class);
         if ($type === 'mobile') {
-            if (! config('flashpay.remit.allow_mobile_source', true)) {
-                $out['problems'][] = 'Débit mobile money non disponible pour les transferts internationaux.';
+            if (! config('flashpay.remit.allow_mobile_source', false)) {
+                $out['problems'][] = self::WALLET_ONLY;
                 return $out;
             }
             $phone = trim((string) ($in['phone'] ?? $user->phone ?? ''));
@@ -223,7 +229,11 @@ class InternationalTransferService
         } elseif ($type === 'card') {
             $out['rail'] = 'card';
             $out['label'] = 'Carte bancaire';
-            if (! in_array((string) config('payment_methods.card_driver', 'none'), ['sandbox', 'wacepay', 'maishapay'], true) || ! config('flashpay.remit.allow_card_source', true)) {
+            if (! config('flashpay.remit.allow_card_source', false)) {
+                $out['problems'][] = self::WALLET_ONLY;
+                return $out;
+            }
+            if (! in_array((string) config('payment_methods.card_driver', 'none'), ['sandbox', 'wacepay', 'maishapay'], true)) {
                 $out['problems'][] = 'Le paiement par carte n\'est pas encore disponible.';
                 return $out;
             }
@@ -510,7 +520,7 @@ class InternationalTransferService
         $collectFee = $this->collectFee($source, $amount + $priced['fee'] + $payoutFee);
         $fee = $priced['fee'] + $payoutFee + $collectFee;
         if ($source['type'] === 'wallet' && $wallet && (int) $wallet->balance < $amount + $fee) {
-            $problems[] = 'Solde insuffisant (' . number_format((int) $wallet->balance, 0, ',', ' ') . " {$currency}).";
+            $problems[] = 'Solde du wallet insuffisant (' . number_format((int) $wallet->balance, 0, ',', ' ') . " {$currency}) : rechargez votre wallet OfficePay (mobile money, carte bancaire ou chez un agent), puis réessayez.";
         }
         if (! $problems && ($p = $this->partnerBalanceProblem($c['partner'], $amount, $currency))) {
             $problems[] = $p;
@@ -588,6 +598,10 @@ class InternationalTransferService
                     throw new PeexException("Pour {$country['name']}, indiquez {$label}.");
                 }
             }
+        }
+        if ($types['beneficiary'] === 'P' && self::beneficiaryIdRequired($q['partner'] ?? null)
+            && (empty($ben['id_type']) || empty($ben['id_number']))) {
+            throw new PeexException("Pour {$country['name']}, indiquez le type et le numéro de pièce d'identité du bénéficiaire (exigés par le partenaire).");
         }
         $account = $this->normalizeAccount((array) ($in['account'] ?? []), $method, $country, $ben);
         if (empty($ben['phone'])) {
@@ -791,6 +805,12 @@ class InternationalTransferService
     }
 
     /** TerraPay exige l'identité complète du bénéficiaire pour certains pays (REMIT_BENEFICIARY_KYC_COUNTRIES). */
+    /** Pièce d'identité du bénéficiaire (type + numéro) exigée par le partenaire (WacePay : beneficiary/create). */
+    public static function beneficiaryIdRequired(?string $partner): bool
+    {
+        return $partner === 'wacepay_remit' && (bool) config('flashpay.wacepay_remit.beneficiary_id_required', true);
+    }
+
     public static function beneficiaryKycRequired(string $iso, ?string $partner): bool
     {
         return $partner === 'terrapay' && in_array(strtoupper($iso), (array) config('flashpay.remit.beneficiary_kyc_countries', []), true);

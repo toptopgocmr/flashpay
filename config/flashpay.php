@@ -116,6 +116,10 @@ return [
         'postal_code_countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('REMIT_POSTAL_CODE_COUNTRIES', 'US,CA,GB'))))),
         // Identité complète du bénéficiaire exigée par TerraPay pour ces pays (date de naissance, pièce, adresse)
         'beneficiary_kyc_countries' => array_filter(array_map('trim', explode(',', strtoupper((string) env('REMIT_BENEFICIARY_KYC_COUNTRIES', 'IN,PK,BD,PH,NP,LK,CN'))))),
+        // Compte débité : uniquement le wallet OfficePay (le client le recharge avant par mobile money,
+        // carte bancaire ou chez un agent). true = débit direct mobile money / carte autorisé aussi.
+        'allow_mobile_source' => (bool) env('REMIT_ALLOW_MOBILE_SOURCE', false),
+        'allow_card_source' => (bool) env('REMIT_ALLOW_CARD_SOURCE', false),
         'min_amount' => (int) env('REMIT_MIN_AMOUNT', 1000),
         'max_amount' => (int) env('REMIT_MAX_AMOUNT', 5000000),
         // Pays / devise d'envoi (OfficePay)
@@ -140,6 +144,8 @@ return [
         'default_address' => env('WACEPAY_REMIT_DEFAULT_ADDRESS', 'Brazzaville'),
         // Code postal envoyé quand le client n'en a pas (Congo : pas de code postal) — champ « zipcode » obligatoire chez WacePay
         'default_zipcode' => env('WACEPAY_REMIT_DEFAULT_ZIPCODE', '00000'),
+        // Bénéficiaire particulier : type + numéro de pièce exigés par WacePay (beneficiary/create)
+        'beneficiary_id_required' => (bool) env('WACEPAY_REMIT_BENEFICIARY_ID_REQUIRED', true),
         // Code WacePay imposé par type de pièce FlashPay, ex. « CNI=IDCARD,PP=PASSPORT » (vide = essai automatique)
         'id_types' => env('WACEPAY_REMIT_ID_TYPES', ''),
     ],

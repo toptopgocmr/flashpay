@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 
 class Transaction extends Model
@@ -70,6 +71,15 @@ class Transaction extends Model
                 'data' => ['transaction_id' => $this->id, 'reference' => $this->reference, 'direction' => $dir, 'status' => $this->status, 'amount' => (int) $this->amount],
             ],
         );
+    }
+
+    /**
+     * Motif d'échec limité à la taille de la colonne (255) : un message partenaire trop long faisait
+     * échouer l'enregistrement (« Data too long for column failure_reason ») et bloquait l'opération.
+     */
+    protected function failureReason(): Attribute
+    {
+        return Attribute::make(set: fn ($v) => $v === null ? null : (mb_strlen((string) $v) > 255 ? mb_substr((string) $v, 0, 254) . '…' : (string) $v));
     }
 
     protected function casts(): array

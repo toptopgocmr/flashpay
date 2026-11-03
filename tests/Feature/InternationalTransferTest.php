@@ -250,7 +250,7 @@ class InternationalTransferTest extends TestCase
             'amount' => 100000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p',
             'service' => ['code' => 'OM', 'name' => 'ORANGE MONEY'],
             'sender' => $this->sender(),
-            'beneficiary' => ['first_name' => 'Awa', 'last_name' => 'Koné', 'city' => 'Abidjan'],
+            'beneficiary' => ['first_name' => 'Awa', 'id_type' => 'PP', 'id_number' => 'P99887766', 'last_name' => 'Koné', 'city' => 'Abidjan'],
             'account' => ['msisdn' => '0707070707'],
             'why' => ['reason' => 'Family Maintainance', 'origin_fund' => 'Salary', 'relation' => 'Brother'],
         ])->assertStatus(202);
@@ -344,7 +344,7 @@ class InternationalTransferTest extends TestCase
         $send = fn (string $account) => $this->postJson('/api/pay/international/send', [
             'amount' => 100000, 'country' => 'FR', 'method' => 'bank', 'business_type' => 'p2p', 'service' => $service,
             'sender' => $this->sender(),
-            'beneficiary' => ['first_name' => 'Marie', 'last_name' => 'Dupont', 'phone' => '+33612345678', 'city' => 'Paris'],
+            'beneficiary' => ['first_name' => 'Marie', 'id_type' => 'PP', 'id_number' => 'P99887766', 'last_name' => 'Dupont', 'phone' => '+33612345678', 'city' => 'Paris'],
             'account' => ['account' => $account, 'bank_name' => 'BNP Paribas', 'swift' => 'bnpafrpp'],
         ]);
         $send('12345678901')->assertStatus(422)->assertJsonFragment(['message' => "Indiquez l'IBAN du bénéficiaire (ex. FR76 3000 …)."]);
@@ -383,7 +383,7 @@ class InternationalTransferTest extends TestCase
         $this->postJson('/api/pay/international/send', [
             'amount' => 100000, 'country' => 'FR', 'method' => 'bank', 'business_type' => 'p2p', 'service' => $service,
             'sender' => $this->sender(),
-            'beneficiary' => ['first_name' => 'Marie', 'last_name' => 'Dupont', 'phone' => '+33612345678', 'city' => 'Paris'],
+            'beneficiary' => ['first_name' => 'Marie', 'id_type' => 'PP', 'id_number' => 'P99887766', 'last_name' => 'Dupont', 'phone' => '+33612345678', 'city' => 'Paris'],
             'account' => ['account' => 'FR7616598000011391612000178', 'bank_name' => 'Nickel (Financière des Paiements Électroniques)', 'swift' => 'FPELFR21'],
         ])->assertStatus(202);
         foreach (['/sender/create', '/beneficiary/create'] as $path) {
@@ -610,7 +610,7 @@ class InternationalTransferTest extends TestCase
         $this->postJson('/api/pay/international/send', [
             'amount' => 10000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p', 'service' => ['code' => 'OM', 'name' => 'ORANGE MONEY'],
             'sender' => ['first_name' => 'Faux', 'last_name' => 'Nom', 'id_number' => 'FAKE'],
-            'beneficiary' => ['first_name' => 'Koffi', 'last_name' => 'Yao'], 'account' => ['msisdn' => '0707070707'],
+            'beneficiary' => ['first_name' => 'Koffi', 'id_type' => 'PP', 'id_number' => 'P99887766', 'last_name' => 'Yao'], 'account' => ['msisdn' => '0707070707'],
         ])->assertStatus(202);
         $sender = collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/sender/create'));
         $this->assertSame('Awa', $sender['firstName']);
@@ -669,8 +669,42 @@ class InternationalTransferTest extends TestCase
         $this->assertSame('Frère', $l->json('relations')['Brother']);
     }
 
+    public function test_remittance_is_paid_from_the_wallet_only_by_default(): void
+    {
+        $c = $this->client(0); // wallet vide
+        $this->actingAs($c, 'sanctum');
+        $o = $this->getJson('/api/pay/international/options')->assertOk();
+        $this->assertTrue($o->json('sources.wallet_only'));
+        $this->assertFalse($o->json('sources.mobile.available'));
+        $this->assertFalse($o->json('sources.card.available'));
+        $base = ['amount' => 10000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p'];
+        $q = $this->postJson('/api/pay/international/quote', $base + ['source' => ['type' => 'mobile']])->assertOk();
+        $this->assertFalse($q->json('available'));
+        $this->assertStringContainsString('Rechargez d\'abord votre wallet', implode(' ', $q->json('problems')));
+        $q = $this->postJson('/api/pay/international/quote', $base)->assertOk();
+        $this->assertStringContainsString('rechargez votre wallet OfficePay', implode(' ', $q->json('problems')));
+    }
+
+    public function test_beneficiary_id_required_by_digitwace(): void
+    {
+        $c = $this->client();
+        $this->actingAs($c, 'sanctum');
+        $this->assertTrue(collect($this->getJson('/api/pay/international/options')->json('countries'))->firstWhere('iso', 'CI')['beneficiary_id']);
+        $send = fn (array $ben) => $this->postJson('/api/pay/international/send', ['amount' => 20000, 'country' => 'CI', 'method' => 'wallet', 'business_type' => 'p2p', 'service' => ['code' => 'OM', 'name' => 'ORANGE MONEY'],
+            'beneficiary' => $ben + ['first_name' => 'Awa', 'last_name' => 'Koné'], 'account' => ['msisdn' => '0707070707']]);
+        $send([])->assertStatus(422)->assertJsonFragment(['message' => "Pour Côte d'Ivoire, indiquez le type et le numéro de pièce d'identité du bénéficiaire (exigés par le partenaire)."]);
+        $this->assertSame(500000, (int) $c->wallet->fresh()->balance);
+        $send(['id_type' => 'CNI', 'id_number' => 'CI0012345'])->assertStatus(202);
+        $ben = collect($this->sent)->first(fn ($q) => str_ends_with($q->url(), '/beneficiary/create'))->data();
+        $this->assertSame('CI0012345', $ben['id_number']);
+        $this->assertSame('CNI', $ben['id_type']);
+        $this->assertSame('CI0012345', $ben['idNumber']);
+    }
+
     public function test_sender_chooses_the_account_to_debit(): void
     {
+        // Débit direct mobile money / carte : seulement si REMIT_ALLOW_*_SOURCE=true
+        config(['flashpay.remit.allow_mobile_source' => true, 'flashpay.remit.allow_card_source' => true]);
         $c = $this->client(0); // wallet vide
         $this->actingAs($c, 'sanctum');
         $o = $this->getJson('/api/pay/international/options')->assertOk();
