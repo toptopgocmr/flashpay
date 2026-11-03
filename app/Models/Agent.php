@@ -10,11 +10,12 @@ class Agent extends Model
     use HasFactory;
 
     protected $fillable = ['user_id', 'float_balance', 'zone', 'country', 'city', 'validation_status', 'validated_at',
-        'agent_code', 'pos_code', 'is_super_agent', 'parent_agent_id', 'low_float_threshold', 'low_float_alerted_at'];
+        'agent_code', 'pos_code', 'is_super_agent', 'parent_agent_id', 'low_float_threshold', 'low_float_alerted_at',
+        'latitude', 'longitude', 'address', 'opening_hours', 'show_on_map'];
 
     protected function casts(): array
     {
-        return ['float_balance' => 'integer', 'validated_at' => 'datetime', 'is_super_agent' => 'boolean', 'low_float_threshold' => 'integer', 'low_float_alerted_at' => 'datetime'];
+        return ['float_balance' => 'integer', 'validated_at' => 'datetime', 'is_super_agent' => 'boolean', 'low_float_threshold' => 'integer', 'low_float_alerted_at' => 'datetime', 'show_on_map' => 'boolean'];
     }
 
     public function user()

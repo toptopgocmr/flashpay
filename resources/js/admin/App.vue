@@ -236,6 +236,7 @@ const groups = [
     { to: '/merchants', label: 'Marchands', desc: 'Comptes marchands et validations', icon: 'store', badge: 'merchants' },
     { to: '/cashiers', label: 'Caissiers', desc: 'Sous-comptes d\'encaissement des marchands', icon: 'pos' },
     { to: '/agents', label: 'Agents', desc: 'Agents, sous-agents et super-agents', icon: 'agent', badge: 'agents' },
+    { to: '/service-points', label: 'Points de service', desc: 'Carte des clients : agences, points de vente, GAB, position des agents', icon: 'globe' },
     { to: '/accounts', label: 'Comptes utilisateurs', desc: 'Activer / désactiver les comptes', icon: 'lock', badge: 'inactive' },
   ] },
   { name: 'À traiter', icon: 'shield', links: [

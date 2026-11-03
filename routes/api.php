@@ -78,6 +78,9 @@ Route::get('/card-checkout/{token}/pay', [\App\Http\Controllers\CardCheckoutCont
 Route::post('/card-checkout/{token}', [\App\Http\Controllers\CardCheckoutController::class, 'submit'])->middleware('throttle:30,1');
 
 // Banque partenaire : retrait GAB avec code OfficePay (header X-Partner-Key)
+// « Localiser un agent » : agents, agences, points de vente, GAB (aussi sans connexion)
+Route::get('/locations', [\App\Http\Controllers\Api\LocationsController::class, 'index'])->middleware('throttle:60,1');
+
 Route::prefix('partners/atm')->middleware('throttle:60,1')->group(function () {
     Route::post('/verify', [CashController::class, 'atmVerify']);
     Route::post('/redeem', [CashController::class, 'atmRedeem']);
@@ -300,6 +303,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     // --- Agent ---
     Route::middleware('role:agent')->prefix('agent')->group(function () {
         Route::get('/dashboard', [AgentController::class, 'dashboard']);
+        Route::post('/location', [\App\Http\Controllers\Api\LocationsController::class, 'agentLocation']);
         Route::post('/cash-in', [CashController::class, 'agentCashIn'])->middleware(['cap:cash_in', 'pin', 'idempotent']);
         Route::get('/vouchers/{code}', [CashController::class, 'agentVoucher'])->middleware(['throttle:20,1', 'cap:cash_out']);
         Route::post('/vouchers/confirm-request', [CashController::class, 'agentRequestConfirmation'])->middleware(['throttle:20,1', 'cap:cash_out']);
@@ -519,6 +523,12 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/commission-rules', [AdminOpsController::class, 'saveCommissionRule']);
         Route::delete('/commission-rules/{rule}', [AdminOpsController::class, 'deleteCommissionRule']);
         Route::get('/mini-programs', [AdminOpsController::class, 'miniPrograms']);
+        // Carte « Localiser un agent » : agences, points de vente, GAB, position des agents
+        Route::get('/service-points', [\App\Http\Controllers\Api\LocationsController::class, 'adminIndex']);
+        Route::post('/service-points', [\App\Http\Controllers\Api\LocationsController::class, 'adminSave']);
+        Route::post('/service-points/{point}', [\App\Http\Controllers\Api\LocationsController::class, 'adminSave'])->whereNumber('point');
+        Route::delete('/service-points/{point}', [\App\Http\Controllers\Api\LocationsController::class, 'adminDelete'])->whereNumber('point');
+        Route::post('/agents/{agent}/location', [\App\Http\Controllers\Api\LocationsController::class, 'adminAgentLocation'])->whereNumber('agent');
         Route::post('/mini-programs', [AdminOpsController::class, 'saveMiniProgram']);
         Route::get('/ecommerce', [AdminOpsController::class, 'ecommerce']);
         Route::post('/api-keys/{key}/revoke', [AdminOpsController::class, 'revokeApiKey']);

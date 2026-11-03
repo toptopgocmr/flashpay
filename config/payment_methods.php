@@ -27,6 +27,10 @@ return [
     // Pays où le retrait au GAB est ouvert (banque partenaire signée)
     'atm_countries' => $list('FLASHPAY_ATM_COUNTRIES', ''),
     'atm_partner_key' => env('FLASHPAY_ATM_PARTNER_KEY'),
+    // Retrait au GAB (sans carte, code OfficePay) : montant minimum, maximum et palier (billets)
+    'atm_min' => (int) env('FLASHPAY_ATM_MIN', 10000),
+    'atm_max' => (int) env('FLASHPAY_ATM_MAX', 250000),
+    'atm_step' => (int) env('FLASHPAY_ATM_STEP', 5000),
 
     // Carte Visa / Mastercard (prépayée ou bancaire) : passerelle carte (PSP).
     // sandbox = page de paiement simulée (aucune carte réelle débitée) ; none = « bientôt ».

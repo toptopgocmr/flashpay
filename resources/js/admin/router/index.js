@@ -23,6 +23,7 @@ const routes = [
   { path: '/maishapay', component: () => import('../views/MaishapayGateway.vue') },
   { path: '/fincra', component: () => import('../views/FincraGateway.vue') },
   { path: '/remittance', component: () => import('../views/RemitDashboard.vue') },
+  { path: '/service-points', component: () => import('../views/ServicePoints.vue') },
   { path: '/corridors', component: () => import('../views/Corridors.vue') },
   // Cahier des charges v1.5
   { path: '/notifications', component: () => import('../views/Notifications.vue') },

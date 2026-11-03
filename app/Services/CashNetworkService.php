@@ -172,6 +172,13 @@ class CashNetworkService
                 ? 'Le retrait au GAB n\'est pas encore disponible dans ce pays.'
                 : 'Le retrait cash n\'est pas encore disponible dans ce pays.');
         }
+        if ($channel === 'atm') {
+            ['min' => $min, 'max' => $max, 'step' => $step] = \App\Services\Payments\PaymentMethodsService::atmLimits();
+            if ($amount < $min || $amount > $max || $amount % $step !== 0) {
+                throw new CashNetworkException(sprintf('Saisissez un montant entre %s et %s FCFA, par tranches de %s.',
+                    number_format($min, 0, ',', ' '), number_format($max, 0, ',', ' '), number_format($step, 0, ',', ' ')));
+            }
+        }
         if ($amount > config('payment_methods.voucher_max_amount', 500000)) {
             throw new CashNetworkException('Montant supérieur au plafond de retrait.');
         }

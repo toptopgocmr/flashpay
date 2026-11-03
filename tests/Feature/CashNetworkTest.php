@@ -170,6 +170,59 @@ class CashNetworkTest extends TestCase
         $this->assertSame(50000, $client->wallet->fresh()->balance);
     }
 
+    public function test_atm_amount_rules(): void
+    {
+        $c = $this->mk('client', '242061111111', 500000);
+        $this->actingAs($c, 'sanctum');
+        $atm = collect($this->getJson('/api/pay/methods?country=CG&operation=withdraw')->json('methods'))->firstWhere('key', 'atm');
+        $this->assertSame(['min' => 10000, 'max' => 250000, 'step' => 5000], $atm['limits']);
+        $msg = 'Saisissez un montant entre 10 000 et 250 000 FCFA, par tranches de 5 000.';
+        $this->postJson('/api/pay/vouchers', ['channel' => 'atm', 'amount' => 5000, 'country' => 'CG'])->assertStatus(422)->assertJsonFragment(['message' => $msg]);
+        $this->postJson('/api/pay/vouchers', ['channel' => 'atm', 'amount' => 12500, 'country' => 'CG'])->assertStatus(422)->assertJsonFragment(['message' => $msg]);
+        $this->postJson('/api/pay/vouchers', ['channel' => 'atm', 'amount' => 300000, 'country' => 'CG'])->assertStatus(422);
+        $this->postJson('/api/pay/vouchers', ['channel' => 'atm', 'amount' => 15000, 'country' => 'CG'])->assertCreated();
+    }
+
+    public function test_locate_agents_agencies_and_atms(): void
+    {
+        $agent = $this->mk('agent', '242063333333', 0);
+        $hidden = $this->mk('agent', '242064444444', 0); // sans position : absent de la carte
+
+        // L'agent enregistre la position de son point de service (Ouenzé)
+        $this->actingAs($agent, 'sanctum');
+        $this->postJson('/api/agent/location', ['lat' => -4.2380, 'lng' => 15.2660, 'address' => 'Rue Itoumbi, Ouenzé', 'opening_hours' => '7h-20h'])->assertOk();
+
+        // Console : un GAB et une agence
+        $admin = User::create(['full_name' => 'Admin', 'phone' => '242069999999', 'password' => 'secret123']);
+        $admin->assignRole('super_admin');
+        $this->actingAs($admin, 'sanctum');
+        $this->postJson('/api/admin/service-points', ['type' => 'atm', 'name' => 'GAB BGFI Poto-Poto', 'operator' => 'BGFIBank', 'city' => 'Brazzaville',
+            'latitude' => -4.2700, 'longitude' => 15.2830])->assertCreated();
+        $this->postJson('/api/admin/service-points', ['type' => 'agency', 'name' => 'Agence OfficePay Plateau', 'city' => 'Brazzaville',
+            'latitude' => -4.2690, 'longitude' => 15.2850, 'opening_hours' => 'Lun-Sam 8h-17h'])->assertCreated();
+        $this->assertCount(2, $this->getJson('/api/admin/service-points')->assertOk()->json('points'));
+
+        // Client (même non connecté) près de Ouenzé : le plus proche d'abord
+        $this->app['auth']->forgetGuards();
+        $r = $this->getJson('/api/locations?lat=-4.2390&lng=15.2650')->assertOk();
+        $list = $r->json('locations');
+        $this->assertCount(3, $list);
+        $this->assertSame('agent', $list[0]['type']);
+        $this->assertSame('Rue Itoumbi, Ouenzé', $list[0]['address']);
+        $this->assertLessThan(1, $list[0]['distance_km']);
+        $this->assertStringNotContainsString((string) $hidden->phone, json_encode($list));
+
+        // Filtre « GAB » : logo de la banque, ouvert 24h/24
+        $atms = $this->getJson('/api/locations?lat=-4.2390&lng=15.2650&types=atm')->assertOk()->json('locations');
+        $this->assertCount(1, $atms);
+        $this->assertSame('24h/24', $atms[0]['opening_hours']);
+        $this->assertStringContainsString('bgfi.com', (string) $atms[0]['logo']);
+
+        // Recherche par nom ; rayon
+        $this->assertSame('Agence OfficePay Plateau', $this->getJson('/api/locations?q=plateau')->json('locations.0.name'));
+        $this->assertCount(0, $this->getJson('/api/locations?lat=-4.80&lng=11.86&radius=20')->json('locations')); // Pointe-Noire
+    }
+
     public function test_atm_partner_redeem(): void
     {
         $client = $this->mk('client', '242061111111', 50000);

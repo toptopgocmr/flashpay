@@ -39,7 +39,8 @@ class PaymentMethodsService
                 'available' => $available,
                 'reason' => $available ? null : $reason,
                 'operators' => $key === 'mobile_money' ? $operators : [],
-            ] + (($def['needs'] ?? null) === 'crypto' ? ['assets' => array_values((array) config('payment_methods.crypto_assets', []))] : []);
+            ] + (($def['needs'] ?? null) === 'crypto' ? ['assets' => array_values((array) config('payment_methods.crypto_assets', []))] : [])
+              + ($key === 'atm' ? ['limits' => self::atmLimits()] : []);
         }
 
         // Disponibles d'abord, « bientôt » ensuite
@@ -53,6 +54,12 @@ class PaymentMethodsService
             'operation' => $operation,
             'methods' => $methods,
         ];
+    }
+
+    /** Retrait au GAB : montant entre min et max, par paliers (billets distribués). */
+    public static function atmLimits(): array
+    {
+        return ['min' => (int) config('payment_methods.atm_min', 10000), 'max' => (int) config('payment_methods.atm_max', 250000), 'step' => max(1, (int) config('payment_methods.atm_step', 5000))];
     }
 
     public function isAvailable(string $country, string $operation, string $method): bool
